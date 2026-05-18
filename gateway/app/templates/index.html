@@ -102,7 +102,7 @@
         </button>
         <label class="date-select">
           <input type="checkbox" class="date-check" title="Select all on {{ g.date }}">
-          <span class="date-label">{{ g.date }} ({{ g.records | length }})</span>
+          <span class="date-label">{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})</span>
         </label>
       </div>
       <table class="records-table">

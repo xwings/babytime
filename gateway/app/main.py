@@ -204,7 +204,14 @@ async def ui_home(
     if page > total_pages:
         page = total_pages
     start = (page - 1) * dates_per_page
-    groups = [{"date": d, "records": by_date[d]} for d in date_order[start:start + dates_per_page]]
+    groups = [
+        {
+            "date": d,
+            "records": by_date[d],
+            "total_ml": sum((r["volume_ml"] or 0) for r in by_date[d]),
+        }
+        for d in date_order[start:start + dates_per_page]
+    ]
 
     now_epoch = int(time.time())
     auto_check_cutoff = now_epoch - 86400
