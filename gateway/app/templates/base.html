@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ html_lang or 'en' }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -10,13 +10,24 @@
 <header>
   <h1>feedingtime-esp32s3 gateway</h1>
   <nav class="tabs">
-    <button type="button" class="tab-btn active" data-tab="records">Records</button>
-    <button type="button" class="tab-btn" data-tab="config">Configuration</button>
+    <span class="lang-switch" role="group" aria-label="Language">
+      <a href="/lang/en" class="lang-btn {% if lang == 'en' %}active{% endif %}">EN</a>
+      <a href="/lang/zh" class="lang-btn {% if lang == 'zh' %}active{% endif %}">中文</a>
+    </span>
+    <button type="button" class="tab-btn active" data-tab="records">{{ t('tab_records') }}</button>
+    <button type="button" class="tab-btn" data-tab="config">{{ t('tab_config') }}</button>
   </nav>
 </header>
 <main>
 {% block content %}{% endblock %}
 </main>
+<script>
+  window.I18N = {
+    unit_hour: {{ t('unit_hour') | tojson }},
+    unit_minute: {{ t('unit_minute') | tojson }},
+    unit_second: {{ t('unit_second') | tojson }}
+  };
+</script>
 <script>
   (function () {
     const buttons = document.querySelectorAll('.tab-btn');

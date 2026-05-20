@@ -3,7 +3,7 @@
 
 {% if sync_result %}
 <div class="banner banner-{{ sync_result }}">
-  Sync {{ sync_result }}{% if sync_msg %}: {{ sync_msg }}{% endif %}
+  {{ t('sync_banner_ok' if sync_result == 'ok' else 'sync_banner_fail') }}{% if sync_msg %}: {{ sync_msg }}{% endif %}
 </div>
 {% endif %}
 
@@ -13,39 +13,40 @@
   <form method="post" action="/ui/feed" class="feed-now-form">
     {% if active %}
     <span class="feed-now-detail">
-      since {{ active.start_epoch | localtime_only(tz) }}
-      on <code>{{ active.device_id or '(unknown)' }}</code>
+      {{ t('feed_since') }} {{ active.start_epoch | localtime_only(tz) }}
+      {{ t('feed_on') }} <code>{{ active.device_id or t('feed_unknown_device') }}</code>
     </span>
     <span class="feed-now-counter live-elapsed" data-since="{{ active.start_epoch }}">…</span>
-    <button type="submit" class="danger feed-now-btn">Stop feeding</button>
+    <button type="submit" class="danger feed-now-btn">{{ t('feed_stop_btn') }}</button>
     {% else %}
     <span class="feed-now-detail">
       {% if last_finished %}
-      last fed at {{ last_finished.stop_epoch | localtime_only(tz) }}
-      on <code>{{ last_finished.device_id or '(unknown)' }}</code>
+      {{ t('feed_last_fed_at') }} {{ last_finished.stop_epoch | localtime_only(tz) }}
+      {{ t('feed_on') }} <code>{{ last_finished.device_id or t('feed_unknown_device') }}</code>
       {% else %}
-      No feedings recorded yet.
+      {{ t('feed_none') }}
       {% endif %}
     </span>
     <span class="feed-now-counter {% if last_finished %}live-elapsed{% endif %}"
-          {% if last_finished %}data-since="{{ last_finished.stop_epoch }}" data-suffix=" ago"{% endif %}>
+          {% if last_finished %}data-since="{{ last_finished.stop_epoch }}" data-suffix="{{ t('feed_ago_suffix') }}"{% endif %}>
       {% if last_finished %}…{% else %}—{% endif %}
     </span>
-    <button type="submit" class="feed-now-btn">Start feeding</button>
+    <button type="submit" class="feed-now-btn">{{ t('feed_start_btn') }}</button>
     {% endif %}
   </form>
 </section>
 
 <script>
   (function () {
+    const U = (window.I18N || { unit_hour: 'h', unit_minute: 'm', unit_second: 's' });
     function fmt(s) {
       if (s < 0) s = 0;
       const h = Math.floor(s / 3600);
       const m = Math.floor((s % 3600) / 60);
       const sec = s % 60;
-      if (h > 0) return h + 'h ' + m + 'm';
-      if (m > 0) return m + 'm ' + String(sec).padStart(2, '0') + 's';
-      return sec + 's';
+      if (h > 0) return h + U.unit_hour + ' ' + m + U.unit_minute;
+      if (m > 0) return m + U.unit_minute + ' ' + String(sec).padStart(2, '0') + U.unit_second;
+      return sec + U.unit_second;
     }
     function tick() {
       const now = Math.floor(Date.now() / 1000);
@@ -63,19 +64,19 @@
 <section class="add-record">
   <form method="post" action="/records">
     <div class="records-head">
-      <h2>Add record</h2>
+      <h2>{{ t('add_heading') }}</h2>
       <div class="bulk-actions">
-        <button type="submit">Add</button>
+        <button type="submit">{{ t('add_btn') }}</button>
       </div>
     </div>
     <div class="row-form">
-      <label>Date <input type="date" name="date" value="{{ now_date }}" required></label>
-      <label>Start <input type="time" name="start_time" value="{{ now_time }}" required></label>
-      <label>Stop <input type="time" name="stop_time" value="{{ now_time }}"></label>
-      <label>ml <input type="number" name="volume_ml" min="0" step="1"
+      <label>{{ t('col_date') }} <input type="date" name="date" value="{{ now_date }}" required></label>
+      <label>{{ t('col_start') }} <input type="time" name="start_time" value="{{ now_time }}" required></label>
+      <label>{{ t('col_stop') }} <input type="time" name="stop_time" value="{{ now_time }}"></label>
+      <label>{{ t('col_ml') }} <input type="number" name="volume_ml" min="0" step="1"
                        value="{{ config.default_volume_ml or '' }}"></label>
-      <label>Notes <input type="text" name="notes"></label>
-      <label>Device <input type="text" name="device_id"
+      <label>{{ t('col_notes') }} <input type="text" name="notes"></label>
+      <label>{{ t('col_device') }} <input type="text" name="device_id"
                           value="{{ config.default_device_id or '' }}"></label>
     </div>
   </form>
@@ -84,37 +85,37 @@
 <section class="records">
   <form method="post" id="records-form">
     <div class="records-head">
-      <h2>Records ({{ total_records }} across {{ total_dates }} day{{ '' if total_dates == 1 else 's' }})</h2>
+      <h2>{{ t('records_heading', n=total_records, d=total_dates, plural='' if total_dates == 1 else 's') }}</h2>
       <div class="bulk-actions">
-        <button type="button" id="check-all-btn" class="ghost">Select all on page</button>
-        <button type="submit" formaction="/records/save">Save</button>
+        <button type="button" id="check-all-btn" class="ghost">{{ t('records_select_all') }}</button>
+        <button type="submit" formaction="/records/save">{{ t('records_save') }}</button>
         <button type="submit" formaction="/records/delete" class="danger"
-                onclick="return confirm('Delete the selected record(s)?')">Delete</button>
-        <button type="submit" formaction="/sync">Upload</button>
+                onclick="return confirm('{{ t('records_delete_confirm') }}')">{{ t('records_delete') }}</button>
+        <button type="submit" formaction="/sync">{{ t('records_upload') }}</button>
       </div>
     </div>
 
     {% for g in groups %}
     <div class="date-group" data-date="{{ g.date }}">
       <div class="date-header">
-        <button type="button" class="fold-toggle" aria-label="Toggle">
+        <button type="button" class="fold-toggle" aria-label="{{ t('records_toggle_aria') }}">
           <span class="chevron">▾</span>
         </button>
         <label class="date-select">
-          <input type="checkbox" class="date-check" title="Select all on {{ g.date }}">
-          <span class="date-label">{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})</span>
+          <input type="checkbox" class="date-check" title="{{ t('records_select_all_on', date=g.date) }}">
+          <span class="date-label">{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
         </label>
       </div>
       <table class="records-table">
         <thead>
           <tr>
             <th></th>
-            <th>Start</th>
-            <th>Stop</th>
-            <th>Duration</th>
-            <th>ml</th>
-            <th>Notes</th>
-            <th>Device</th>
+            <th>{{ t('col_start') }}</th>
+            <th>{{ t('col_stop') }}</th>
+            <th>{{ t('col_duration') }}</th>
+            <th>{{ t('col_ml') }}</th>
+            <th>{{ t('col_notes') }}</th>
+            <th>{{ t('col_device') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -153,22 +154,22 @@
       </table>
     </div>
     {% else %}
-    <p class="empty">No records yet.</p>
+    <p class="empty">{{ t('no_records') }}</p>
     {% endfor %}
   </form>
 
   {% if total_pages > 1 %}
   <nav class="pagination">
     {% if page > 1 %}
-      <a href="?page={{ page - 1 }}">&larr; Prev</a>
+      <a href="?page={{ page - 1 }}">{{ t('pagination_prev') }}</a>
     {% else %}
-      <span class="disabled">&larr; Prev</span>
+      <span class="disabled">{{ t('pagination_prev') }}</span>
     {% endif %}
-    <span>Page {{ page }} of {{ total_pages }}</span>
+    <span>{{ t('pagination_page', page=page, total=total_pages) }}</span>
     {% if page < total_pages %}
-      <a href="?page={{ page + 1 }}">Next &rarr;</a>
+      <a href="?page={{ page + 1 }}">{{ t('pagination_next') }}</a>
     {% else %}
-      <span class="disabled">Next &rarr;</span>
+      <span class="disabled">{{ t('pagination_next') }}</span>
     {% endif %}
   </nav>
   {% endif %}
@@ -220,7 +221,7 @@
 <div class="tab-panel" data-tab="config">
 
 <section class="config" id="config">
-  <h2>Configuration</h2>
+  <h2>{{ t('config_heading') }}</h2>
   <form method="post" action="/config" class="grid-form">
     {% for key in config_keys_simple %}
     <label>{{ key }}
@@ -233,13 +234,10 @@
     <label class="full-width">webhook_record_format
       <textarea name="webhook_record_format" rows="3">{{ config.webhook_record_format | default('') }}</textarea>
     </label>
-    <button type="submit">Save</button>
+    <button type="submit">{{ t('config_save') }}</button>
   </form>
   <p class="hint">
-    Template placeholders: <code>{records}</code> in message, and
-    <code>{date}</code> <code>{start_time}</code> <code>{stop_time}</code>
-    <code>{duration}</code> <code>{volume}</code> <code>{notes}</code>
-    <code>{device_id}</code> in each record line.
+    {{ t('config_template_hint_html') | safe }}
   </p>
 </section>
 

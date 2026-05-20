@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from . import config, db, openclaw
+from . import config, db, i18n, openclaw
 from .util import zoneinfo
 
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "").strip()
@@ -222,10 +222,14 @@ async def ui_home(
     )
 
     now = datetime.now(tz=tz)
+    lang = i18n.read_lang(request)
     return templates.TemplateResponse(
         "index.html",
         {
             "request": request,
+            "lang": lang,
+            "html_lang": i18n.html_lang_attr(lang),
+            "t": (lambda key, **kw: i18n.t(key, lang, **kw)),
             "groups": groups,
             "active": active,
             "last_finished": last_finished,
@@ -358,3 +362,18 @@ async def ui_sync(request: Request):
     return RedirectResponse(
         f"/?sync={'ok' if ok else 'fail'}&msg={msg}", status_code=303
     )
+
+
+@app.get("/lang/{code}")
+async def ui_set_lang(code: str, request: Request):
+    target = i18n.normalize(code)
+    dest = request.headers.get("referer") or "/"
+    resp = RedirectResponse(dest, status_code=303)
+    resp.set_cookie(
+        i18n.LANG_COOKIE,
+        target,
+        max_age=i18n.COOKIE_MAX_AGE,
+        samesite="lax",
+        httponly=False,
+    )
+    return resp
