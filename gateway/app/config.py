@@ -4,7 +4,7 @@ import threading
 from pathlib import Path
 from typing import Callable, Optional
 
-CONFIG_PATH = os.environ.get("GATEWAY_CONFIG_PATH", "/feeding/config.json")
+CONFIG_PATH = os.environ.get("GATEWAY_CONFIG_PATH", "/babytime/config.json")
 
 DEFAULTS: dict = {
     "openclaw_url": "",

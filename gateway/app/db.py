@@ -3,7 +3,7 @@ import sqlite3
 import threading
 from typing import Optional
 
-_DB_PATH = os.environ.get("GATEWAY_DB_PATH", "/feeding/gateway.db")
+_DB_PATH = os.environ.get("GATEWAY_DB_PATH", "/babytime/gateway.db")
 _lock = threading.Lock()
 _conn: Optional[sqlite3.Connection] = None
 
@@ -37,12 +37,6 @@ def init() -> None:
             CREATE INDEX IF NOT EXISTS idx_records_start ON records(start_epoch DESC);
             """
         )
-        # Migrate pre-activity databases: existing rows are feedings.
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(records)")}
-        if "activity" not in cols:
-            conn.execute(
-                "ALTER TABLE records ADD COLUMN activity TEXT NOT NULL DEFAULT 'feeding'"
-            )
         conn.commit()
 
 

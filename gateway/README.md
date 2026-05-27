@@ -12,9 +12,9 @@ docker compose up -d --build
 Then open http://localhost:8080/ — records, manual edit, and OpenClaw config
 all live on one page.
 
-Persisted in `./feeding/` on the host (mounted to `/feeding` in the container):
+Persisted in `./babytime/` on the host (mounted to `/babytime` in the container):
 
-- `gateway.db` — SQLite, holds feeding records.
+- `gateway.db` — SQLite, holds activity records.
 - `config.json` — OpenClaw settings, message/record templates, sync schedule,
   timezone, UI options. Editable from the web UI **or** by hand; written
   atomically. Keys match those in the Config section below.
