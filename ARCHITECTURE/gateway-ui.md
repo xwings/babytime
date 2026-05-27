@@ -13,8 +13,8 @@ ones (poopoo, etc.) log a single timestamp on tap ("tap to log") and
 never enter a running state. The idle Feeding button carries an
 integrated `Last fed:` live 1 Hz counter
 since the most recent finished feeding, an Add-record form with
-header-action button, and per-date collapsible record groups with select-all +
-auto-check of the last 24 h. Each record row carries its own free-text
+header-action button, and per-date collapsible record groups (only today
+expanded by default) with per-record selection and auto-check of the last 24 h. Each record row carries its own free-text
 note field (distinct from the per-day note). Each date group carries a full-width
 free-text day-note textarea seated between that date's header and
 its records (labelled "Notes for Today" on the current date, "Day
@@ -47,7 +47,7 @@ note" otherwise), and per-date headers also show the day's `total_ml`
 - `gateway/app/templates/index.html` — `<section class="activity-bar">` renders one `<form action="/ui/activity">` per activity from `active_map`; the button is `.running` (red, `.live-elapsed` timer since `start_epoch`) when that activity has an open session, else `.idle` (blue). The idle Feeding button is special: when `last_fed` exists it shows an `.activity-sub` "Last fed:" label plus a `.live-elapsed` counter since `last_fed.stop_epoch`; otherwise it shows the "tap to start" hint for timed activities (`a in timed`) and "tap to log" for instant ones. Instant activities never appear in `active_map` (their records are created closed, `stop == start`), so they have no running state.
 - `gateway/app/templates/index.html` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch (drives the running-activity timer).
 - `gateway/app/templates/index.html:63` — `<section class="add-record">` with header-row + top-right Add button; ml/Device prefilled from `config.default_volume_ml` / `config.default_device_id`.
-- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} (<count> time(s)[, <total_ml> ml])` via the `date_count` i18n string (English pluralizes "time"/"times"; ml appended only when `g.total_ml` is nonzero). Between the header and the records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`. Each row has an `activity_{id}` `<select>` (`.activity-select`) for its activity and a `notes_{id}` free-text `.notes-input` for that record's own note (blank clears it); the Add-record form carries its own `activity` `<select>` (`.add-activity-select`, options tagged with `data-timed`) and `notes` field, so any configured activity can be logged manually. `/records` (`ui_create`) closes instant activities at creation (`stop_epoch = start_epoch`) and keeps the entered stop for timed ones. A row whose activity is instant (`r.activity not in timed`) renders its Stop and Duration cells as a static `—` (no editable stop input); `/records/save` re-closes such rows (`stop == start`).
+- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with a chevron fold toggle. Only the `now_date` group renders expanded; every other date carries the `collapsed` class on initial render (template `{% if g.date != now_date %}collapsed{% endif %}`, toggled client-side thereafter). The date header has no select-all checkbox — selection/deletion is per-record only (`.row-check` plus the page-wide `check-all-btn`). Rows still 24 h auto-check (`row.start_epoch >= auto_check_cutoff`); header reads `{{ g.date }} (<count> time(s)[, <total_ml> ml])` via the `date_count` i18n string, where `<count>` (`g.ml_count`) is the number of that day's records that carry a volume — feedings only; records without ml (sleep, poopoo, a feeding with no volume entered) are not counted, so the count and the ml total describe the same set. English pluralizes "time"/"times"; ml appended only when `g.total_ml` is nonzero. Between the header and the records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`. Each row has an `activity_{id}` `<select>` (`.activity-select`) for its activity and a `notes_{id}` free-text `.notes-input` for that record's own note (blank clears it); the Add-record form carries its own `activity` `<select>` (`.add-activity-select`, options tagged with `data-timed`) and `notes` field, so any configured activity can be logged manually. `/records` (`ui_create`) closes instant activities at creation (`stop_epoch = start_epoch`) and keeps the entered stop for timed ones. A row whose activity is instant (`r.activity not in timed`) renders its Stop and Duration cells as a static `—` (no editable stop input); `/records/save` re-closes such rows (`stop == start`).
 - `gateway/app/templates/index.html:222` — `<section class="config">` (Configuration tab body). Activities are edited in a `.config-activities` fieldset: one `.activity-row` per activity with a name input and a `.timed-toggle` "timed" checkbox; a `+ Add activity` button appends a blank row (client-side, incrementing `activity_name_<i>` indices) and a per-row `×` removes one. The feeding row is read-only with a disabled (always-checked) timed box, reflecting that feeding is structurally required and always timed. The remaining scalar keys still render as plain text inputs from `config_keys_simple` (now just `auto_stop_minutes`, `default_volume_ml`, `timezone`, `ui_show_count` — `activity_types`/`timed_activities` are driven by the rows).
 - `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row of `.activity-btn.idle` (blue) / `.activity-btn.running` (red) buttons with a tabular-nums `.activity-timer` and an `.activity-sub` micro-label (the idle Feeding button's "Last fed:"), `.day-note-block`/`.day-note` textarea styling (`border-bottom`, sits between header and table), `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
 
@@ -90,12 +90,15 @@ Pass means all of:
   second since the most recent finished feeding (just "tap to start"
   until one feeding has been stopped); while feeding is running the
   button is red and shows the in-progress timer instead.
-- Date headers collapse/expand on chevron click; each header shows
+- Date headers collapse/expand on chevron click; only today's group is
+  expanded on load, every other date starts collapsed. Each header shows
   `YYYY-MM-DD (N times[, M ml])` — the count reads "1 time" / "6 times"
-  and the millilitre total is appended only when at least one record
-  that day has a volume.
-- Date-header checkbox toggles all rows in that day; rows from the
-  last 24 h are pre-checked on page load.
+  and counts only that day's records with a volume (feedings), so it
+  pairs with the millilitre total; the total is appended only when at
+  least one record that day has a volume.
+- There is no per-date select-all; selection and deletion are per-record
+  (each row's checkbox, plus the page-wide "select all on page" button).
+  Rows from the last 24 h are pre-checked on page load.
 - Each date group has a multi-line day-note textarea between the date
   header and that date's records (labelled "Notes for Today" on the
   current date); editing it and clicking Save persists the note
@@ -131,7 +134,7 @@ Pass means all of:
   a manual refresh (counter is client-side off the rendered
   `start_epoch`).
 - No `localStorage` persistence of date-group fold state — every
-  reload starts with the default (most-recent expanded) layout.
+  reload starts with the default (only today's group expanded) layout.
 - No mobile-specific layout; the activity bar relies on flex-wrap to
   stack buttons on narrow screens rather than a dedicated breakpoint.
 - i18n covers only EN + ZH today; adding a third language is one

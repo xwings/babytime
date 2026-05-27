@@ -402,6 +402,7 @@ async def ui_home(
         {
             "date": d,
             "records": by_date[d],
+            "ml_count": sum(1 for r in by_date[d] if r["volume_ml"]),
             "total_ml": sum((r["volume_ml"] or 0) for r in by_date[d]),
             "note": day_notes.get(d, ""),
         }

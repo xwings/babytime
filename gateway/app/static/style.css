@@ -158,15 +158,8 @@ section h2 {
 
 .date-group.collapsed .fold-toggle .chevron { transform: rotate(-90deg); }
 
-.date-select {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  flex: 1;
-}
-
 .date-label {
+  flex: 1;
   font-weight: 600;
   color: #f5c64a;
 }

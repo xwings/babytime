@@ -87,15 +87,12 @@
     </div>
 
     {% for g in groups %}
-    <div class="date-group" data-date="{{ g.date }}">
+    <div class="date-group{% if g.date != now_date %} collapsed{% endif %}" data-date="{{ g.date }}">
       <div class="date-header">
         <button type="button" class="fold-toggle" aria-label="{{ t('records_toggle_aria') }}">
           <span class="chevron">▾</span>
         </button>
-        <label class="date-select">
-          <input type="checkbox" class="date-check" title="{{ t('records_select_all_on', date=g.date) }}">
-          <span class="date-label">{{ g.date }} ({{ t('date_count', n=g.records|length, plural='' if (g.records|length) == 1 else 's') }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
-        </label>
+        <span class="date-label">{{ g.date }} ({{ t('date_count', n=g.ml_count, plural='' if g.ml_count == 1 else 's') }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
       </div>
       <div class="day-note-block">
         <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('day_note_today') if g.date == now_date else t('col_day_note') }}</label>
@@ -187,24 +184,7 @@
 <script>
   (function () {
     document.querySelectorAll('.date-group').forEach(group => {
-      const dateCheck = group.querySelector('.date-check');
-      const rowChecks = group.querySelectorAll('.row-check');
       const fold = group.querySelector('.fold-toggle');
-
-      function syncDateCheck() {
-        const total = rowChecks.length;
-        const on = Array.from(rowChecks).filter(c => c.checked).length;
-        dateCheck.checked = on === total && total > 0;
-        dateCheck.indeterminate = on > 0 && on < total;
-      }
-
-      dateCheck?.addEventListener('change', e => {
-        rowChecks.forEach(c => { c.checked = e.target.checked; });
-        dateCheck.indeterminate = false;
-      });
-      rowChecks.forEach(c => c.addEventListener('change', syncDateCheck));
-      syncDateCheck();
-
       fold?.addEventListener('click', () => {
         group.classList.toggle('collapsed');
       });
@@ -232,13 +212,6 @@
       const all = document.querySelectorAll('.row-check');
       const target = !Array.from(all).every(c => c.checked);
       all.forEach(c => { c.checked = target; });
-      document.querySelectorAll('.date-group').forEach(g => {
-        const dc = g.querySelector('.date-check');
-        const rc = g.querySelectorAll('.row-check');
-        const on = Array.from(rc).filter(c => c.checked).length;
-        dc.checked = on === rc.length && rc.length > 0;
-        dc.indeterminate = on > 0 && on < rc.length;
-      });
     });
   })();
 </script>
