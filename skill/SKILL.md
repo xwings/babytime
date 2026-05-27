@@ -1,3 +1,9 @@
+---
+name: babytime
+description: babytime baby timer and activity recorder
+metadata: {"author": "xwings", "openclaw": {"bins": ["python3 {baseDir}/scripts/babytime.py"]}}
+---
+
 # babytime Records
 
 Use this skill when the user asks to read, add, correct, or delete
