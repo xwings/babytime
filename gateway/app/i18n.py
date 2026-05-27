@@ -66,6 +66,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Config tab
         "config_heading": "Configuration",
         "config_save": "Save",
+        "config_activities": "Activities",
+        "config_timed": "timed",
+        "config_add_activity": "+ Add activity",
+        "config_remove_activity": "Remove activity",
+        "config_feeding_locked": "Feeding is always present and timed",
         # Time units (read by the live-elapsed JS in index.html)
         "unit_hour": "h",
         "unit_minute": "m",
@@ -112,6 +117,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Config tab
         "config_heading": "设置",
         "config_save": "保存",
+        "config_activities": "活动",
+        "config_timed": "计时",
+        "config_add_activity": "+ 添加活动",
+        "config_remove_activity": "删除活动",
+        "config_feeding_locked": "喂食始终存在且计时",
         # Time units
         "unit_hour": "时",
         "unit_minute": "分",

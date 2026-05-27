@@ -257,6 +257,54 @@ button.danger:hover { background: #c64545; }
   height: fit-content;
 }
 
+.config-activities {
+  border: 1px solid #2a2f3a;
+  border-radius: 6px;
+  padding: 0.75rem 1rem 1rem;
+}
+.config-activities legend {
+  padding: 0 0.4rem;
+  font-size: 0.85rem;
+  color: #a4b1c5;
+}
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.activity-row .activity-name-input {
+  flex: 1 1 auto;
+  max-width: 16rem;
+}
+.activity-row .activity-name-input[readonly] {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.timed-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: #a4b1c5;
+  white-space: nowrap;
+}
+.row-remove {
+  background: transparent;
+  border: 1px solid #2a2f3a;
+  color: #a4b1c5;
+  line-height: 1;
+  padding: 0.2rem 0.5rem;
+}
+.row-remove:hover { background: #232834; }
+#add-activity {
+  margin-top: 0.25rem;
+  background: transparent;
+  border: 1px solid #2a2f3a;
+  color: #a4b1c5;
+}
+#add-activity:hover { background: #232834; }
+
 .row-form {
   display: flex;
   flex-wrap: wrap;

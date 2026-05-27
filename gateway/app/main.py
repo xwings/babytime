@@ -366,8 +366,6 @@ async def ui_home(
             "config_keys_simple": [
                 "auto_stop_minutes",
                 "default_volume_ml",
-                "activity_types",
-                "timed_activities",
                 "timezone",
                 "ui_show_count",
             ],
@@ -472,7 +470,24 @@ async def ui_bulk_delete(request: Request):
 @app.post("/config")
 async def ui_save_config(request: Request):
     form = await request.form()
-    items = {k: str(v) for k, v in form.multi_items()}
+    items: dict = {}
+    rows: list[tuple[str, str]] = []  # (row index, activity name) in form order
+    timed_rows: set[str] = set()
+    for key, value in form.multi_items():
+        if key.startswith("activity_name_"):
+            rows.append((key[len("activity_name_"):], str(value).strip()))
+        elif key.startswith("activity_timed_"):
+            timed_rows.add(key[len("activity_timed_"):])
+        else:
+            items[key] = str(value)
+    if rows:
+        # Rebuild the two activity lists from the per-row name + timed toggle.
+        # config.activity_list / timed_activities re-force 'feeding', so the
+        # feeding row (read-only name, disabled checkbox) need not round-trip.
+        items["activity_types"] = ",".join(name for _, name in rows if name)
+        items["timed_activities"] = ",".join(
+            name for ri, name in rows if name and ri in timed_rows
+        )
     config.update(items)
     return RedirectResponse("/#config", status_code=303)
 

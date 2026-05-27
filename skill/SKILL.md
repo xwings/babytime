@@ -35,20 +35,17 @@ the gateway's configured timezone — you do not need the UTC offset.
 `script/babytime.py` is a dependency-free Python 3 client:
 
 ```sh
-export BABYTIME_GATEWAY_URL=http://gateway.lan:8080
-export BABYTIME_GATEWAY_TOKEN=...        # omit if the gateway is open
+python3 scripts/babytime.py list --limit 10
+python3 scripts/babytime.py list --activity feeding
+python3 scripts/babytime.py add --start "2026-05-27 14:30" --stop "2026-05-27 14:45" --ml 90 --notes "left side"
+python3 scripts/babytime.py add --activity sleep --start "2026-05-27 21:00"
+python3 scripts/babytime.py update 12 --stop "2026-05-27 14:50" --ml 120
+python3 scripts/babytime.py update 12 --activity poopoo        # volume is dropped automatically
+python3 scripts/babytime.py delete 12
 
-python3 script/babytime.py list --limit 10
-python3 script/babytime.py list --activity feeding
-python3 script/babytime.py add --start "2026-05-27 14:30" --stop "2026-05-27 14:45" --ml 90 --notes "left side"
-python3 script/babytime.py add --activity sleep --start "2026-05-27 21:00"
-python3 script/babytime.py update 12 --stop "2026-05-27 14:50" --ml 120
-python3 script/babytime.py update 12 --activity poopoo        # volume is dropped automatically
-python3 script/babytime.py delete 12
-
-python3 script/babytime.py daynote get                        # {date: note} map of all day notes
-python3 script/babytime.py daynote set 2026-05-27 --note "slept through the night"
-python3 script/babytime.py daynote set 2026-05-27             # blank note clears the day's note
+python3 scripts/babytime.py daynote get                        # {date: note} map of all day notes
+python3 scripts/babytime.py daynote set 2026-05-27 --note "slept through the night"
+python3 scripts/babytime.py daynote set 2026-05-27             # blank note clears the day's note
 ```
 
 Non-2xx responses print to stderr and exit non-zero.

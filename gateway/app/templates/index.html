@@ -234,16 +234,69 @@
 <div class="tab-panel" data-tab="config">
 
 <section class="config" id="config">
-  <h2>{{ t('config_heading') }}</h2>
   <form method="post" action="/config" class="grid-form">
+    <div class="records-head full-width">
+      <h2>{{ t('config_heading') }}</h2>
+      <div class="bulk-actions">
+        <button type="submit">{{ t('config_save') }}</button>
+      </div>
+    </div>
+    <fieldset class="config-activities full-width">
+      <legend>{{ t('config_activities') }}</legend>
+      <div id="activity-rows">
+        {% for a in activities %}
+        <div class="activity-row">
+          <input type="text" name="activity_name_{{ loop.index0 }}" value="{{ a }}"
+                 class="activity-name-input"
+                 {% if a == 'feeding' %}readonly title="{{ t('config_feeding_locked') }}"{% endif %}>
+          <label class="timed-toggle">
+            <input type="checkbox" name="activity_timed_{{ loop.index0 }}"
+                   {% if a in timed %}checked{% endif %}
+                   {% if a == 'feeding' %}disabled{% endif %}>
+            {{ t('config_timed') }}
+          </label>
+          {% if a != 'feeding' %}
+          <button type="button" class="row-remove ghost" aria-label="{{ t('config_remove_activity') }}">×</button>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      <button type="button" id="add-activity" class="ghost">{{ t('config_add_activity') }}</button>
+    </fieldset>
     {% for key in config_keys_simple %}
     <label>{{ key }}
       <input type="text" name="{{ key }}" value="{{ config[key] | default('') }}">
     </label>
     {% endfor %}
-    <button type="submit">{{ t('config_save') }}</button>
   </form>
 </section>
+
+<script>
+  (function () {
+    const rows = document.getElementById('activity-rows');
+    const addBtn = document.getElementById('add-activity');
+    if (!rows || !addBtn) return;
+    const TIMED = {{ t('config_timed') | tojson }};
+    const REMOVE = {{ t('config_remove_activity') | tojson }};
+    let idx = rows.querySelectorAll('.activity-row').length;
+    addBtn.addEventListener('click', () => {
+      const row = document.createElement('div');
+      row.className = 'activity-row';
+      row.innerHTML =
+        '<input type="text" class="activity-name-input" name="activity_name_' + idx + '" value="">' +
+        '<label class="timed-toggle"><input type="checkbox" name="activity_timed_' + idx + '"> ' + TIMED + '</label>' +
+        '<button type="button" class="row-remove ghost" aria-label="' + REMOVE + '">×</button>';
+      rows.appendChild(row);
+      idx++;
+      row.querySelector('input').focus();
+    });
+    rows.addEventListener('click', e => {
+      if (e.target.classList.contains('row-remove')) {
+        e.target.closest('.activity-row').remove();
+      }
+    });
+  })();
+</script>
 
 </div><!-- /tab-panel config -->
 

@@ -46,7 +46,7 @@ store through the web UI.
 - `gateway/app/main.py:272` — `POST /records` — add via form.
 - `POST /records/save` — inline edit of the checked rows; rows for an instant activity are re-closed (`stop_epoch = start_epoch`) since their stop is not editable. Also persists each `day_note_<date>` field via `db.set_day_note`, so one Save writes both records and day notes.
 - `POST /records/delete` — deletes the checked rows.
-- `POST /config` — saves the config form.
+- `POST /config` — saves the config form. The per-activity rows arrive as `activity_name_<i>` inputs plus optional `activity_timed_<i>` checkboxes; the handler rebuilds `activity_types` (names in form order) and `timed_activities` (names whose checkbox was on) from them, and passes every other field through unchanged. `config.activity_list`/`timed_activities` re-force `feeding`, so the read-only/disabled feeding row need not round-trip.
 
 ## Interactions
 

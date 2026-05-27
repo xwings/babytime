@@ -30,7 +30,7 @@ note" otherwise), and per-date headers also show the day's `total_ml`
 | ---- | ---- |
 | `gateway/app/templates/base.html` | Page chrome, header with language switch + right-aligned tabs, tab-switch IIFE, `window.I18N` JS bridge |
 | `gateway/app/templates/index.html` | Activity-button bar, Add-record, Records (date groups + day-note textareas), Configuration sections + live-timer JS; every visible string routed through `t(...)` |
-| `gateway/app/static/style.css` | Layout (flex `.activity-bar`/`.activity-btn`, flex+margin-left for tabs), `.lang-switch` chip, `.day-note-block`, date-group fold styling |
+| `gateway/app/static/style.css` | Layout (flex `.activity-bar`/`.activity-btn`, flex+margin-left for tabs), `.lang-switch` chip, `.day-note-block`, date-group fold styling, `.config-activities` fieldset + `.activity-row`/`.timed-toggle` rows |
 | `gateway/app/i18n.py` | Translation tables (EN / ZH), cookie helpers, `t(key, lang, **kwargs)` substitution |
 
 ## Key Types and Entry Points
@@ -47,7 +47,7 @@ note" otherwise), and per-date headers also show the day's `total_ml`
 - `gateway/app/templates/index.html` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch (drives the running-activity timer).
 - `gateway/app/templates/index.html:63` — `<section class="add-record">` with header-row + top-right Add button; ml/Device prefilled from `config.default_volume_ml` / `config.default_device_id`.
 - `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`. Between the header and the records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`. Each row has an `activity_{id}` `<select>` (`.activity-select`) for its activity; the Add-record form has no activity picker and defaults new records to feeding. A row whose activity is instant (`r.activity not in timed`) renders its Stop and Duration cells as a static `—` (no editable stop input); `/records/save` re-closes such rows (`stop == start`).
-- `gateway/app/templates/index.html:222` — `<section class="config">` (Configuration tab body).
+- `gateway/app/templates/index.html:222` — `<section class="config">` (Configuration tab body). Activities are edited in a `.config-activities` fieldset: one `.activity-row` per activity with a name input and a `.timed-toggle` "timed" checkbox; a `+ Add activity` button appends a blank row (client-side, incrementing `activity_name_<i>` indices) and a per-row `×` removes one. The feeding row is read-only with a disabled (always-checked) timed box, reflecting that feeding is structurally required and always timed. The remaining scalar keys still render as plain text inputs from `config_keys_simple` (now just `auto_stop_minutes`, `default_volume_ml`, `timezone`, `ui_show_count` — `activity_types`/`timed_activities` are driven by the rows).
 - `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row of `.activity-btn.idle` (blue) / `.activity-btn.running` (red) buttons with a tabular-nums `.activity-timer` and an `.activity-sub` micro-label (the idle Feeding button's "Last fed:"), `.day-note-block`/`.day-note` textarea styling (`border-bottom`, sits between header and table), `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
 
 ## Interactions
@@ -103,6 +103,12 @@ Pass means all of:
   editable stop time.
 - Tabs (Records / Configuration) sit on the right of the header and
   switch sections without a full reload.
+- The Configuration tab lists each activity as a row with a name field
+  and a "timed" checkbox; `+ Add activity` adds a row, `×` removes one,
+  the feeding row is locked (read-only, always timed). Saving rebuilds
+  `activity_types` + `timed_activities`, and the rows reflect the stored
+  state on reload (feeding stays checked even though it isn't stored in
+  `timed_activities`).
 - Language switch chip (EN / 中文) sits left of the tabs; clicking
   the other language reloads the page in that language and the
   choice persists across reloads (cookie). Per-date headers show
