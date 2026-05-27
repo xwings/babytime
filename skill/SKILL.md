@@ -13,7 +13,12 @@ host. Instead you talk to the gateway over HTTP and it writes its own DB.
 
 ## Configuration
 
-Check `BABYTIME_GATEWAY_URL` `BABYTIME_GATEWAY_TOKEN` from TOOLS.md
+Pass the gateway location on the command line (before the subcommand):
+
+- `--host URL` — gateway base URL (default `http://127.0.0.1:8080`)
+- `--token TOK` — bearer token; omit if the gateway is open on the LAN
+
+Look up the host and token for this deployment in TOOLS.md.
 
 ## Record fields
 
@@ -35,7 +40,7 @@ the gateway's configured timezone — you do not need the UTC offset.
 `script/babytime.py` is a dependency-free Python 3 client:
 
 ```sh
-python3 scripts/babytime.py list --limit 10
+python3 scripts/babytime.py --host https://gw.example.com --token abc123 list --limit 10
 python3 scripts/babytime.py list --activity feeding
 python3 scripts/babytime.py add --start "2026-05-27 14:30" --stop "2026-05-27 14:45" --ml 90 --notes "left side"
 python3 scripts/babytime.py add --activity sleep --start "2026-05-27 21:00"

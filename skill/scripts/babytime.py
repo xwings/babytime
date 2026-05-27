@@ -5,12 +5,12 @@ A remote agent never touches the gateway's SQLite file; it calls the
 gateway over HTTP and the gateway writes its own DB. This script is that
 HTTP client. No third-party packages: it runs on any Python 3.
 
-Configuration (environment):
-  BABYTIME_GATEWAY_URL    base URL, default http://127.0.0.1:8080
-  BABYTIME_GATEWAY_TOKEN  bearer token; omit if the gateway is open on LAN
+Connection (global flags, before the subcommand):
+  --host URL    gateway base URL, default http://127.0.0.1:8080
+  --token TOK   bearer token; omit if the gateway is open on LAN
 
 Examples:
-  babytime.py list --limit 5
+  babytime.py --host https://gw.example.com --token abc123 list --limit 5
   babytime.py list --activity sleep
   babytime.py add --start "2026-05-27 14:30" --stop "2026-05-27 14:45" --ml 90
   babytime.py add --activity sleep --start "2026-05-27 21:00"
@@ -22,23 +22,25 @@ Examples:
 
 import argparse
 import json
-import os
 import sys
 import urllib.error
 import urllib.request
 
-BASE = os.environ.get("BABYTIME_GATEWAY_URL", "http://127.0.0.1:8080").rstrip("/")
-TOKEN = os.environ.get("BABYTIME_GATEWAY_TOKEN", "").strip()
+DEFAULT_HOST = "http://127.0.0.1:8080"
+
+# Connection config, resolved from CLI flags in main() before any command runs.
+_base_url = DEFAULT_HOST
+_token = ""
 
 
 def _request(method: str, path: str, body: dict | None = None):
-    url = BASE + path
+    url = _base_url + path
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method)
     if data is not None:
         req.add_header("Content-Type", "application/json")
-    if TOKEN:
-        req.add_header("Authorization", "Bearer " + TOKEN)
+    if _token:
+        req.add_header("Authorization", "Bearer " + _token)
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
             raw = resp.read().decode()
@@ -111,6 +113,10 @@ def _add_field_flags(p) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="babytime records HTTP client")
+    ap.add_argument("--host", default=DEFAULT_HOST, metavar="URL",
+                    help="gateway base URL (default %(default)s)")
+    ap.add_argument("--token", default="", metavar="TOK",
+                    help="bearer token; omit if the gateway is open on the LAN")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p_list = sub.add_parser("list", help="list recent records (newest first)")
@@ -140,6 +146,9 @@ def main() -> None:
     p_note.set_defaults(func=cmd_daynote)
 
     args = ap.parse_args()
+    global _base_url, _token
+    _base_url = args.host.rstrip("/")
+    _token = args.token.strip()
     args.func(args)
 
 
