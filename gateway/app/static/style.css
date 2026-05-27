@@ -332,20 +332,12 @@ code {
 .activity-bar {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
 }
 
-.activity-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: 0.75rem;
-  flex: 1 1 auto;
-}
-
-.activity-buttons form {
+.activity-bar form {
   flex: 1 1 8rem;
   margin: 0;
   padding: 0;
@@ -385,23 +377,12 @@ code {
   opacity: 0.8;
 }
 
-.last-fed {
-  margin-left: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.15rem;
-}
-
-.last-fed-label {
-  color: #7d8a9e;
-  font-size: 0.85rem;
-}
-
-.last-fed-counter {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 1.35rem;
-  font-variant-numeric: tabular-nums;
+.activity-sub {
+  font-size: 0.75rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
 }
 
 .day-note-block {

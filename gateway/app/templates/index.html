@@ -4,28 +4,23 @@
 <div class="tab-panel active" data-tab="records">
 
 <section class="activity-bar">
-  <div class="activity-buttons">
-    {% for a in activities %}
-    {% set s = active_map.get(a) %}
-    <form method="post" action="/ui/activity">
-      <input type="hidden" name="activity" value="{{ a }}">
-      <button type="submit" class="activity-btn {{ 'running' if s else 'idle' }}">
-        <span class="activity-name">{{ al(a) }}</span>
-        {% if s %}
-        <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
-        {% else %}
-        <span class="activity-hint">{{ t('activity_start_btn') }}</span>
-        {% endif %}
-      </button>
-    </form>
-    {% endfor %}
-  </div>
-  {% if last_fed %}
-  <div class="last-fed">
-    <span class="last-fed-label">{{ t('last_fed') }}</span>
-    <span class="last-fed-counter live-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
-  </div>
-  {% endif %}
+  {% for a in activities %}
+  {% set s = active_map.get(a) %}
+  <form method="post" action="/ui/activity">
+    <input type="hidden" name="activity" value="{{ a }}">
+    <button type="submit" class="activity-btn {{ 'running' if s else 'idle' }}">
+      <span class="activity-name">{{ al(a) }}</span>
+      {% if s %}
+      <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
+      {% elif a == 'feeding' and last_fed %}
+      <span class="activity-sub">{{ t('last_fed') }}</span>
+      <span class="activity-timer live-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
+      {% else %}
+      <span class="activity-hint">{{ t('activity_start_btn') }}</span>
+      {% endif %}
+    </button>
+  </form>
+  {% endfor %}
 </section>
 
 <script>
@@ -135,8 +130,14 @@
                      {% if r.activity != 'feeding' %}disabled data-feeding-only="1"{% endif %}>
             </td>
             <td>
-              <span class="activity-cell">{{ al(r.activity) }}</span>
-              <input type="hidden" name="activity_{{ r.id }}" value="{{ r.activity }}">
+              <select name="activity_{{ r.id }}" class="activity-select">
+                {% for a in activities %}
+                <option value="{{ a }}" {% if a == r.activity %}selected{% endif %}>{{ al(a) }}</option>
+                {% endfor %}
+                {% if r.activity and r.activity not in activities %}
+                <option value="{{ r.activity }}" selected>{{ al(r.activity) }}</option>
+                {% endif %}
+              </select>
             </td>
           </tr>
           {% endfor %}
@@ -189,6 +190,24 @@
       fold?.addEventListener('click', () => {
         group.classList.toggle('collapsed');
       });
+    });
+
+    // ml is only meaningful for feeding: disable + show "--" otherwise.
+    document.querySelectorAll('.activity-select').forEach(sel => {
+      const ml = sel.closest('tr')?.querySelector('.ml-input');
+      if (!ml) return;
+      function sync() {
+        const feeding = sel.value === 'feeding';
+        ml.disabled = !feeding;
+        if (feeding) {
+          ml.placeholder = '';
+        } else {
+          ml.value = '';
+          ml.placeholder = '--';
+        }
+      }
+      sel.addEventListener('change', sync);
+      sync();
     });
 
     document.getElementById('check-all-btn')?.addEventListener('click', () => {
