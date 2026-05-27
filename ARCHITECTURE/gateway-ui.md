@@ -4,13 +4,14 @@
 
 Browser-facing surface of the gateway: a single-page UI with two
 top-right tabs (Records / Configuration), a per-browser language
-switch (English / 中文) seated to the left of the tabs, a feed-now
-panel with live 1 Hz elapsed-time counter and Start/Stop button, an
+switch (English / 中文) seated to the left of the tabs, an
+activity-button bar (one toggle per configured activity — blue when
+idle, red with a live 1 Hz in-progress timer when running), an
 Add-record form with header-action button, and per-date collapsible
 record groups with select-all + auto-check of the last 24 h. Each
-date group carries a free-text day-note input, and per-date headers
-also show the day's `total_ml` (omitted when zero, so days with no
-volume logged stay clean).
+date group carries a full-width free-text day-note textarea, and
+per-date headers also show the day's `total_ml` (omitted when zero,
+so days with no volume logged stay clean).
 
 ## Status
 
@@ -21,8 +22,8 @@ volume logged stay clean).
 | File | Role |
 | ---- | ---- |
 | `gateway/app/templates/base.html` | Page chrome, header with language switch + right-aligned tabs, tab-switch IIFE, `window.I18N` JS bridge |
-| `gateway/app/templates/index.html` | Feed-now, Add-record, Records (date groups), Configuration sections + live-counter JS; every visible string routed through `t(...)` |
-| `gateway/app/static/style.css` | Layout (grid for feed-now, flex+margin-left for tabs), `.lang-switch` chip, date-group fold styling |
+| `gateway/app/templates/index.html` | Activity-button bar, Add-record, Records (date groups + day-note textareas), Configuration sections + live-timer JS; every visible string routed through `t(...)` |
+| `gateway/app/static/style.css` | Layout (flex `.activity-bar`/`.activity-btn`, flex+margin-left for tabs), `.lang-switch` chip, `.day-note-block`, date-group fold styling |
 | `gateway/app/i18n.py` | Translation tables (EN / ZH), cookie helpers, `t(key, lang, **kwargs)` substitution |
 
 ## Key Types and Entry Points
@@ -31,30 +32,31 @@ volume logged stay clean).
 - `gateway/app/templates/base.html:13-16` — `.lang-switch` anchors point at `/lang/{code}`; the active language gets `.active` from server-rendered `lang` context.
 - `gateway/app/templates/base.html:22-28` — inline script populating `window.I18N` with unit strings (hour/minute/second) used by the live-elapsed counter — keeps Chinese rendering as `1时 30分` without a second roundtrip.
 - `gateway/app/templates/base.html:30` — IIFE wiring tab buttons; reads initial tab from URL hash (`#records` / `#config`).
-- `gateway/app/i18n.py:41-130` — `TRANSLATIONS` dict with EN + ZH covering nav, feed-now, records, columns, day-note, pagination, config, and unit strings.
+- `gateway/app/i18n.py:41-130` — `TRANSLATIONS` dict with EN + ZH covering nav, activity bar, records, columns, day-note, pagination, config, and unit strings.
 - `gateway/app/i18n.py:142` — `normalize(code)` clamps any input to a supported lang or `DEFAULT_LANG`.
 - `gateway/app/i18n.py:147` — `read_lang(request)` returns the cookie-backed lang.
 - `gateway/app/i18n.py:151` — `t(key, lang, **kwargs)` looks up the entry and substitutes `{name}` placeholders with `str.replace` (no `str.format`, so any literal braces in a translated string pass through untouched).
-- `gateway/app/templates/index.html:12` — `<section class="feed-now">` with 3-column grid (detail | live counter | button); status text varies on `active`.
-- `gateway/app/templates/index.html:36` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch.
+- `gateway/app/templates/index.html` — `<section class="activity-bar">` renders one `<form action="/ui/activity">` per activity from `active_map`; the button is `.idle` (blue, "tap to start") or `.running` (red, with a `.live-elapsed` timer) depending on whether that activity has an open session. A `.activity-last` line shows the most recent finished activity.
+- `gateway/app/templates/index.html` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch (drives the running-activity timer).
 - `gateway/app/templates/index.html:63` — `<section class="add-record">` with header-row + top-right Add button; ml/Device prefilled from `config.default_volume_ml` / `config.default_device_id`.
-- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`.
+- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`. Below the header, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed); it round-trips through `/records/save`.
 - `gateway/app/templates/index.html:222` — `<section class="config">` (Configuration tab body).
-- `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.feed-now-form` 3-col grid with mobile media-query stacking, `.feed-now-counter { font-variant-numeric: tabular-nums }`, `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
+- `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row of `.activity-btn.idle` (blue) / `.activity-btn.running` (red) buttons with a tabular-nums `.activity-timer`, `.day-note-block`/`.day-note` textarea styling, `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
 
 ## Interactions
 
 - Rendered by [gateway-api.md](gateway-api.md) `ui_home`; receives
-  `groups` (each group carries `date`, `records`, `total_ml`),
+  `groups` (each group carries `date`, `records`, `total_ml`, `note`),
+  `activities`, `active_map` (`{activity: open-session}`),
   `last_finished`, `now_epoch`, `auto_check_cutoff`, `config`,
-  `dates_per_page`, plus `lang` / `html_lang` / `t` for the i18n
-  layer.
-- Submits to [gateway-api.md](gateway-api.md): `/ui/feed`,
-  `/records`, `/records/save` (persists both record edits and the
-  per-date day notes), `/records/delete`, `/config`, and the
-  language switch hits `/lang/{code}` (303 back to referer with the
-  `lang` cookie set, max-age 1 year).
-- The live counter is purely client-side off the server-rendered
+  `dates_per_page`, plus `lang` / `html_lang` / `t` / `al` for the
+  i18n layer.
+- Submits to [gateway-api.md](gateway-api.md): `/ui/activity` (one
+  form per activity button), `/records`, `/records/save` (persists
+  both record edits and the per-date day notes), `/records/delete`,
+  `/config`, and the language switch hits `/lang/{code}` (303 back to
+  referer with the `lang` cookie set, max-age 1 year).
+- The in-progress timer is purely client-side off the server-rendered
   `start_epoch` — there is no server push.
 - Translation table lives in `app/i18n.py` and covers every visible
   string in both templates. Config field identifiers
@@ -66,17 +68,17 @@ volume logged stay clean).
 With the gateway running, open `http://localhost:8080/` in a browser.
 Pass means all of:
 
-- Feed-now panel renders with the elapsed-time counter centered
-  between status text (left) and the Start/Stop button (right).
-- Counter ticks once per second when a session is active.
-- Clicking **Start feeding** posts `/ui/feed` and the page returns
-  showing **Stop feeding** (no broken-state flash).
+- Activity bar renders one button per configured activity; an idle
+  activity is blue ("tap to start"), a running one is red and shows a
+  timer that ticks once per second.
+- Clicking a blue button posts `/ui/activity` and the page returns
+  with that button red + counting; clicking it again stops it.
 - Date headers collapse/expand on chevron click; each header shows
   `YYYY-MM-DD (N)`.
 - Date-header checkbox toggles all rows in that day; rows from the
   last 24 h are pre-checked on page load.
-- Each date group has a day-note text input; editing it and clicking
-  Save persists the note (round-trips on reload).
+- Each date group has a multi-line day-note textarea; editing it and
+  clicking Save persists the note (round-trips on reload).
 - Tabs (Records / Configuration) sit on the right of the header and
   switch sections without a full reload.
 - Language switch chip (EN / 中文) sits left of the tabs; clicking
@@ -92,8 +94,8 @@ Pass means all of:
   `start_epoch`).
 - No `localStorage` persistence of date-group fold state — every
   reload starts with the default (most-recent expanded) layout.
-- No mobile-specific layout beyond the single media query that
-  collapses the feed-now grid.
+- No mobile-specific layout; the activity bar relies on flex-wrap to
+  stack buttons on narrow screens rather than a dedicated breakpoint.
 - i18n covers only EN + ZH today; adding a third language is one
   more dict in `app/i18n.py` plus a button in `base.html`. There
   is no `Accept-Language` auto-detection — the default is hard-

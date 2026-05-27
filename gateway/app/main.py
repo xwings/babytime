@@ -329,7 +329,7 @@ async def ui_home(
     auto_check_cutoff = now_epoch - 86400
 
     activities = config.activity_list(cfg)
-    active_sessions = [s for a in activities if (s := db.get_active(a))]
+    active_map = {a: s for a in activities if (s := db.get_active(a))}
     last_finished = next(
         (r for r in all_records if r.get("stop_epoch")), None
     )
@@ -346,7 +346,7 @@ async def ui_home(
             "al": (lambda name: i18n.activity_label(name, lang)),
             "groups": groups,
             "activities": activities,
-            "active_sessions": active_sessions,
+            "active_map": active_map,
             "last_finished": last_finished,
             "now_epoch": now_epoch,
             "config": cfg,

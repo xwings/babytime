@@ -30,13 +30,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_records": "Records",
         "tab_config": "Configuration",
         # Live activity panel
-        "feed_since": "since",
         "feed_last_fed_at": "last activity at",
-        "feed_none": "Nothing recorded yet.",
-        "feed_ago_suffix": " ago",
-        "activity_stop_btn": "Stop",
-        "activity_start_btn": "Start",
-        "activity_none_active": "Nothing in progress.",
+        "activity_start_btn": "tap to start",
         # Activity display labels (custom types fall back to their raw name)
         "act_feeding": "Feeding",
         "act_sleep": "Sleep",
@@ -80,13 +75,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_records": "记录",
         "tab_config": "设置",
         # Live activity panel
-        "feed_since": "开始于",
         "feed_last_fed_at": "上次活动于",
-        "feed_none": "尚无记录。",
-        "feed_ago_suffix": "前",
-        "activity_stop_btn": "停止",
-        "activity_start_btn": "开始",
-        "activity_none_active": "暂无进行中的活动。",
+        "activity_start_btn": "点击开始",
         # Activity display labels
         "act_feeding": "喂食",
         "act_sleep": "睡眠",

@@ -3,41 +3,27 @@
 
 <div class="tab-panel active" data-tab="records">
 
-<section class="feed-now {% if active_sessions %}active{% endif %}">
-  {% for s in active_sessions %}
-  <form method="post" action="/ui/activity" class="feed-now-form">
-    <input type="hidden" name="activity" value="{{ s.activity }}">
-    <span class="feed-now-detail">
-      <strong>{{ al(s.activity) }}</strong>
-      {{ t('feed_since') }} {{ s.start_epoch | localtime_only(tz) }}
-    </span>
-    <span class="feed-now-counter live-elapsed" data-since="{{ s.start_epoch }}">…</span>
-    <button type="submit" class="danger feed-now-btn">{{ t('activity_stop_btn') }}</button>
-  </form>
-  {% else %}
-  <div class="feed-now-form">
-    <span class="feed-now-detail">
-      {% if last_finished %}
-      {{ t('feed_last_fed_at') }} {{ last_finished.stop_epoch | localtime_only(tz) }}
-      (<strong>{{ al(last_finished.activity) }}</strong>)
+<section class="activity-bar">
+  {% for a in activities %}
+  {% set s = active_map.get(a) %}
+  <form method="post" action="/ui/activity">
+    <input type="hidden" name="activity" value="{{ a }}">
+    <button type="submit" class="activity-btn {{ 'running' if s else 'idle' }}">
+      <span class="activity-name">{{ al(a) }}</span>
+      {% if s %}
+      <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
       {% else %}
-      {{ t('feed_none') }}
+      <span class="activity-hint">{{ t('activity_start_btn') }}</span>
       {% endif %}
-    </span>
-    <span class="feed-now-counter {% if last_finished %}live-elapsed{% endif %}"
-          {% if last_finished %}data-since="{{ last_finished.stop_epoch }}" data-suffix="{{ t('feed_ago_suffix') }}"{% endif %}>
-      {% if last_finished %}…{% else %}—{% endif %}
-    </span>
-  </div>
-  {% endfor %}
-  <form method="post" action="/ui/activity" class="feed-now-form feed-now-start">
-    <select name="activity">
-      {% for a in activities %}
-      <option value="{{ a }}">{{ al(a) }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="feed-now-btn">{{ t('activity_start_btn') }}</button>
+    </button>
   </form>
+  {% endfor %}
+  {% if last_finished %}
+  <p class="activity-last">
+    {{ t('feed_last_fed_at') }} <strong>{{ al(last_finished.activity) }}</strong>
+    {{ last_finished.stop_epoch | localtime_only(tz) }}
+  </p>
+  {% endif %}
 </section>
 
 <script>
@@ -113,9 +99,11 @@
           <input type="checkbox" class="date-check" title="{{ t('records_select_all_on', date=g.date) }}">
           <span class="date-label">{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
         </label>
-        <input type="text" class="day-note" name="day_note_{{ g.date }}"
-               value="{{ g.note }}" placeholder="{{ t('day_note_placeholder') }}"
-               aria-label="{{ t('col_day_note') }}">
+      </div>
+      <div class="day-note-block">
+        <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('col_day_note') }}</label>
+        <textarea class="day-note" id="day_note_{{ g.date }}" name="day_note_{{ g.date }}"
+                  rows="3" placeholder="{{ t('day_note_placeholder') }}">{{ g.note }}</textarea>
       </div>
       <table class="records-table">
         <thead>
