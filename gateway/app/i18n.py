@@ -45,6 +45,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "records_delete_confirm": "Delete the selected record(s)?",
         "records_toggle_aria": "Toggle",
         "records_select_all_on": "Select all on {date}",
+        "date_count": "{n} time{plural}",
         "col_day_note": "Day note",
         "day_note_today": "Notes for Today",
         "day_note_placeholder": "Note for this day…",
@@ -89,6 +90,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "act_feeding": "喂食",
         "act_sleep": "睡眠",
         "act_poopoo": "便便",
+        "act_supplement": "补充剂",
         # Records section
         "records_heading": "记录（共 {n} 条,{d} 天）",
         "records_select_all": "选中本页全部",
@@ -97,6 +99,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "records_delete_confirm": "确认删除所选记录?",
         "records_toggle_aria": "折叠",
         "records_select_all_on": "选中 {date} 全部",
+        "date_count": "{n} 次",
         "col_day_note": "每日备注",
         "day_note_today": "今日备注",
         "day_note_placeholder": "当天备注…",

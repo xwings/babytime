@@ -87,7 +87,7 @@
         </button>
         <label class="date-select">
           <input type="checkbox" class="date-check" title="{{ t('records_select_all_on', date=g.date) }}">
-          <span class="date-label">{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
+          <span class="date-label">{{ g.date }} ({{ t('date_count', n=g.records|length, plural='' if (g.records|length) == 1 else 's') }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
         </label>
       </div>
       <div class="day-note-block">
