@@ -8,6 +8,7 @@ CONFIG_PATH = os.environ.get("GATEWAY_CONFIG_PATH", "/babytime/config.json")
 
 DEFAULTS: dict = {
     "activity_types": "feeding,sleep,poopoo",
+    "timed_activities": "feeding,sleep",
     "auto_stop_minutes": "15",
     "default_volume_ml": "",
     "timezone": "UTC",
@@ -90,6 +91,21 @@ def activity_list(cfg: dict) -> list:
         if name and name not in seen:
             seen.add(name)
             out.append(name)
+    return out
+
+
+def timed_activities(cfg: dict) -> set:
+    """Activities recorded as start->stop sessions (running timer); the rest
+    are instant timestamps (start only, stop shown as '-').
+
+    'feeding' is always timed — the firmware's session model and the volume
+    logic both assume a feeding session that opens and closes."""
+    raw = (cfg.get("timed_activities") or "").replace("\n", ",")
+    out = {"feeding"}
+    for part in raw.split(","):
+        name = part.strip()
+        if name:
+            out.add(name)
     return out
 
 

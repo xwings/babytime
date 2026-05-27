@@ -29,7 +29,7 @@ store through the web UI.
 - `gateway/app/main.py:51` — `filter_duration` — `(start, stop)` → `"Xh Ym"` / `"Xm Ys"`.
 - `gateway/app/main.py:81` — `lifespan` — startup: `db.init()`, `config.migrate_from(...)`, spawn `scheduler.scheduler_loop` as a background task.
 - `gateway/app/main.py:99` — `check_token` — `Authorization: Bearer <token>` dependency, no-op when `GATEWAY_TOKEN` is unset.
-- `gateway/app/main.py:109` — `state_payload` — assembles `{active, history, server_epoch}` for `/api/state`.
+- `gateway/app/main.py:109` — `state_payload` — assembles `{active, history, server_epoch}` for `/api/state`; `active` is `db.get_active("feeding")` (the device is feeding-centric, so an open sleep/instant record never masquerades as the device's active session).
 - `gateway/app/main.py:128` — `POST /api/events` — start/stop toggle; honors `timestamp_epoch` override.
 - `gateway/app/main.py:142` — `GET /api/state` — device polling target.
 - `GET /api/records` — JSON record list (newest-first, `limit`).
@@ -42,9 +42,9 @@ store through the web UI.
 - `_to_epoch(value, tz)` — JSON timestamp coercion (epoch int, digit string, or ISO/`Z`/offset; naive strings read in the configured tz). Shared by the write endpoints.
 - `_feeding_volume(activity, raw)` — single definition of the "volume only for feeding" rule, shared by the form routes and the JSON endpoints.
 - `gateway/app/main.py:174` — `ui_home` (`GET /`) — groups records by local date, paginates by date count (`ui_show_count`).
-- `POST /ui/activity` — web-initiated start/stop toggle for a chosen activity; stamps `device_id="web"`.
+- `POST /ui/activity` — web-initiated tap for a chosen activity; stamps `device_id="web"`. Timed activities (`config.timed_activities`) toggle start↔stop; instant activities log one closed record (`stop_epoch == start_epoch`) so they never open a session.
 - `gateway/app/main.py:272` — `POST /records` — add via form.
-- `POST /records/save` — inline edit of the checked rows; also persists each `day_note_<date>` field via `db.set_day_note`, so one Save writes both records and day notes.
+- `POST /records/save` — inline edit of the checked rows; rows for an instant activity are re-closed (`stop_epoch = start_epoch`) since their stop is not editable. Also persists each `day_note_<date>` field via `db.set_day_note`, so one Save writes both records and day notes.
 - `POST /records/delete` — deletes the checked rows.
 - `POST /config` — saves the config form.
 
@@ -64,13 +64,13 @@ From `gateway/`:
 ```sh
 docker compose up -d --build
 curl -s http://localhost:8080/api/state | jq .
-curl -s http://localhost:8080/ | grep -F 'feed-now'
+curl -s http://localhost:8080/ | grep -F 'activity-bar'
 ```
 
 - Pass = first `curl` prints a JSON object with `active`, `history`,
   and `server_epoch` keys.
 - Pass = second `curl` prints at least one line containing
-  `feed-now` (HTML rendered with the feed-now section).
+  `activity-bar` (HTML rendered with the activity-button bar).
 
 ## Open Gaps / Roadmap
 

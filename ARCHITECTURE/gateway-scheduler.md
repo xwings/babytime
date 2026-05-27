@@ -24,7 +24,10 @@ network without ever sending the `stop`.
   active session at `start_epoch + minutes * 60`; writes
   `stop_epoch = cap` (a clean cap, not "now") and logs
   `[scheduler] auto-stopped session <id> at <N>min cap`. A
-  non-positive `auto_stop_minutes` disables it.
+  non-positive `auto_stop_minutes` disables it. Sessions whose activity
+  is not in `config.timed_activities(cfg)` are skipped — instant events
+  are logged closed and must never be capped (belt-and-suspenders, since
+  the UI never opens them).
 - `gateway/app/scheduler.py:23` — `scheduler_loop()` — `async` task:
   wakes every 60 s and calls `_enforce_auto_stop`. Cancellable via
   `asyncio.CancelledError`.

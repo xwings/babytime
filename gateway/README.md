@@ -80,7 +80,8 @@ the network without sending `stop`.
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `activity_types` | `feeding` | comma-separated; `feeding` always first |
+| `activity_types` | `feeding,sleep,poopoo` | comma-separated; `feeding` always first |
+| `timed_activities` | `feeding,sleep` | comma-separated subset of `activity_types` that record as start→stop sessions with a timer; the rest log a single instant timestamp. `feeding` is always timed |
 | `auto_stop_minutes` | `15` | auto-stop an active session after this many minutes (0 disables) |
 | `default_volume_ml` | `` | pre-fills the ml field of the Add-record form |
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |

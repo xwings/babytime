@@ -61,8 +61,9 @@ Persistence for the gateway. Three stores:
 - `delete_record(id)`.
 - `list_records(limit=..., ids=..., offset=...)` — newest-first pagination.
 - `count_records()`.
-- `gateway/app/config.py` — `DEFAULTS` — full key list with seed values (`auto_stop_minutes`, UI prefills, `activity_types`, timezone, `ui_show_count`).
+- `gateway/app/config.py` — `DEFAULTS` — full key list with seed values (`auto_stop_minutes`, UI prefills, `activity_types`, `timed_activities`, timezone, `ui_show_count`).
 - `activity_list(cfg)` — split/dedupe `activity_types`, always with `feeding` first; reused by the app + UI for dropdowns.
+- `timed_activities(cfg)` — set of activities recorded as start→stop sessions (the rest are instant single-timestamp logs); always includes `feeding`. Used by the UI and scheduler to tell timed from instant activities.
 - `load()` — returns merged-with-defaults dict from cache (lazy init from disk).
 - `update(items)` — merges into the on-disk JSON via atomic `os.replace`, refreshes cache.
 - `migrate_from(legacy_loader)` — seed `config.json` from the legacy SQLite `config` table on first start; no-op once the file exists. `CONFIG_PATH` env `GATEWAY_CONFIG_PATH` (default `/babytime/config.json`).

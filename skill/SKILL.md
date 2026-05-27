@@ -13,13 +13,7 @@ host. Instead you talk to the gateway over HTTP and it writes its own DB.
 
 ## Configuration
 
-Two environment variables point the skill at a gateway:
-
-- `BABYTIME_GATEWAY_URL` — base URL, e.g. `http://gateway.lan:8080`
-  (default `http://127.0.0.1:8080`).
-- `BABYTIME_GATEWAY_TOKEN` — bearer token. Required only if the gateway
-  was started with a non-empty `GATEWAY_TOKEN`; sent as
-  `Authorization: Bearer <token>`.
+Check `BABYTIME_GATEWAY_URL` `BABYTIME_GATEWAY_TOKEN` from TOOLS.md
 
 ## Record fields
 
@@ -58,38 +52,6 @@ python3 script/babytime.py daynote set 2026-05-27             # blank note clear
 ```
 
 Non-2xx responses print to stderr and exit non-zero.
-
-## Raw HTTP (when shell/Python is unavailable)
-
-```sh
-URL=${BABYTIME_GATEWAY_URL:-http://127.0.0.1:8080}
-AUTH="Authorization: Bearer ${BABYTIME_GATEWAY_TOKEN}"
-
-# read newest 10
-curl -s "$URL/api/records?limit=10" -H "$AUTH"
-
-# add a feeding
-curl -s -X POST "$URL/api/records" -H "$AUTH" -H 'content-type: application/json' \
-  -d '{"start":"2026-05-27 14:30","stop":"2026-05-27 14:45","activity":"feeding","volume_ml":90}'
-
-# correct a record (only the fields you send change)
-curl -s -X PATCH "$URL/api/records/12" -H "$AUTH" -H 'content-type: application/json' \
-  -d '{"volume_ml":120}'
-
-# delete
-curl -s -X DELETE "$URL/api/records/12" -H "$AUTH"
-
-# read all per-day notes
-curl -s "$URL/api/day_notes" -H "$AUTH"
-
-# write one day's note (blank note clears it)
-curl -s -X PUT "$URL/api/day_notes/2026-05-27" -H "$AUTH" -H 'content-type: application/json' \
-  -d '{"note":"slept through the night"}'
-```
-
-`POST /api/records` requires `start`; everything else is optional and
-`activity` defaults to `feeding`. `PATCH` updates only the fields you
-include. Both return the stored record as JSON.
 
 ## Per-day notes
 

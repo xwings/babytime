@@ -133,7 +133,7 @@ def check_token(authorization: Optional[str] = Header(None)) -> None:
 
 def state_payload() -> dict:
     return {
-        "active": db.get_active(),
+        "active": db.get_active("feeding"),
         "history": db.list_records(limit=8),
         "server_epoch": int(time.time()),
     }
@@ -329,7 +329,8 @@ async def ui_home(
     auto_check_cutoff = now_epoch - 86400
 
     activities = config.activity_list(cfg)
-    active_map = {a: s for a in activities if (s := db.get_active(a))}
+    timed = config.timed_activities(cfg)
+    active_map = {a: s for a in activities if a in timed and (s := db.get_active(a))}
     last_fed = next(
         (r for r in all_records
          if r.get("stop_epoch") and r["activity"] == "feeding"),
@@ -348,6 +349,7 @@ async def ui_home(
             "al": (lambda name: i18n.activity_label(name, lang)),
             "groups": groups,
             "activities": activities,
+            "timed": sorted(timed),
             "active_map": active_map,
             "last_fed": last_fed,
             "now_epoch": now_epoch,
@@ -365,6 +367,7 @@ async def ui_home(
                 "auto_stop_minutes",
                 "default_volume_ml",
                 "activity_types",
+                "timed_activities",
                 "timezone",
                 "ui_show_count",
             ],
@@ -386,7 +389,11 @@ def _feeding_volume(activity: str, raw_ml) -> Optional[int]:
 @app.post("/ui/activity")
 async def ui_activity_toggle(activity: str = Form("feeding")):
     ts = int(time.time())
-    if db.get_active(activity):
+    if activity not in config.timed_activities(config.load()):
+        # Instant event: log a single closed timestamp (start == stop) so it
+        # never looks like an open session to the device, scheduler, or UI.
+        db.create_record(start_epoch=ts, stop_epoch=ts, activity=activity, device_id="web")
+    elif db.get_active(activity):
         db.stop_active(stop_epoch=ts, activity=activity)
     else:
         db.create_record(start_epoch=ts, activity=activity, device_id="web")
@@ -423,6 +430,7 @@ async def ui_bulk_save(request: Request):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
     form = await request.form()
+    timed = config.timed_activities(cfg)
     rids = [int(v) for v in form.getlist("record_id") if str(v).isdigit()]
     for rid in rids:
         date = (form.get(f"date_{rid}") or "").strip()
@@ -431,10 +439,13 @@ async def ui_bulk_save(request: Request):
         if not date or not start_time:
             continue
         start_epoch = combine_date_time(date, start_time, tz)
-        stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
-        if stop_epoch is not None and stop_epoch < start_epoch:
-            stop_epoch += 86400  # session crossed midnight
         activity = (form.get(f"activity_{rid}") or "feeding").strip() or "feeding"
+        if activity not in timed:
+            stop_epoch = start_epoch  # instant event has no editable stop
+        else:
+            stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
+            if stop_epoch is not None and stop_epoch < start_epoch:
+                stop_epoch += 86400  # session crossed midnight
         volume_ml = form.get(f"volume_ml_{rid}") or ""
         db.update_record(
             rid,

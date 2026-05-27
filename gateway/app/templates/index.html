@@ -16,7 +16,7 @@
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_start_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_start_btn') if a in timed else t('activity_log_btn') }}</span>
       {% endif %}
     </button>
   </form>
@@ -119,10 +119,14 @@
                      value="{{ r.start_epoch | localtime_only(tz) }}" required>
             </td>
             <td>
+              {% if r.activity in timed %}
               <input type="time" name="stop_time_{{ r.id }}"
                      value="{{ (r.stop_epoch | localtime_only(tz)) if r.stop_epoch else '' }}">
+              {% else %}
+              <span class="instant-dash">—</span>
+              {% endif %}
             </td>
-            <td>{{ r.start_epoch | duration(r.stop_epoch) or '—' }}</td>
+            <td>{{ (r.start_epoch | duration(r.stop_epoch) or '—') if r.activity in timed else '—' }}</td>
             <td>
               <input type="number" name="volume_ml_{{ r.id }}" min="0" step="1"
                      class="ml-input"

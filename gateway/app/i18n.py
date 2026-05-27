@@ -32,6 +32,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Live activity panel
         "last_fed": "Last fed:",
         "activity_start_btn": "tap to start",
+        "activity_log_btn": "tap to log",
         # Activity display labels (custom types fall back to their raw name)
         "act_feeding": "Feeding",
         "act_sleep": "Sleep",
@@ -77,6 +78,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Live activity panel
         "last_fed": "上次喂食:",
         "activity_start_btn": "点击开始",
+        "activity_log_btn": "点击记录",
         # Activity display labels
         "act_feeding": "喂食",
         "act_sleep": "睡眠",

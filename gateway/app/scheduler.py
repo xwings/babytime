@@ -14,6 +14,8 @@ def _enforce_auto_stop(cfg: dict) -> None:
     active = db.get_active()
     if not active:
         return
+    if active["activity"] not in config.timed_activities(cfg):
+        return  # instant events are never open; nothing to cap
     cap = int(active["start_epoch"]) + minutes * 60
     if int(time.time()) >= cap:
         if db.stop_active(stop_epoch=cap):
