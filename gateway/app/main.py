@@ -277,6 +277,15 @@ async def api_get_config():
     return config.load()
 
 
+@app.get("/api/activities", dependencies=[Depends(check_token)])
+async def api_get_activities():
+    """The configured activity types an agent may write, each flagged
+    `timed` (start->stop session) or instant (single timestamp)."""
+    cfg = config.load()
+    timed = config.timed_activities(cfg)
+    return [{"activity": a, "timed": a in timed} for a in config.activity_list(cfg)]
+
+
 # ---------------------------------------------------------------------------
 # Web UI
 # ---------------------------------------------------------------------------

@@ -32,7 +32,7 @@ Look up the host and token for this deployment in TOOLS.md.
 | ----- | ------- |
 | `id` | server-assigned record id |
 | `start_epoch` / `stop_epoch` | session bounds, Unix seconds (`stop_epoch` null = still open) |
-| `activity` | `feeding`, `sleep`, `poopoo`, … (gateway-configurable) |
+| `activity` | one of the gateway-configured types — run `activities` to list them; do not invent new ones |
 | `volume_ml` | only meaningful for `feeding`; ignored/forced null for other activities |
 | `notes` | free text |
 | `device_id` | who recorded it (`agent` for this skill) |
@@ -41,12 +41,19 @@ When writing, you may give `start`/`stop` as either a Unix epoch or a
 human time string `"YYYY-MM-DD HH:MM"`. Naive strings are interpreted in
 the gateway's configured timezone — you do not need the UTC offset.
 
+`activities` flags each type `timed` or instant. A **timed** activity
+(e.g. feeding, sleep) is a `start`→`stop` session; give both bounds. An
+**instant** activity (e.g. poopoo) is a single moment — give only
+`start` and leave `stop` off.
+
 ## Helper script (preferred when shell is available)
 
 `script/babytime.py` is a dependency-free Python 3 client:
 
 ```sh
-python3 scripts/babytime.py --host https://gw.example.com --token abc123 list --limit 10
+python3 scripts/babytime.py --host https://gw.example.com --token abc123 activities
+python3 scripts/babytime.py activities                         # [{activity, timed}, ...] — the types you may add
+python3 scripts/babytime.py list --limit 10
 python3 scripts/babytime.py list --activity feeding
 python3 scripts/babytime.py add --start "2026-05-27 14:30" --stop "2026-05-27 14:45" --ml 90 --notes "left side"
 python3 scripts/babytime.py add --activity sleep --start "2026-05-27 21:00"

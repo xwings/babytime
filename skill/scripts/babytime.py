@@ -10,7 +10,9 @@ Connection (global flags, before the subcommand):
   --token TOK   bearer token; omit if the gateway is open on LAN
 
 Examples:
-  babytime.py --host https://gw.example.com --token abc123 list --limit 5
+  babytime.py --host https://gw.example.com --token abc123 activities
+  babytime.py activities                 # what activity types exist + which are timed
+  babytime.py list --limit 5
   babytime.py list --activity sleep
   babytime.py add --start "2026-05-27 14:30" --stop "2026-05-27 14:45" --ml 90
   babytime.py add --activity sleep --start "2026-05-27 21:00"
@@ -96,6 +98,10 @@ def cmd_delete(args) -> None:
     _print(_request("DELETE", f"/api/records/{args.id}"))
 
 
+def cmd_activities(args) -> None:
+    _print(_request("GET", "/api/activities"))
+
+
 def cmd_daynote(args) -> None:
     if args.action == "get":
         _print(_request("GET", "/api/day_notes"))
@@ -118,6 +124,10 @@ def main() -> None:
     ap.add_argument("--token", default="", metavar="TOK",
                     help="bearer token; omit if the gateway is open on the LAN")
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    p_act = sub.add_parser("activities",
+                           help="list the activity types you may add, each flagged timed/instant")
+    p_act.set_defaults(func=cmd_activities)
 
     p_list = sub.add_parser("list", help="list recent records (newest first)")
     p_list.add_argument("--limit", type=int, default=20)

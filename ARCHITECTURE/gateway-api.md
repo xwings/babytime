@@ -39,6 +39,7 @@ store through the web UI.
 - `GET /api/day_notes` — `{date: note}` map of all per-day notes.
 - `PUT /api/day_notes/{date}` — upsert one day's note (`DayNoteIn`); `date` validated as `YYYY-MM-DD`; a blank note clears the entry. Returns `{date, note}`.
 - `GET /api/config` — non-secret config dump.
+- `GET /api/activities` — `[{activity, timed}, ...]` for the configured types (via `config.activity_list` + `timed_activities`); lets an agent discover what it may add and which types are start→stop vs instant.
 - `_to_epoch(value, tz)` — JSON timestamp coercion (epoch int, digit string, or ISO/`Z`/offset; naive strings read in the configured tz). Shared by the write endpoints.
 - `_feeding_volume(activity, raw)` — single definition of the "volume only for feeding" rule, shared by the form routes and the JSON endpoints.
 - `gateway/app/main.py:174` — `ui_home` (`GET /`) — groups records by local date, paginates by date count (`ui_show_count`).
