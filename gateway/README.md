@@ -84,5 +84,6 @@ the network without sending `stop`.
 | `timed_activities` | `feeding,sleep` | comma-separated subset of `activity_types` that record as start→stop sessions with a timer; the rest log a single instant timestamp. `feeding` is always timed |
 | `auto_stop_minutes` | `15` | auto-stop an active session after this many minutes (0 disables) |
 | `default_volume_ml` | `` | pre-fills the ml field of the Add-record form |
+| `default_language` | `en` | UI language (`en`/`zh`) for browsers without a `lang` cookie; the per-browser switch still overrides it |
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |
 | `ui_show_count` | `10` | dates per page on the web UI (records grouped by date; rows from the last 24h are pre-checked) |

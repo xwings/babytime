@@ -58,6 +58,13 @@
     </div>
     <div class="row-form">
       <label>{{ t('col_date') }} <input type="date" name="date" value="{{ now_date }}" required></label>
+      <label>{{ t('col_activity') }}
+        <select name="activity" class="add-activity-select">
+          {% for a in activities %}
+          <option value="{{ a }}" data-timed="{{ '1' if a in timed else '0' }}">{{ al(a) }}</option>
+          {% endfor %}
+        </select>
+      </label>
       <label>{{ t('col_start') }} <input type="time" name="start_time" value="{{ now_time }}" required></label>
       <label>{{ t('col_stop') }} <input type="time" name="stop_time" value="{{ now_time }}"></label>
       <label>{{ t('col_ml') }} <input type="number" name="volume_ml" min="0" step="1"
@@ -270,6 +277,13 @@
       </div>
       <button type="button" id="add-activity" class="ghost">{{ t('config_add_activity') }}</button>
     </fieldset>
+    <label>{{ t('config_default_language') }}
+      <select name="default_language">
+        {% for code, label in languages %}
+        <option value="{{ code }}" {% if config.default_language == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
     {% for key in config_keys_simple %}
     <label>{{ key }}
       <input type="text" name="{{ key }}" value="{{ config[key] | default('') }}">

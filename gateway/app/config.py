@@ -11,6 +11,7 @@ DEFAULTS: dict = {
     "timed_activities": "feeding,sleep",
     "auto_stop_minutes": "15",
     "default_volume_ml": "",
+    "default_language": "en",
     "timezone": "UTC",
     "ui_show_count": "10",
 }

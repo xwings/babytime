@@ -347,7 +347,7 @@ async def ui_home(
     )
 
     now = datetime.now(tz=tz)
-    lang = i18n.read_lang(request)
+    lang = i18n.read_lang(request, cfg.get("default_language"))
     return templates.TemplateResponse(
         "index.html",
         {
@@ -358,6 +358,7 @@ async def ui_home(
             "al": (lambda name: i18n.activity_label(name, lang)),
             "groups": groups,
             "activities": activities,
+            "languages": i18n.language_options(),
             "timed": sorted(timed),
             "active_map": active_map,
             "last_fed": last_fed,
@@ -421,14 +422,18 @@ async def ui_create(
     start_epoch = combine_date_time(date, start_time, tz)
     if start_epoch is None:
         raise HTTPException(400, "date and start_time required")
-    stop_epoch = combine_date_time(date, stop_time, tz) if stop_time.strip() else None
-    if stop_epoch is not None and stop_epoch < start_epoch:
-        stop_epoch += 86400  # session crossed midnight
+    activity = activity or "feeding"
+    if activity not in config.timed_activities(cfg):
+        stop_epoch = start_epoch  # instant event: a single closed timestamp
+    else:
+        stop_epoch = combine_date_time(date, stop_time, tz) if stop_time.strip() else None
+        if stop_epoch is not None and stop_epoch < start_epoch:
+            stop_epoch += 86400  # session crossed midnight
     db.create_record(
         start_epoch=start_epoch,
         stop_epoch=stop_epoch,
         volume_ml=_feeding_volume(activity, volume_ml),
-        activity=activity or "feeding",
+        activity=activity,
         notes=notes.strip() or None,
     )
     return RedirectResponse("/", status_code=303)

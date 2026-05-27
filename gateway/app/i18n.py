@@ -17,6 +17,7 @@ from typing import Optional
 from fastapi import Request
 
 SUPPORTED = ("en", "zh")
+LANG_LABELS = {"en": "English", "zh": "中文"}
 DEFAULT_LANG = "en"
 LANG_COOKIE = "lang"
 
@@ -68,6 +69,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Config tab
         "config_heading": "Configuration",
         "config_save": "Save",
+        "config_default_language": "Default language",
         "config_activities": "Activities",
         "config_timed": "timed",
         "config_add_activity": "+ Add activity",
@@ -122,6 +124,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Config tab
         "config_heading": "设置",
         "config_save": "保存",
+        "config_default_language": "默认语言",
         "config_activities": "活动",
         "config_timed": "计时",
         "config_add_activity": "+ 添加活动",
@@ -145,8 +148,17 @@ def normalize(code: Optional[str]) -> str:
     return code if code in SUPPORTED else DEFAULT_LANG
 
 
-def read_lang(request: Request) -> str:
-    return normalize(request.cookies.get(LANG_COOKIE))
+def read_lang(request: Request, default: Optional[str] = None) -> str:
+    """Resolve the active language: the per-browser cookie wins, else the
+    gateway's configured default (`default`), else :data:`DEFAULT_LANG`."""
+    cookie = request.cookies.get(LANG_COOKIE)
+    return normalize(cookie) if cookie else normalize(default)
+
+
+def language_options() -> list[tuple[str, str]]:
+    """`(code, display label)` pairs for every supported language — drives
+    the language picker on the config page."""
+    return [(code, LANG_LABELS.get(code, code)) for code in SUPPORTED]
 
 
 def t(key: str, lang: str = DEFAULT_LANG, **kwargs) -> str:
