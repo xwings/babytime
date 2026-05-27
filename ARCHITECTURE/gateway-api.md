@@ -28,7 +28,8 @@ store through the web UI.
 - `gateway/app/main.py:45` — `filter_localtime_only` — epoch → `HH:MM` for time input.
 - `gateway/app/main.py:51` — `filter_duration` — `(start, stop)` → `"Xh Ym"` / `"Xm Ys"`.
 - `gateway/app/main.py:81` — `lifespan` — startup: `db.init()`, `config.migrate_from(...)`, spawn `scheduler.scheduler_loop` as a background task.
-- `gateway/app/main.py` — `require_auth` — one global dependency (`FastAPI(dependencies=[...])`) gating every route, API and browser UI alike. Order: no-op when `GATEWAY_TOKEN` is unset → pass when the client IP is in a `trusted_networks` CIDR (default `10.0.0.0/8`) → otherwise the request must carry the token, as `Authorization: Bearer <token>` (machines) or HTTP Basic where the password is the token (browsers; username ignored). On failure it returns `401` with `WWW-Authenticate: Basic realm="babytime"` so browsers pop the native login; the token compare uses `hmac.compare_digest`. The `/static` mount is a sub-app and stays open (CSS only).
+- `gateway/app/main.py` — `require_auth` — one global dependency (`FastAPI(dependencies=[...])`) gating every route, API and browser UI alike. Order: no-op when `GATEWAY_TOKEN` is unset → pass when the effective client IP is in a `trusted_networks` CIDR (default `10.0.0.0/8`) → otherwise the request must carry the token, as `Authorization: Bearer <token>` (machines) or HTTP Basic where the password is the token (browsers; username ignored). On failure it returns `401` with `WWW-Authenticate: Basic realm="babytime"` so browsers pop the native login; the token compare uses `hmac.compare_digest`. The `/static` mount is a sub-app and stays open (CSS only).
+- `gateway/app/main.py` — `_effective_client_ip` — the IP the trust check keys on. Normally `request.client.host` (the TCP peer). When that peer is in `trusted_proxies` (CIDR list, empty by default) it walks the `X-Forwarded-For` chain from the connection side inward, skipping further trusted-proxy hops, to the real client behind the reverse proxy. `X-Forwarded-For` is ignored when the peer isn't a configured proxy, so a direct client can't spoof a LAN IP. uvicorn is launched with `--no-proxy-headers` (see `Dockerfile`) so it leaves `request.client` as the real peer instead of rewriting it from forwarded headers — this module is the single authority on proxy headers.
 - `gateway/app/main.py:109` — `state_payload` — assembles `{active, history, server_epoch}` for `/api/state`; `active` is `db.get_active("feeding")` (the device is feeding-centric, so an open sleep/instant record never masquerades as the device's active session).
 - `gateway/app/main.py:128` — `POST /api/events` — start/stop toggle; honors `timestamp_epoch` override.
 - `gateway/app/main.py:142` — `GET /api/state` — device polling target.
@@ -79,8 +80,10 @@ curl -s http://localhost:8080/ | grep -F 'activity-bar'
   (`POST/PATCH/DELETE /api/records`, `PUT /api/day_notes/{date}`),
   consumed by the `skill/` agent client; the old form routes
   (`/records*`) remain for the web UI only.
-- Network trust keys on `request.client.host`. Behind a reverse proxy
-  that terminates the connection, every client looks like the proxy —
-  `trusted_networks` would then need the proxy's IP, or the proxy must
-  forward the real peer (no `X-Forwarded-For` handling today).
+- Behind a reverse proxy, `trusted_proxies` must list the proxy's
+  source IP (as seen by the gateway) for `X-Forwarded-For` to be
+  honoured; otherwise the proxy itself is the effective client and a
+  proxy inside `trusted_networks` would make every forwarded request
+  look trusted. Only `X-Forwarded-For` is read (not `Forwarded` /
+  `X-Real-IP`).
 - No per-route metrics, structured logging, or rate limiting.

@@ -124,21 +124,40 @@ async def lifespan(app: FastAPI):
 _AUTH_CHALLENGE = {"WWW-Authenticate": 'Basic realm="babytime"'}
 
 
-def _client_is_trusted(request: Request) -> bool:
-    """True when the caller's IP falls inside a configured trusted network.
+def _effective_client_ip(request: Request, cfg: dict):
+    """The IP the trust decision should key on.
 
-    Trusted clients (the home LAN by default) skip auth entirely. Source is
-    `request.client.host`; behind a reverse proxy that rewrites the peer IP
-    this would see the proxy, so the proxy must pass the real client through
-    if you rely on network trust there."""
+    Normally the direct peer (`request.client.host`). When that peer is a
+    configured reverse proxy (`trusted_proxies`), walk back through the
+    `X-Forwarded-For` chain — skipping further trusted-proxy hops — to the
+    real client the proxy is fronting. `X-Forwarded-For` is ignored entirely
+    when the peer isn't a known proxy, so a direct client can't spoof it."""
     client = request.client
     if client is None:
+        return None
+    proxies = config.trusted_proxies(cfg)
+    # Connection side last: the forwarded list is client-most-first, the
+    # actual peer is appended on the right.
+    forwarded = request.headers.get("X-Forwarded-For", "")
+    chain = [h.strip() for h in forwarded.split(",") if h.strip()] + [client.host]
+    for hop in reversed(chain):
+        try:
+            ip = ipaddress.ip_address(hop)
+        except ValueError:
+            continue
+        if any(ip in net for net in proxies):
+            continue  # a proxy hop — keep looking inward for the real client
+        return ip
+    return None
+
+
+def _client_is_trusted(request: Request, cfg: dict) -> bool:
+    """True when the effective client IP falls inside a `trusted_networks`
+    block. Trusted clients (the home LAN by default) skip auth entirely."""
+    ip = _effective_client_ip(request, cfg)
+    if ip is None:
         return False
-    try:
-        ip = ipaddress.ip_address(client.host)
-    except ValueError:
-        return False
-    return any(ip in net for net in config.trusted_networks(config.load()))
+    return any(ip in net for net in config.trusted_networks(cfg))
 
 
 def _presented_token(request: Request) -> Optional[str]:
@@ -168,7 +187,7 @@ def require_auth(request: Request) -> None:
     browsers). A missing token set on the server leaves the gateway open."""
     if not GATEWAY_TOKEN:
         return
-    if _client_is_trusted(request):
+    if _client_is_trusted(request, config.load()):
         return
     presented = _presented_token(request)
     if presented and hmac.compare_digest(presented, GATEWAY_TOKEN):
@@ -434,6 +453,7 @@ async def ui_home(
                 "timezone",
                 "ui_show_count",
                 "trusted_networks",
+                "trusted_proxies",
             ],
         },
     )

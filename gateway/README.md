@@ -45,6 +45,22 @@ default `10.0.0.0/8`. Everyone else must present the token:
 - **Browsers** outside the trusted range get an HTTP Basic prompt; enter the
   token as the password (the username is ignored).
 
+### Behind a reverse proxy
+
+The gateway keys trust on the connecting IP, which behind a proxy (nginx,
+etc.) is the *proxy's* IP — and if that IP sits inside `trusted_networks`
+(e.g. a LAN nginx in `10.0.0.0/8`), every forwarded request would look
+trusted and skip auth. To fix this, list the proxy's source IP (as the
+gateway sees it) in `trusted_proxies`; the gateway then reads the real client
+from the proxy's `X-Forwarded-For` header and applies the trust/auth rules to
+*that*. The header is ignored unless the peer is a configured proxy, so it
+can't be spoofed.
+
+Make the proxy forward the header (nginx: `proxy_set_header X-Forwarded-For
+$proxy_add_x_forwarded_for;`). If unsure which source IP to trust, hit the
+gateway through the proxy with a token set and check the container logs — the
+`401` line shows the peer IP uvicorn saw.
+
 ## API
 
 Device-facing:
@@ -97,3 +113,4 @@ the network without sending `stop`.
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |
 | `ui_show_count` | `10` | dates per page on the web UI (records grouped by date; rows from the last 24h are pre-checked) |
 | `trusted_networks` | `10.0.0.0/8` | comma-separated CIDR blocks whose clients skip auth when `GATEWAY_TOKEN` is set; everyone else must present the token. Unparseable entries are ignored |
+| `trusted_proxies` | `` | comma-separated CIDR blocks of reverse proxies whose `X-Forwarded-For` is believed; empty means the header is ignored. Set this to your proxy's source IP so the real client IP drives the trust/auth decision |

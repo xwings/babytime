@@ -16,6 +16,7 @@ DEFAULTS: dict = {
     "timezone": "UTC",
     "ui_show_count": "10",
     "trusted_networks": "10.0.0.0/8",
+    "trusted_proxies": "",
 }
 
 _lock = threading.Lock()
@@ -97,17 +98,12 @@ def activity_list(cfg: dict) -> list:
     return out
 
 
-def trusted_networks(cfg: dict) -> list:
-    """Parsed CIDR blocks whose clients skip authentication.
-
-    Browsers and API clients from these networks are treated as logged in
-    (the gateway is meant to be open on the home LAN); everyone else must
-    present the gateway token. Unparseable entries are dropped rather than
-    raising, so one typo in the config can't lock the whole UI out.
-    """
-    raw = (cfg.get("trusted_networks") or "").replace("\n", ",")
+def _parse_cidrs(raw: str) -> list:
+    """Comma/newline-separated CIDR string → list of `ip_network`. Unparseable
+    entries are dropped rather than raising, so one typo in the config can't
+    lock the whole UI out."""
     nets: list = []
-    for part in raw.split(","):
+    for part in (raw or "").replace("\n", ",").split(","):
         part = part.strip()
         if not part:
             continue
@@ -116,6 +112,23 @@ def trusted_networks(cfg: dict) -> list:
         except ValueError:
             pass
     return nets
+
+
+def trusted_networks(cfg: dict) -> list:
+    """Parsed CIDR blocks whose clients skip authentication.
+
+    Browsers and API clients from these networks are treated as logged in
+    (the gateway is meant to be open on the home LAN); everyone else must
+    present the gateway token."""
+    return _parse_cidrs(cfg.get("trusted_networks") or "")
+
+
+def trusted_proxies(cfg: dict) -> list:
+    """Parsed CIDR blocks of reverse proxies whose `X-Forwarded-For` we
+    believe. Empty by default: the forwarded header is ignored unless the
+    direct peer is a configured proxy, so a client can't spoof a LAN IP to
+    bypass auth."""
+    return _parse_cidrs(cfg.get("trusted_proxies") or "")
 
 
 def timed_activities(cfg: dict) -> set:

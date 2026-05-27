@@ -17,4 +17,7 @@ ENV GATEWAY_BIND_PORT=8080
 EXPOSE 8080
 VOLUME ["/babytime"]
 
-CMD ["sh", "-c", "uvicorn app.main:app --host ${GATEWAY_BIND_HOST} --port ${GATEWAY_BIND_PORT}"]
+# --no-proxy-headers: the app resolves X-Forwarded-For itself (config
+# `trusted_proxies`), so uvicorn must leave request.client as the real TCP
+# peer instead of rewriting it from forwarded headers it half-trusts.
+CMD ["sh", "-c", "uvicorn app.main:app --host ${GATEWAY_BIND_HOST} --port ${GATEWAY_BIND_PORT} --no-proxy-headers"]
