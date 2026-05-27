@@ -30,7 +30,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_records": "Records",
         "tab_config": "Configuration",
         # Live activity panel
-        "feed_last_fed_at": "last activity at",
+        "last_fed": "Last fed:",
         "activity_start_btn": "tap to start",
         # Activity display labels (custom types fall back to their raw name)
         "act_feeding": "Feeding",
@@ -45,6 +45,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "records_toggle_aria": "Toggle",
         "records_select_all_on": "Select all on {date}",
         "col_day_note": "Day note",
+        "day_note_today": "Notes for Today",
         "day_note_placeholder": "Note for this day…",
         # Add-record
         "add_heading": "Add record",
@@ -56,7 +57,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_duration": "Duration",
         "col_ml": "ml",
         "col_activity": "Activity",
-        "col_notes": "Notes",
         # Pagination + empty
         "no_records": "No records yet.",
         "pagination_page": "Page {page} of {total}",
@@ -75,7 +75,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_records": "记录",
         "tab_config": "设置",
         # Live activity panel
-        "feed_last_fed_at": "上次活动于",
+        "last_fed": "上次喂食:",
         "activity_start_btn": "点击开始",
         # Activity display labels
         "act_feeding": "喂食",
@@ -90,6 +90,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "records_toggle_aria": "折叠",
         "records_select_all_on": "选中 {date} 全部",
         "col_day_note": "每日备注",
+        "day_note_today": "今日备注",
         "day_note_placeholder": "当天备注…",
         # Add-record
         "add_heading": "添加记录",
@@ -101,7 +102,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_duration": "时长",
         "col_ml": "毫升",
         "col_activity": "活动",
-        "col_notes": "备注",
         # Pagination + empty
         "no_records": "暂无记录。",
         "pagination_page": "第 {page} / {total} 页",

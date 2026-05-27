@@ -4,25 +4,27 @@
 <div class="tab-panel active" data-tab="records">
 
 <section class="activity-bar">
-  {% for a in activities %}
-  {% set s = active_map.get(a) %}
-  <form method="post" action="/ui/activity">
-    <input type="hidden" name="activity" value="{{ a }}">
-    <button type="submit" class="activity-btn {{ 'running' if s else 'idle' }}">
-      <span class="activity-name">{{ al(a) }}</span>
-      {% if s %}
-      <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
-      {% else %}
-      <span class="activity-hint">{{ t('activity_start_btn') }}</span>
-      {% endif %}
-    </button>
-  </form>
-  {% endfor %}
-  {% if last_finished %}
-  <p class="activity-last">
-    {{ t('feed_last_fed_at') }} <strong>{{ al(last_finished.activity) }}</strong>
-    {{ last_finished.stop_epoch | localtime_only(tz) }}
-  </p>
+  <div class="activity-buttons">
+    {% for a in activities %}
+    {% set s = active_map.get(a) %}
+    <form method="post" action="/ui/activity">
+      <input type="hidden" name="activity" value="{{ a }}">
+      <button type="submit" class="activity-btn {{ 'running' if s else 'idle' }}">
+        <span class="activity-name">{{ al(a) }}</span>
+        {% if s %}
+        <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
+        {% else %}
+        <span class="activity-hint">{{ t('activity_start_btn') }}</span>
+        {% endif %}
+      </button>
+    </form>
+    {% endfor %}
+  </div>
+  {% if last_fed %}
+  <div class="last-fed">
+    <span class="last-fed-label">{{ t('last_fed') }}</span>
+    <span class="last-fed-counter live-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
+  </div>
   {% endif %}
 </section>
 
@@ -72,7 +74,6 @@
           {% endfor %}
         </select>
       </label>
-      <label>{{ t('col_notes') }} <input type="text" name="notes"></label>
     </div>
   </form>
 </section>
@@ -100,11 +101,6 @@
           <span class="date-label">{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
         </label>
       </div>
-      <div class="day-note-block">
-        <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('col_day_note') }}</label>
-        <textarea class="day-note" id="day_note_{{ g.date }}" name="day_note_{{ g.date }}"
-                  rows="3" placeholder="{{ t('day_note_placeholder') }}">{{ g.note }}</textarea>
-      </div>
       <table class="records-table">
         <thead>
           <tr>
@@ -114,7 +110,6 @@
             <th>{{ t('col_duration') }}</th>
             <th>{{ t('col_ml') }}</th>
             <th>{{ t('col_activity') }}</th>
-            <th>{{ t('col_notes') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -151,14 +146,15 @@
                 {% endif %}
               </select>
             </td>
-            <td>
-              <input type="text" name="notes_{{ r.id }}"
-                     value="{{ r.notes or '' }}">
-            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
+      <div class="day-note-block">
+        <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('day_note_today') if g.date == now_date else t('col_day_note') }}</label>
+        <textarea class="day-note" id="day_note_{{ g.date }}" name="day_note_{{ g.date }}"
+                  rows="3" placeholder="{{ t('day_note_placeholder') }}">{{ g.note }}</textarea>
+      </div>
     </div>
     {% else %}
     <p class="empty">{{ t('no_records') }}</p>

@@ -6,12 +6,15 @@ Browser-facing surface of the gateway: a single-page UI with two
 top-right tabs (Records / Configuration), a per-browser language
 switch (English / 中文) seated to the left of the tabs, an
 activity-button bar (one toggle per configured activity — blue when
-idle, red with a live 1 Hz in-progress timer when running), an
-Add-record form with header-action button, and per-date collapsible
-record groups with select-all + auto-check of the last 24 h. Each
-date group carries a full-width free-text day-note textarea, and
-per-date headers also show the day's `total_ml` (omitted when zero,
-so days with no volume logged stay clean).
+idle, red with a live 1 Hz in-progress timer when running) with a
+right-aligned `Last fed:` panel showing a live 1 Hz counter since the
+most recent finished feeding, an Add-record form with header-action
+button, and per-date collapsible record groups with select-all +
+auto-check of the last 24 h. Each date group carries a full-width
+free-text day-note textarea seated *below* that date's records
+(labelled "Notes for Today" on the current date, "Day note"
+otherwise), and per-date headers also show the day's `total_ml`
+(omitted when zero, so days with no volume logged stay clean).
 
 ## Status
 
@@ -36,21 +39,21 @@ so days with no volume logged stay clean).
 - `gateway/app/i18n.py:142` — `normalize(code)` clamps any input to a supported lang or `DEFAULT_LANG`.
 - `gateway/app/i18n.py:147` — `read_lang(request)` returns the cookie-backed lang.
 - `gateway/app/i18n.py:151` — `t(key, lang, **kwargs)` looks up the entry and substitutes `{name}` placeholders with `str.replace` (no `str.format`, so any literal braces in a translated string pass through untouched).
-- `gateway/app/templates/index.html` — `<section class="activity-bar">` renders one `<form action="/ui/activity">` per activity from `active_map`; the button is `.idle` (blue, "tap to start") or `.running` (red, with a `.live-elapsed` timer) depending on whether that activity has an open session. A `.activity-last` line shows the most recent finished activity.
+- `gateway/app/templates/index.html` — `<section class="activity-bar">` holds a left `.activity-buttons` group rendering one `<form action="/ui/activity">` per activity from `active_map` (button `.idle` blue "tap to start" or `.running` red with a `.live-elapsed` timer, by open-session state) and a right-aligned `.last-fed` panel — a `Last fed:` label plus a `.last-fed-counter.live-elapsed` ticking since `last_fed.stop_epoch` (the most recent finished feeding; omitted when none).
 - `gateway/app/templates/index.html` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch (drives the running-activity timer).
 - `gateway/app/templates/index.html:63` — `<section class="add-record">` with header-row + top-right Add button; ml/Device prefilled from `config.default_volume_ml` / `config.default_device_id`.
-- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`. Below the header, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed); it round-trips through `/records/save`.
+- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`. Below the date's records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`.
 - `gateway/app/templates/index.html:222` — `<section class="config">` (Configuration tab body).
-- `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row of `.activity-btn.idle` (blue) / `.activity-btn.running` (red) buttons with a tabular-nums `.activity-timer`, `.day-note-block`/`.day-note` textarea styling, `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
+- `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row holding `.activity-buttons` (left, flex group of `.activity-btn.idle` blue / `.activity-btn.running` red with a tabular-nums `.activity-timer`) and `.last-fed` (`margin-left:auto`, label + tabular-nums `.last-fed-counter`), `.day-note-block`/`.day-note` textarea styling (`border-top`, sits below the table), `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
 
 ## Interactions
 
 - Rendered by [gateway-api.md](gateway-api.md) `ui_home`; receives
   `groups` (each group carries `date`, `records`, `total_ml`, `note`),
   `activities`, `active_map` (`{activity: open-session}`),
-  `last_finished`, `now_epoch`, `auto_check_cutoff`, `config`,
-  `dates_per_page`, plus `lang` / `html_lang` / `t` / `al` for the
-  i18n layer.
+  `last_fed` (most recent finished feeding, or `None`), `now_epoch`,
+  `now_date`, `auto_check_cutoff`, `config`, `dates_per_page`, plus
+  `lang` / `html_lang` / `t` / `al` for the i18n layer.
 - Submits to [gateway-api.md](gateway-api.md): `/ui/activity` (one
   form per activity button), `/records`, `/records/save` (persists
   both record edits and the per-date day notes), `/records/delete`,
@@ -73,12 +76,16 @@ Pass means all of:
   timer that ticks once per second.
 - Clicking a blue button posts `/ui/activity` and the page returns
   with that button red + counting; clicking it again stops it.
+- The right-aligned `Last fed:` counter ticks once per second since
+  the most recent finished feeding (absent until one feeding has been
+  stopped).
 - Date headers collapse/expand on chevron click; each header shows
   `YYYY-MM-DD (N)`.
 - Date-header checkbox toggles all rows in that day; rows from the
   last 24 h are pre-checked on page load.
-- Each date group has a multi-line day-note textarea; editing it and
-  clicking Save persists the note (round-trips on reload).
+- Each date group has a multi-line day-note textarea below that date's
+  records (labelled "Notes for Today" on the current date); editing it
+  and clicking Save persists the note (round-trips on reload).
 - Tabs (Records / Configuration) sit on the right of the header and
   switch sections without a full reload.
 - Language switch chip (EN / 中文) sits left of the tabs; clicking

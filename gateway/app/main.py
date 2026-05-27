@@ -330,8 +330,10 @@ async def ui_home(
 
     activities = config.activity_list(cfg)
     active_map = {a: s for a in activities if (s := db.get_active(a))}
-    last_finished = next(
-        (r for r in all_records if r.get("stop_epoch")), None
+    last_fed = next(
+        (r for r in all_records
+         if r.get("stop_epoch") and r["activity"] == "feeding"),
+        None,
     )
 
     now = datetime.now(tz=tz)
@@ -347,7 +349,7 @@ async def ui_home(
             "groups": groups,
             "activities": activities,
             "active_map": active_map,
-            "last_finished": last_finished,
+            "last_fed": last_fed,
             "now_epoch": now_epoch,
             "config": cfg,
             "tz": tz_name,
@@ -398,7 +400,6 @@ async def ui_create(
     stop_time: str = Form(""),
     volume_ml: str = Form(""),
     activity: str = Form("feeding"),
-    notes: str = Form(""),
 ):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
@@ -413,7 +414,6 @@ async def ui_create(
         stop_epoch=stop_epoch,
         volume_ml=_feeding_volume(activity, volume_ml),
         activity=activity or "feeding",
-        notes=notes or None,
     )
     return RedirectResponse("/", status_code=303)
 
@@ -436,14 +436,12 @@ async def ui_bulk_save(request: Request):
             stop_epoch += 86400  # session crossed midnight
         activity = (form.get(f"activity_{rid}") or "feeding").strip() or "feeding"
         volume_ml = form.get(f"volume_ml_{rid}") or ""
-        notes = form.get(f"notes_{rid}") or ""
         db.update_record(
             rid,
             start_epoch=start_epoch,
             stop_epoch=stop_epoch,
             volume_ml=_feeding_volume(activity, volume_ml),
             activity=activity,
-            notes=notes or None,
         )
     for key, value in form.multi_items():
         if key.startswith("day_note_"):
