@@ -62,6 +62,7 @@
       <label>{{ t('col_stop') }} <input type="time" name="stop_time" value="{{ now_time }}"></label>
       <label>{{ t('col_ml') }} <input type="number" name="volume_ml" min="0" step="1"
                        class="ml-input" value="{{ config.default_volume_ml or '' }}"></label>
+      <label>{{ t('col_notes') }} <input type="text" name="notes"></label>
     </div>
   </form>
 </section>
@@ -103,6 +104,7 @@
             <th>{{ t('col_duration') }}</th>
             <th>{{ t('col_ml') }}</th>
             <th>{{ t('col_activity') }}</th>
+            <th>{{ t('col_notes') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -142,6 +144,11 @@
                 <option value="{{ r.activity }}" selected>{{ al(r.activity) }}</option>
                 {% endif %}
               </select>
+            </td>
+            <td>
+              <input type="text" name="notes_{{ r.id }}" class="notes-input"
+                     value="{{ r.notes | default('') }}"
+                     placeholder="{{ t('col_notes') }}">
             </td>
           </tr>
           {% endfor %}

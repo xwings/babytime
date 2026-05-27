@@ -210,6 +210,10 @@ section h2 {
   width: 100%;
 }
 
+.records-table .notes-input {
+  min-width: 12rem;
+}
+
 input, textarea, button, select {
   font: inherit;
   color: inherit;

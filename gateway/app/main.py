@@ -414,6 +414,7 @@ async def ui_create(
     stop_time: str = Form(""),
     volume_ml: str = Form(""),
     activity: str = Form("feeding"),
+    notes: str = Form(""),
 ):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
@@ -428,6 +429,7 @@ async def ui_create(
         stop_epoch=stop_epoch,
         volume_ml=_feeding_volume(activity, volume_ml),
         activity=activity or "feeding",
+        notes=notes.strip() or None,
     )
     return RedirectResponse("/", status_code=303)
 
@@ -460,6 +462,7 @@ async def ui_bulk_save(request: Request):
             stop_epoch=stop_epoch,
             volume_ml=_feeding_volume(activity, volume_ml),
             activity=activity,
+            notes=(form.get(f"notes_{rid}") or "").strip() or None,
         )
     for key, value in form.multi_items():
         if key.startswith("day_note_"):

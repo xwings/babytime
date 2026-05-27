@@ -58,6 +58,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_duration": "Duration",
         "col_ml": "ml",
         "col_activity": "Activity",
+        "col_notes": "Note",
         # Pagination + empty
         "no_records": "No records yet.",
         "pagination_page": "Page {page} of {total}",
@@ -109,6 +110,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_duration": "时长",
         "col_ml": "毫升",
         "col_activity": "活动",
+        "col_notes": "备注",
         # Pagination + empty
         "no_records": "暂无记录。",
         "pagination_page": "第 {page} / {total} 页",

@@ -14,7 +14,8 @@ never enter a running state. The idle Feeding button carries an
 integrated `Last fed:` live 1 Hz counter
 since the most recent finished feeding, an Add-record form with
 header-action button, and per-date collapsible record groups with select-all +
-auto-check of the last 24 h. Each date group carries a full-width
+auto-check of the last 24 h. Each record row carries its own free-text
+note field (distinct from the per-day note). Each date group carries a full-width
 free-text day-note textarea seated between that date's header and
 its records (labelled "Notes for Today" on the current date, "Day
 note" otherwise), and per-date headers also show the day's `total_ml`
@@ -46,7 +47,7 @@ note" otherwise), and per-date headers also show the day's `total_ml`
 - `gateway/app/templates/index.html` — `<section class="activity-bar">` renders one `<form action="/ui/activity">` per activity from `active_map`; the button is `.running` (red, `.live-elapsed` timer since `start_epoch`) when that activity has an open session, else `.idle` (blue). The idle Feeding button is special: when `last_fed` exists it shows an `.activity-sub` "Last fed:" label plus a `.live-elapsed` counter since `last_fed.stop_epoch`; otherwise it shows the "tap to start" hint for timed activities (`a in timed`) and "tap to log" for instant ones. Instant activities never appear in `active_map` (their records are created closed, `stop == start`), so they have no running state.
 - `gateway/app/templates/index.html` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch (drives the running-activity timer).
 - `gateway/app/templates/index.html:63` — `<section class="add-record">` with header-row + top-right Add button; ml/Device prefilled from `config.default_volume_ml` / `config.default_device_id`.
-- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`. Between the header and the records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`. Each row has an `activity_{id}` `<select>` (`.activity-select`) for its activity; the Add-record form has no activity picker and defaults new records to feeding. A row whose activity is instant (`r.activity not in timed`) renders its Stop and Duration cells as a static `—` (no editable stop input); `/records/save` re-closes such rows (`stop == start`).
+- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`. Between the header and the records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`. Each row has an `activity_{id}` `<select>` (`.activity-select`) for its activity and a `notes_{id}` free-text `.notes-input` for that record's own note (blank clears it); the Add-record form has no activity picker, defaults new records to feeding, and carries its own `notes` field. A row whose activity is instant (`r.activity not in timed`) renders its Stop and Duration cells as a static `—` (no editable stop input); `/records/save` re-closes such rows (`stop == start`).
 - `gateway/app/templates/index.html:222` — `<section class="config">` (Configuration tab body). Activities are edited in a `.config-activities` fieldset: one `.activity-row` per activity with a name input and a `.timed-toggle` "timed" checkbox; a `+ Add activity` button appends a blank row (client-side, incrementing `activity_name_<i>` indices) and a per-row `×` removes one. The feeding row is read-only with a disabled (always-checked) timed box, reflecting that feeding is structurally required and always timed. The remaining scalar keys still render as plain text inputs from `config_keys_simple` (now just `auto_stop_minutes`, `default_volume_ml`, `timezone`, `ui_show_count` — `activity_types`/`timed_activities` are driven by the rows).
 - `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row of `.activity-btn.idle` (blue) / `.activity-btn.running` (red) buttons with a tabular-nums `.activity-timer` and an `.activity-sub` micro-label (the idle Feeding button's "Last fed:"), `.day-note-block`/`.day-note` textarea styling (`border-bottom`, sits between header and table), `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
 
@@ -97,10 +98,11 @@ Pass means all of:
   header and that date's records (labelled "Notes for Today" on the
   current date); editing it and clicking Save persists the note
   (round-trips on reload).
-- Each row has an activity dropdown; the Add-record form has no
-  activity picker and defaults new records to Feeding. Rows for an
-  instant activity show `—` for Stop and Duration instead of an
-  editable stop time.
+- Each row has an activity dropdown and a free-text Note field that
+  round-trips on Save (blank clears it); the Add-record form has no
+  activity picker, defaults new records to Feeding, and has its own
+  Note field. Rows for an instant activity show `—` for Stop and
+  Duration instead of an editable stop time.
 - Tabs (Records / Configuration) sit on the right of the header and
   switch sections without a full reload.
 - The Configuration tab lists each activity as a row with a name field
