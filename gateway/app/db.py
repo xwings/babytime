@@ -30,12 +30,19 @@ def init() -> None:
                 stop_epoch INTEGER,
                 volume_ml INTEGER,
                 notes TEXT,
+                activity TEXT NOT NULL DEFAULT 'feeding',
                 device_id TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
             );
             CREATE INDEX IF NOT EXISTS idx_records_start ON records(start_epoch DESC);
             """
         )
+        # Migrate pre-activity databases: existing rows are feedings.
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(records)")}
+        if "activity" not in cols:
+            conn.execute(
+                "ALTER TABLE records ADD COLUMN activity TEXT NOT NULL DEFAULT 'feeding'"
+            )
         conn.commit()
 
 
@@ -55,23 +62,45 @@ def legacy_config_rows() -> dict:
     return {r["key"]: r["value"] for r in rows}
 
 
-def get_active() -> Optional[dict]:
+def get_active(activity: Optional[str] = None) -> Optional[dict]:
+    """The open session (stop_epoch IS NULL). With `activity`, the open
+    session of that type; without it, the most recent open session of any
+    type."""
     conn = get_conn()
     with _lock:
-        row = conn.execute(
-            "SELECT * FROM records WHERE stop_epoch IS NULL ORDER BY start_epoch DESC LIMIT 1"
-        ).fetchone()
+        if activity is None:
+            row = conn.execute(
+                "SELECT * FROM records WHERE stop_epoch IS NULL "
+                "ORDER BY start_epoch DESC LIMIT 1"
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM records WHERE stop_epoch IS NULL AND activity=? "
+                "ORDER BY start_epoch DESC LIMIT 1",
+                (activity,),
+            ).fetchone()
     return dict(row) if row else None
 
 
-def stop_active(stop_epoch: int) -> bool:
+def stop_active(stop_epoch: int, activity: Optional[str] = None) -> bool:
+    """Close the open session for `activity` (or the latest open one of any
+    type when `activity` is None)."""
     conn = get_conn()
     with _lock:
+        if activity is None:
+            sub = (
+                "SELECT id FROM records WHERE stop_epoch IS NULL "
+                "ORDER BY start_epoch DESC LIMIT 1"
+            )
+            params: tuple = (stop_epoch,)
+        else:
+            sub = (
+                "SELECT id FROM records WHERE stop_epoch IS NULL AND activity=? "
+                "ORDER BY start_epoch DESC LIMIT 1"
+            )
+            params = (stop_epoch, activity)
         cur = conn.execute(
-            "UPDATE records SET stop_epoch=? "
-            "WHERE id=(SELECT id FROM records WHERE stop_epoch IS NULL "
-            "ORDER BY start_epoch DESC LIMIT 1)",
-            (stop_epoch,),
+            f"UPDATE records SET stop_epoch=? WHERE id=({sub})", params
         )
         conn.commit()
         return cur.rowcount > 0
@@ -82,21 +111,22 @@ def create_record(
     stop_epoch: Optional[int] = None,
     volume_ml: Optional[int] = None,
     notes: Optional[str] = None,
+    activity: str = "feeding",
     device_id: str = "",
 ) -> int:
     conn = get_conn()
     with _lock:
         cur = conn.execute(
-            "INSERT INTO records (start_epoch, stop_epoch, volume_ml, notes, device_id) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (start_epoch, stop_epoch, volume_ml, notes, device_id),
+            "INSERT INTO records (start_epoch, stop_epoch, volume_ml, notes, activity, device_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (start_epoch, stop_epoch, volume_ml, notes, activity, device_id),
         )
         conn.commit()
         return cur.lastrowid
 
 
 def update_record(rid: int, **fields) -> None:
-    allowed = {"start_epoch", "stop_epoch", "volume_ml", "notes", "device_id"}
+    allowed = {"start_epoch", "stop_epoch", "volume_ml", "notes", "activity", "device_id"}
     sets = []
     params: list = []
     for k, v in fields.items():

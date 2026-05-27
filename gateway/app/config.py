@@ -23,13 +23,13 @@ DEFAULTS: dict = {
         "Append or update as needed.\n{records}"
     ),
     "webhook_record_format": (
-        "{date} {start_time} -> {stop_time} ({duration}, {volume}ml) {notes}"
+        "{date} {start_time} -> {stop_time} [{activity}] ({duration}, {volume}ml) {notes}"
     ),
+    "activity_types": "feeding,sleep,poopoo",
     "auto_sync_enabled": "0",
     "auto_sync_hours": "6",
     "auto_stop_minutes": "15",
     "default_volume_ml": "",
-    "default_device_id": "",
     "timezone": "UTC",
     "ui_show_count": "10",
 }
@@ -93,6 +93,24 @@ def update(items: dict) -> dict:
         _write_file(current)
         _cache = _merge(current)
         return dict(_cache)
+
+
+def activity_list(cfg: dict) -> list:
+    """Configured activity types, in order, deduped, with 'feeding' first.
+
+    'feeding' is the one type the rest of the app special-cases (volume_ml,
+    the firmware default), so it is always present regardless of config.
+    """
+    raw = (cfg.get("activity_types") or "").replace("\n", ",")
+    seen: set = set()
+    out: list = ["feeding"]
+    seen.add("feeding")
+    for part in raw.split(","):
+        name = part.strip()
+        if name and name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
 
 
 def migrate_from(legacy_loader: Callable[[], dict]) -> None:

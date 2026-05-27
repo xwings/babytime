@@ -1,4 +1,4 @@
-// feedingtime-esp32s3 — firmware entry point.
+// babytime — firmware entry point.
 //
 // Holds app state (feed history, active counter, pending event queue),
 // the gateway HTTP client (runs on Core 0 via gatewayTask), NTP setup,

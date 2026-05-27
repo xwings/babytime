@@ -1,4 +1,4 @@
-# feedingtime-esp32s3
+# babytime
 #
 # Override the PlatformIO binary, serial port, baud, or target device on the
 # command line, e.g.

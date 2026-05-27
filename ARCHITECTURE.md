@@ -1,4 +1,4 @@
-# feedingtime-esp32s3
+# babytime
 
 This file is the control center. It carries only cross-cutting
 material: mission, target environment, workspace layout, boot/entry

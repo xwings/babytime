@@ -30,15 +30,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Nav
         "tab_records": "Records",
         "tab_config": "Configuration",
-        # Feed-now panel
+        # Live activity panel
         "feed_since": "since",
-        "feed_on": "on",
-        "feed_unknown_device": "(unknown)",
-        "feed_last_fed_at": "last fed at",
-        "feed_none": "No feedings recorded yet.",
-        "feed_stop_btn": "Stop feeding",
-        "feed_start_btn": "Start feeding",
+        "feed_last_fed_at": "last activity at",
+        "feed_none": "Nothing recorded yet.",
         "feed_ago_suffix": " ago",
+        "activity_stop_btn": "Stop",
+        "activity_start_btn": "Start",
+        "activity_none_active": "Nothing in progress.",
+        # Activity display labels (custom types fall back to their raw name)
+        "act_feeding": "Feeding",
+        "act_sleep": "Sleep",
+        "act_poopoo": "Poopoo",
         # Records section
         "records_heading": "Records ({n} across {d} day{plural})",
         "records_select_all": "Select all on page",
@@ -57,8 +60,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_stop": "Stop",
         "col_duration": "Duration",
         "col_ml": "ml",
+        "col_activity": "Activity",
         "col_notes": "Notes",
-        "col_device": "Device",
         # Pagination + empty
         "no_records": "No records yet.",
         "pagination_page": "Page {page} of {total}",
@@ -70,8 +73,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_template_hint_html": (
             "Template placeholders: <code>{records}</code> in message, and "
             "<code>{date}</code> <code>{start_time}</code> <code>{stop_time}</code> "
-            "<code>{duration}</code> <code>{volume}</code> <code>{notes}</code> "
-            "<code>{device_id}</code> in each record line."
+            "<code>{duration}</code> <code>{volume}</code> <code>{activity}</code> "
+            "<code>{notes}</code> <code>{device_id}</code> in each record line."
         ),
         # Sync banner
         "sync_banner_ok": "Sync ok",
@@ -85,15 +88,18 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Nav
         "tab_records": "记录",
         "tab_config": "设置",
-        # Feed-now panel
+        # Live activity panel
         "feed_since": "开始于",
-        "feed_on": "设备",
-        "feed_unknown_device": "（未知）",
-        "feed_last_fed_at": "上次喂食于",
-        "feed_none": "尚无喂食记录。",
-        "feed_stop_btn": "停止喂食",
-        "feed_start_btn": "开始喂食",
+        "feed_last_fed_at": "上次活动于",
+        "feed_none": "尚无记录。",
         "feed_ago_suffix": "前",
+        "activity_stop_btn": "停止",
+        "activity_start_btn": "开始",
+        "activity_none_active": "暂无进行中的活动。",
+        # Activity display labels
+        "act_feeding": "喂食",
+        "act_sleep": "睡眠",
+        "act_poopoo": "便便",
         # Records section
         "records_heading": "记录（共 {n} 条,{d} 天）",
         "records_select_all": "选中本页全部",
@@ -112,8 +118,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "col_stop": "结束",
         "col_duration": "时长",
         "col_ml": "毫升",
+        "col_activity": "活动",
         "col_notes": "备注",
-        "col_device": "设备",
         # Pagination + empty
         "no_records": "暂无记录。",
         "pagination_page": "第 {page} / {total} 页",
@@ -125,8 +131,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_template_hint_html": (
             "模板占位符:消息体中的 <code>{records}</code>,以及每条记录行中的 "
             "<code>{date}</code> <code>{start_time}</code> <code>{stop_time}</code> "
-            "<code>{duration}</code> <code>{volume}</code> <code>{notes}</code> "
-            "<code>{device_id}</code>。"
+            "<code>{duration}</code> <code>{volume}</code> <code>{activity}</code> "
+            "<code>{notes}</code> <code>{device_id}</code>。"
         ),
         # Sync banner
         "sync_banner_ok": "同步成功",
@@ -159,6 +165,16 @@ def t(key: str, lang: str = DEFAULT_LANG, **kwargs) -> str:
     for k, v in kwargs.items():
         s = s.replace("{" + k + "}", str(v))
     return s
+
+
+def activity_label(name: str, lang: str = DEFAULT_LANG) -> str:
+    """Display label for an activity type. Known types are translated;
+    user-defined ones fall back to their raw name."""
+    if not name:
+        return ""
+    table = TRANSLATIONS.get(lang) or TRANSLATIONS[DEFAULT_LANG]
+    key = "act_" + name
+    return table.get(key) or TRANSLATIONS[DEFAULT_LANG].get(key) or name
 
 
 def html_lang_attr(lang: str) -> str:

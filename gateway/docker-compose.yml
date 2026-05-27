@@ -1,8 +1,8 @@
 services:
   gateway:
     build: .
-    image: feeding-gateway:latest
-    container_name: feeding-gateway
+    image: babytime-gateway:latest
+    container_name: babytime-gateway
     restart: unless-stopped
     ports:
       # HOST:CONTAINER — change the left side to expose on a different host port.

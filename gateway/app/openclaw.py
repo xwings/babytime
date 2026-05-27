@@ -39,6 +39,7 @@ def render_message(records: list, cfg: dict) -> str:
             stop_time=stop_s,
             duration=dur_s,
             volume=vol_s,
+            activity=r.get("activity") or "feeding",
             notes=notes,
             device_id=r.get("device_id") or "",
         )

@@ -1,4 +1,4 @@
-# feedingtime-esp32s3
+# babytime
 
 Baby-feeding tracker for the Alientek DNESP32S3B board. An optional Docker
 gateway lets multiple units share state and forward records to OpenClaw.

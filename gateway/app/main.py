@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="OpenClaw Gateway", lifespan=lifespan)
+app = FastAPI(title="babytime gateway", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
@@ -122,6 +122,7 @@ def state_payload() -> dict:
 class EventIn(BaseModel):
     type: str
     device_id: str = ""
+    activity: str = "feeding"
     timestamp_epoch: Optional[int] = None
 
 
@@ -131,11 +132,12 @@ async def api_post_event(event: EventIn):
         raise HTTPException(400, "type must be 'start' or 'stop'")
     ts = event.timestamp_epoch or int(time.time())
     if event.type == "start":
-        active = db.get_active()
-        if active is None:
-            db.create_record(start_epoch=ts, device_id=event.device_id)
+        if db.get_active(event.activity) is None:
+            db.create_record(
+                start_epoch=ts, activity=event.activity, device_id=event.device_id
+            )
     else:
-        db.stop_active(stop_epoch=ts)
+        db.stop_active(stop_epoch=ts, activity=event.activity)
     return state_payload()
 
 
@@ -216,7 +218,8 @@ async def ui_home(
     now_epoch = int(time.time())
     auto_check_cutoff = now_epoch - 86400
 
-    active = db.get_active()
+    activities = config.activity_list(cfg)
+    active_sessions = [s for a in activities if (s := db.get_active(a))]
     last_finished = next(
         (r for r in all_records if r.get("stop_epoch")), None
     )
@@ -230,8 +233,10 @@ async def ui_home(
             "lang": lang,
             "html_lang": i18n.html_lang_attr(lang),
             "t": (lambda key, **kw: i18n.t(key, lang, **kw)),
+            "al": (lambda name: i18n.activity_label(name, lang)),
             "groups": groups,
-            "active": active,
+            "activities": activities,
+            "active_sessions": active_sessions,
             "last_finished": last_finished,
             "now_epoch": now_epoch,
             "config": cfg,
@@ -259,7 +264,7 @@ async def ui_home(
                 "auto_sync_hours",
                 "auto_stop_minutes",
                 "default_volume_ml",
-                "default_device_id",
+                "activity_types",
                 "timezone",
                 "ui_show_count",
             ],
@@ -269,14 +274,21 @@ async def ui_home(
     )
 
 
-@app.post("/ui/feed")
-async def ui_feed_toggle():
+def _feeding_volume(activity: str, raw_ml: str) -> Optional[int]:
+    """Volume is only meaningful for feeding; other activities store none."""
+    raw_ml = (raw_ml or "").strip()
+    if activity != "feeding" or not raw_ml:
+        return None
+    return int(raw_ml)
+
+
+@app.post("/ui/activity")
+async def ui_activity_toggle(activity: str = Form("feeding")):
     ts = int(time.time())
-    active = db.get_active()
-    if active:
-        db.stop_active(stop_epoch=ts)
+    if db.get_active(activity):
+        db.stop_active(stop_epoch=ts, activity=activity)
     else:
-        db.create_record(start_epoch=ts, device_id="web")
+        db.create_record(start_epoch=ts, activity=activity, device_id="web")
     return RedirectResponse("/", status_code=303)
 
 
@@ -286,8 +298,8 @@ async def ui_create(
     start_time: str = Form(...),
     stop_time: str = Form(""),
     volume_ml: str = Form(""),
+    activity: str = Form("feeding"),
     notes: str = Form(""),
-    device_id: str = Form(""),
 ):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
@@ -300,9 +312,9 @@ async def ui_create(
     db.create_record(
         start_epoch=start_epoch,
         stop_epoch=stop_epoch,
-        volume_ml=int(volume_ml) if volume_ml.strip() else None,
+        volume_ml=_feeding_volume(activity, volume_ml),
+        activity=activity or "feeding",
         notes=notes or None,
-        device_id=device_id or "",
     )
     return RedirectResponse("/", status_code=303)
 
@@ -323,16 +335,16 @@ async def ui_bulk_save(request: Request):
         stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
         if stop_epoch is not None and stop_epoch < start_epoch:
             stop_epoch += 86400  # session crossed midnight
-        volume_ml = (form.get(f"volume_ml_{rid}") or "").strip()
+        activity = (form.get(f"activity_{rid}") or "feeding").strip() or "feeding"
+        volume_ml = form.get(f"volume_ml_{rid}") or ""
         notes = form.get(f"notes_{rid}") or ""
-        device_id = form.get(f"device_id_{rid}") or ""
         db.update_record(
             rid,
             start_epoch=start_epoch,
             stop_epoch=stop_epoch,
-            volume_ml=int(volume_ml) if volume_ml else None,
+            volume_ml=_feeding_volume(activity, volume_ml),
+            activity=activity,
             notes=notes or None,
-            device_id=device_id or "",
         )
     return RedirectResponse("/", status_code=303)
 
