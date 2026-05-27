@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import os
 import threading
@@ -14,6 +15,7 @@ DEFAULTS: dict = {
     "default_language": "en",
     "timezone": "UTC",
     "ui_show_count": "10",
+    "trusted_networks": "10.0.0.0/8",
 }
 
 _lock = threading.Lock()
@@ -93,6 +95,27 @@ def activity_list(cfg: dict) -> list:
             seen.add(name)
             out.append(name)
     return out
+
+
+def trusted_networks(cfg: dict) -> list:
+    """Parsed CIDR blocks whose clients skip authentication.
+
+    Browsers and API clients from these networks are treated as logged in
+    (the gateway is meant to be open on the home LAN); everyone else must
+    present the gateway token. Unparseable entries are dropped rather than
+    raising, so one typo in the config can't lock the whole UI out.
+    """
+    raw = (cfg.get("trusted_networks") or "").replace("\n", ",")
+    nets: list = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            nets.append(ipaddress.ip_network(part, strict=False))
+        except ValueError:
+            pass
+    return nets
 
 
 def timed_activities(cfg: dict) -> set:

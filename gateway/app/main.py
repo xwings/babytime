@@ -1,4 +1,7 @@
 import asyncio
+import base64
+import hmac
+import ipaddress
 import os
 import time
 from contextlib import asynccontextmanager
@@ -10,7 +13,6 @@ from fastapi import (
     Depends,
     FastAPI,
     Form,
-    Header,
     HTTPException,
     Request,
 )
@@ -117,18 +119,71 @@ async def lifespan(app: FastAPI):
             pass
 
 
-app = FastAPI(title="babytime gateway", lifespan=lifespan)
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+# Browsers re-prompt for credentials on a 401 carrying this challenge; the
+# API/skill/firmware ignore it and just resend their Bearer header.
+_AUTH_CHALLENGE = {"WWW-Authenticate": 'Basic realm="babytime"'}
 
 
-def check_token(authorization: Optional[str] = Header(None)) -> None:
+def _client_is_trusted(request: Request) -> bool:
+    """True when the caller's IP falls inside a configured trusted network.
+
+    Trusted clients (the home LAN by default) skip auth entirely. Source is
+    `request.client.host`; behind a reverse proxy that rewrites the peer IP
+    this would see the proxy, so the proxy must pass the real client through
+    if you rely on network trust there."""
+    client = request.client
+    if client is None:
+        return False
+    try:
+        ip = ipaddress.ip_address(client.host)
+    except ValueError:
+        return False
+    return any(ip in net for net in config.trusted_networks(config.load()))
+
+
+def _presented_token(request: Request) -> Optional[str]:
+    """Pull the gateway token out of the Authorization header, whether it
+    arrived as a machine `Bearer <token>` or a browser `Basic <user:token>`
+    (the username is ignored; the password is the token)."""
+    header = request.headers.get("Authorization")
+    if not header:
+        return None
+    scheme, _, rest = header.partition(" ")
+    scheme = scheme.lower()
+    if scheme == "bearer":
+        return rest.strip()
+    if scheme == "basic":
+        try:
+            decoded = base64.b64decode(rest.strip()).decode("utf-8", "replace")
+        except (ValueError, UnicodeDecodeError):
+            return None
+        _, _, password = decoded.partition(":")
+        return password
+    return None
+
+
+def require_auth(request: Request) -> None:
+    """Gate every route: trusted-network clients pass freely, everyone else
+    must present the gateway token (Bearer for machines, Basic password for
+    browsers). A missing token set on the server leaves the gateway open."""
     if not GATEWAY_TOKEN:
         return
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="missing bearer token")
-    token = authorization.split(" ", 1)[1].strip()
-    if token != GATEWAY_TOKEN:
-        raise HTTPException(status_code=403, detail="invalid token")
+    if _client_is_trusted(request):
+        return
+    presented = _presented_token(request)
+    if presented and hmac.compare_digest(presented, GATEWAY_TOKEN):
+        return
+    raise HTTPException(status_code=401, detail="authentication required", headers=_AUTH_CHALLENGE)
+
+
+# One global gate covers the JSON API and the browser UI alike; the mounted
+# /static sub-app is intentionally left open (CSS only, no secrets).
+app = FastAPI(
+    title="babytime gateway",
+    lifespan=lifespan,
+    dependencies=[Depends(require_auth)],
+)
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
 def state_payload() -> dict:
@@ -151,7 +206,7 @@ class EventIn(BaseModel):
     timestamp_epoch: Optional[int] = None
 
 
-@app.post("/api/events", dependencies=[Depends(check_token)])
+@app.post("/api/events")
 async def api_post_event(event: EventIn):
     if event.type not in ("start", "stop"):
         raise HTTPException(400, "type must be 'start' or 'stop'")
@@ -166,12 +221,12 @@ async def api_post_event(event: EventIn):
     return state_payload()
 
 
-@app.get("/api/state", dependencies=[Depends(check_token)])
+@app.get("/api/state")
 async def api_get_state():
     return state_payload()
 
 
-@app.get("/api/records", dependencies=[Depends(check_token)])
+@app.get("/api/records")
 async def api_list_records(limit: int = 100):
     return db.list_records(limit=limit)
 
@@ -192,7 +247,7 @@ def _require_record(rid: int) -> dict:
     return rows[0]
 
 
-@app.post("/api/records", dependencies=[Depends(check_token)])
+@app.post("/api/records")
 async def api_create_record(body: RecordIn):
     tz = config.load().get("timezone") or "UTC"
     start = _to_epoch(body.start, tz)
@@ -212,7 +267,7 @@ async def api_create_record(body: RecordIn):
     return _require_record(rid)
 
 
-@app.patch("/api/records/{rid}", dependencies=[Depends(check_token)])
+@app.patch("/api/records/{rid}")
 async def api_update_record(rid: int, body: RecordIn):
     existing = _require_record(rid)
     tz = config.load().get("timezone") or "UTC"
@@ -241,7 +296,7 @@ async def api_update_record(rid: int, body: RecordIn):
     return _require_record(rid)
 
 
-@app.delete("/api/records/{rid}", dependencies=[Depends(check_token)])
+@app.delete("/api/records/{rid}")
 async def api_delete_record(rid: int):
     _require_record(rid)
     db.delete_record(rid)
@@ -260,24 +315,24 @@ def _valid_date(date: str) -> str:
     return date
 
 
-@app.get("/api/day_notes", dependencies=[Depends(check_token)])
+@app.get("/api/day_notes")
 async def api_get_day_notes():
     return db.get_day_notes()
 
 
-@app.put("/api/day_notes/{date}", dependencies=[Depends(check_token)])
+@app.put("/api/day_notes/{date}")
 async def api_put_day_note(date: str, body: DayNoteIn):
     date = _valid_date(date)
     db.set_day_note(date, body.note)
     return {"date": date, "note": (body.note or "").strip()}
 
 
-@app.get("/api/config", dependencies=[Depends(check_token)])
+@app.get("/api/config")
 async def api_get_config():
     return config.load()
 
 
-@app.get("/api/activities", dependencies=[Depends(check_token)])
+@app.get("/api/activities")
 async def api_get_activities():
     """The configured activity types an agent may write, each flagged
     `timed` (start->stop session) or instant (single timestamp)."""
@@ -378,6 +433,7 @@ async def ui_home(
                 "default_volume_ml",
                 "timezone",
                 "ui_show_count",
+                "trusted_networks",
             ],
         },
     )

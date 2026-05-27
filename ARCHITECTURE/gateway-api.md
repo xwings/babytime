@@ -28,7 +28,7 @@ store through the web UI.
 - `gateway/app/main.py:45` — `filter_localtime_only` — epoch → `HH:MM` for time input.
 - `gateway/app/main.py:51` — `filter_duration` — `(start, stop)` → `"Xh Ym"` / `"Xm Ys"`.
 - `gateway/app/main.py:81` — `lifespan` — startup: `db.init()`, `config.migrate_from(...)`, spawn `scheduler.scheduler_loop` as a background task.
-- `gateway/app/main.py:99` — `check_token` — `Authorization: Bearer <token>` dependency, no-op when `GATEWAY_TOKEN` is unset.
+- `gateway/app/main.py` — `require_auth` — one global dependency (`FastAPI(dependencies=[...])`) gating every route, API and browser UI alike. Order: no-op when `GATEWAY_TOKEN` is unset → pass when the client IP is in a `trusted_networks` CIDR (default `10.0.0.0/8`) → otherwise the request must carry the token, as `Authorization: Bearer <token>` (machines) or HTTP Basic where the password is the token (browsers; username ignored). On failure it returns `401` with `WWW-Authenticate: Basic realm="babytime"` so browsers pop the native login; the token compare uses `hmac.compare_digest`. The `/static` mount is a sub-app and stays open (CSS only).
 - `gateway/app/main.py:109` — `state_payload` — assembles `{active, history, server_epoch}` for `/api/state`; `active` is `db.get_active("feeding")` (the device is feeding-centric, so an open sleep/instant record never masquerades as the device's active session).
 - `gateway/app/main.py:128` — `POST /api/events` — start/stop toggle; honors `timestamp_epoch` override.
 - `gateway/app/main.py:142` — `GET /api/state` — device polling target.
@@ -79,7 +79,8 @@ curl -s http://localhost:8080/ | grep -F 'activity-bar'
   (`POST/PATCH/DELETE /api/records`, `PUT /api/day_notes/{date}`),
   consumed by the `skill/` agent client; the old form routes
   (`/records*`) remain for the web UI only.
-- `/ui/*` and `/records*` routes are not behind `check_token`;
-  LAN-trust is assumed. Could move under the same dependency when
-  `GATEWAY_TOKEN` is set, but no work tracked yet.
+- Network trust keys on `request.client.host`. Behind a reverse proxy
+  that terminates the connection, every client looks like the proxy —
+  `trusted_networks` would then need the proxy's IP, or the proxy must
+  forward the real peer (no `X-Forwarded-For` handling today).
 - No per-route metrics, structured logging, or rate limiting.

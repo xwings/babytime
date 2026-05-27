@@ -58,8 +58,10 @@ docker compose up -d --build
 
 Open <http://localhost:8080/>. One page: records table with inline edit, an
 Add-record form, per-date day-note fields, and the configuration form. Set
-`GATEWAY_TOKEN` in `docker-compose.yml` to require bearer auth on `/api/*`;
-leave empty to trust the LAN.
+`GATEWAY_TOKEN` in `docker-compose.yml` to require the token on every route
+(Bearer for machines, HTTP Basic password for browsers); clients in
+`trusted_networks` (default `10.0.0.0/8`) skip auth. Leave the token empty to
+trust everyone.
 
 ## Buttons
 

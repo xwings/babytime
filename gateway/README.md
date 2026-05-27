@@ -33,8 +33,17 @@ at the repo root packages this for a third-party agent — install it and point
 ## Auth
 
 By default, set `GATEWAY_TOKEN` to `""` in `docker-compose.yml` (LAN-trust, no
-auth). Set a non-empty token to require `Authorization: Bearer <token>` on all
-`/api/*` endpoints (and the same token in firmware `config.local.h`).
+auth). Set a non-empty token to require it on **every** route — the JSON API
+and the browser UI.
+
+Clients on a trusted network skip auth entirely (the gateway is meant to be
+open on the home LAN); the `trusted_networks` config key lists the CIDR blocks,
+default `10.0.0.0/8`. Everyone else must present the token:
+
+- **Machines** (firmware, the `skill/` client) send `Authorization: Bearer
+  <token>` — put the same token in firmware `config.local.h`.
+- **Browsers** outside the trusted range get an HTTP Basic prompt; enter the
+  token as the password (the username is ignored).
 
 ## API
 
@@ -87,3 +96,4 @@ the network without sending `stop`.
 | `default_language` | `en` | UI language (`en`/`zh`) for browsers without a `lang` cookie; the per-browser switch still overrides it |
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |
 | `ui_show_count` | `10` | dates per page on the web UI (records grouped by date; rows from the last 24h are pre-checked) |
+| `trusted_networks` | `10.0.0.0/8` | comma-separated CIDR blocks whose clients skip auth when `GATEWAY_TOKEN` is set; everyone else must present the token. Unparseable entries are ignored |
