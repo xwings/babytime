@@ -19,10 +19,10 @@ with a button or touch), shows a live clock + last-fed counter +
 recent history on its LCD, and runs untethered.
 
 An optional Docker gateway turns the device into a multi-room
-deployment: durable SQLite log, a web UI for editing records,
-multiple devices sharing one source of truth, and outbound forwarding
-to an OpenClaw agent (the "automation" backend) on demand or on a
-schedule.
+deployment: durable SQLite log, a web UI for editing records and
+per-day notes, multiple devices sharing one source of truth, and a
+JSON record API that a remote agent reads and writes directly (see
+`skill/`).
 
 ## Target environment
 
@@ -70,7 +70,7 @@ firmware/        ESP32 firmware (PlatformIO project, two envs)
   lib/             empty (cleared when audio was removed)
   platformio.ini   shared [env] + [env:dnesp32s3b] + [env:esp32p4_7b]
 gateway/         FastAPI + SQLite gateway, packaged as Docker
-  app/             Python source (main, db, config, openclaw, util)
+  app/             Python source (main, db, config, scheduler, util)
   app/templates/   server-rendered Jinja2 HTML
   app/static/      CSS
   Dockerfile, docker-compose.yml, requirements.txt
@@ -87,7 +87,7 @@ README.md        user-facing setup notes
    bring-up (e.g. the DNESP32S3B "LCD before Wire" quirk lives
    inside `hal/dnesp32s3b/board.cpp`; the ESP32-P4-7B backend has
    its own ordering). The semantic input callbacks (`cycleView`,
-   `toggleFeeding`, `manualSync`) are then bound on
+   `toggleFeeding`) are then bound on
    `board.input()`, and Wi-Fi + NTP come up.
 2. In gateway mode, `xTaskCreatePinnedToCore(gatewayTask, …, 0)`
    pins the HTTP client to Core 0.
@@ -98,7 +98,7 @@ README.md        user-facing setup notes
 
 1. `docker compose up` → `uvicorn app.main:app --host 0.0.0.0 --port 8080`.
 2. FastAPI's `lifespan` hook calls `db.init()`, runs the legacy
-   config migration, and spawns `openclaw.scheduler_loop` as a
+   config migration, and spawns `scheduler.scheduler_loop` as a
    background task.
 
 ## Hardware quirks
@@ -205,10 +205,10 @@ standards followed when writing.
 
 - [firmware-app.md](ARCHITECTURE/firmware-app.md) — board-agnostic firmware: state ring, gateway HTTP client, NTP, view orchestrator, semantic-action handlers.
 - [firmware-hal.md](ARCHITECTURE/firmware-hal.md) — Hardware Abstraction Layer: `Display` / `InputSource` / `Board` interfaces + DNESP32S3B backend + ESP32-P4-7B Phase A stub.
-- [gateway-api.md](ARCHITECTURE/gateway-api.md) — FastAPI surface: `/api/*` for devices, `/`, `/ui/*`, `/records*`, `/config`, `/sync` for the browser.
-- [gateway-storage.md](ARCHITECTURE/gateway-storage.md) — persistence: SQLite `records` table and JSON config file with one-shot legacy migration.
-- [gateway-openclaw.md](ARCHITECTURE/gateway-openclaw.md) — webhook poster + 60 s scheduler driving auto-sync and the 15 min auto-stop cap.
-- [gateway-ui.md](ARCHITECTURE/gateway-ui.md) — server-rendered Records / Configuration page: feed-now panel, date-grouped records, live 1 Hz counter.
+- [gateway-api.md](ARCHITECTURE/gateway-api.md) — FastAPI surface: `/api/*` for devices and the record + day-note JSON API, `/`, `/ui/*`, `/records*`, `/config` for the browser.
+- [gateway-storage.md](ARCHITECTURE/gateway-storage.md) — persistence: SQLite `records` + `day_notes` tables and JSON config file with one-shot legacy migration.
+- [gateway-scheduler.md](ARCHITECTURE/gateway-scheduler.md) — 60 s background loop enforcing the `auto_stop_minutes` cap on runaway sessions.
+- [gateway-ui.md](ARCHITECTURE/gateway-ui.md) — server-rendered Records / Configuration page: feed-now panel, date-grouped records, per-day notes, live 1 Hz counter.
 
 ## Per-module template
 

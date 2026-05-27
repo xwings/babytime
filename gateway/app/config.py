@@ -7,27 +7,7 @@ from typing import Callable, Optional
 CONFIG_PATH = os.environ.get("GATEWAY_CONFIG_PATH", "/babytime/config.json")
 
 DEFAULTS: dict = {
-    "openclaw_url": "",
-    "webhook_token": "",
-    "openclaw_agent_id": "main",
-    "openclaw_session_key": "",
-    "openclaw_channel": "last",
-    "openclaw_to": "",
-    "openclaw_name": "ESP32 Baby Feeding",
-    "openclaw_wake_mode": "now",
-    "openclaw_deliver": "1",
-    "webhook_default_sync_count": "8",
-    "webhook_message_template": (
-        "Use joplin-cli skill. Search for kinra notebook and update the note "
-        "based on date and time. The following are the last feeding records. "
-        "Append or update as needed.\n{records}"
-    ),
-    "webhook_record_format": (
-        "{date} {start_time} -> {stop_time} [{activity}] ({duration}, {volume}ml) {notes}"
-    ),
     "activity_types": "feeding,sleep,poopoo",
-    "auto_sync_enabled": "0",
-    "auto_sync_hours": "6",
     "auto_stop_minutes": "15",
     "default_volume_ml": "",
     "timezone": "UTC",

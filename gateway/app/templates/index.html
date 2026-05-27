@@ -1,12 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 
-{% if sync_result %}
-<div class="banner banner-{{ sync_result }}">
-  {{ t('sync_banner_ok' if sync_result == 'ok' else 'sync_banner_fail') }}{% if sync_msg %}: {{ sync_msg }}{% endif %}
-</div>
-{% endif %}
-
 <div class="tab-panel active" data-tab="records">
 
 <section class="feed-now {% if active_sessions %}active{% endif %}">
@@ -106,7 +100,6 @@
         <button type="submit" formaction="/records/save">{{ t('records_save') }}</button>
         <button type="submit" formaction="/records/delete" class="danger"
                 onclick="return confirm('{{ t('records_delete_confirm') }}')">{{ t('records_delete') }}</button>
-        <button type="submit" formaction="/sync">{{ t('records_upload') }}</button>
       </div>
     </div>
 
@@ -120,6 +113,9 @@
           <input type="checkbox" class="date-check" title="{{ t('records_select_all_on', date=g.date) }}">
           <span class="date-label">{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
         </label>
+        <input type="text" class="day-note" name="day_note_{{ g.date }}"
+               value="{{ g.note }}" placeholder="{{ t('day_note_placeholder') }}"
+               aria-label="{{ t('col_day_note') }}">
       </div>
       <table class="records-table">
         <thead>
@@ -270,17 +266,8 @@
       <input type="text" name="{{ key }}" value="{{ config[key] | default('') }}">
     </label>
     {% endfor %}
-    <label class="full-width">webhook_message_template
-      <textarea name="webhook_message_template" rows="6">{{ config.webhook_message_template | default('') }}</textarea>
-    </label>
-    <label class="full-width">webhook_record_format
-      <textarea name="webhook_record_format" rows="3">{{ config.webhook_record_format | default('') }}</textarea>
-    </label>
     <button type="submit">{{ t('config_save') }}</button>
   </form>
-  <p class="hint">
-    {{ t('config_template_hint_html') | safe }}
-  </p>
 </section>
 
 </div><!-- /tab-panel config -->

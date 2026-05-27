@@ -3,10 +3,13 @@
 ## Goal
 
 HTTP surface for the gateway. Exposes the device-facing JSON API
-(`/api/events`, `/api/state`, `/api/sync`, `/api/records`,
-`/api/config`) that ESP32 firmware drives, plus the browser-facing
-routes (`/`, `/ui/feed`, `/records*`, `/config`, `/sync`) that render
-and mutate the same store through the web UI.
+(`/api/events`, `/api/state`, `/api/config`) that ESP32 firmware
+drives; a JSON record + day-note API (`GET/POST /api/records`,
+`PATCH/DELETE /api/records/{id}`, `GET /api/day_notes`,
+`PUT /api/day_notes/{date}`) that remote agents use to read and mutate
+the log (see `skill/`); plus the browser-facing routes (`/`,
+`/ui/activity`, `/records*`, `/config`) that render and mutate the same
+store through the web UI.
 
 ## Status
 
@@ -24,29 +27,34 @@ and mutate the same store through the web UI.
 - `gateway/app/main.py:39` — `filter_localdate_input` — epoch → `YYYY-MM-DD` for `<input type=date>`.
 - `gateway/app/main.py:45` — `filter_localtime_only` — epoch → `HH:MM` for time input.
 - `gateway/app/main.py:51` — `filter_duration` — `(start, stop)` → `"Xh Ym"` / `"Xm Ys"`.
-- `gateway/app/main.py:81` — `lifespan` — startup: `db.init()`, `config.migrate_from(...)`, spawn `openclaw.scheduler_loop` as a background task.
+- `gateway/app/main.py:81` — `lifespan` — startup: `db.init()`, `config.migrate_from(...)`, spawn `scheduler.scheduler_loop` as a background task.
 - `gateway/app/main.py:99` — `check_token` — `Authorization: Bearer <token>` dependency, no-op when `GATEWAY_TOKEN` is unset.
 - `gateway/app/main.py:109` — `state_payload` — assembles `{active, history, server_epoch}` for `/api/state`.
 - `gateway/app/main.py:128` — `POST /api/events` — start/stop toggle; honors `timestamp_epoch` override.
 - `gateway/app/main.py:142` — `GET /api/state` — device polling target.
-- `gateway/app/main.py:151` — `POST /api/sync` — explicit OpenClaw push (selected ids or newest N).
-- `gateway/app/main.py:159` — `GET /api/records` — JSON record list (read-only).
-- `gateway/app/main.py:164` — `GET /api/config` — non-secret config dump.
+- `GET /api/records` — JSON record list (newest-first, `limit`).
+- `POST /api/records` — create a record from JSON (`RecordIn`); `start` required, `activity` defaults to `feeding`, `volume_ml` kept only for feeding. Returns the stored row.
+- `PATCH /api/records/{rid}` — partial update (only fields present in the body change; uses pydantic `exclude_unset`); re-applies the feeding-only-ml rule; 404 if absent.
+- `DELETE /api/records/{rid}` — delete by id; 404 if absent.
+- `GET /api/day_notes` — `{date: note}` map of all per-day notes.
+- `PUT /api/day_notes/{date}` — upsert one day's note (`DayNoteIn`); `date` validated as `YYYY-MM-DD`; a blank note clears the entry. Returns `{date, note}`.
+- `GET /api/config` — non-secret config dump.
+- `_to_epoch(value, tz)` — JSON timestamp coercion (epoch int, digit string, or ISO/`Z`/offset; naive strings read in the configured tz). Shared by the write endpoints.
+- `_feeding_volume(activity, raw)` — single definition of the "volume only for feeding" rule, shared by the form routes and the JSON endpoints.
 - `gateway/app/main.py:174` — `ui_home` (`GET /`) — groups records by local date, paginates by date count (`ui_show_count`).
-- `gateway/app/main.py:261` — `POST /ui/feed` — web-initiated K2 mirror; stamps `device_id="web"`.
+- `POST /ui/activity` — web-initiated start/stop toggle for a chosen activity; stamps `device_id="web"`.
 - `gateway/app/main.py:272` — `POST /records` — add via form.
-- `gateway/app/main.py:299` — `POST /records/save` — inline edit.
-- `gateway/app/main.py:329` — `POST /records/delete`.
-- `gateway/app/main.py:338` — `POST /config` — saves the config form.
-- `gateway/app/main.py:346` — `POST /sync` — UI sync; same as `/api/sync` but redirects back to `/`.
+- `POST /records/save` — inline edit of the checked rows; also persists each `day_note_<date>` field via `db.set_day_note`, so one Save writes both records and day notes.
+- `POST /records/delete` — deletes the checked rows.
+- `POST /config` — saves the config form.
 
 ## Interactions
 
 - Reads/writes through [gateway-storage.md](gateway-storage.md) for
-  records and config on every route.
-- Calls into [gateway-openclaw.md](gateway-openclaw.md) `send_sync`
-  on `/api/sync` and `/sync`; `lifespan` launches
-  `openclaw.scheduler_loop` (auto-stop + auto-sync).
+  records, day notes, and config on every route.
+- `lifespan` launches the auto-stop loop from
+  [gateway-scheduler.md](gateway-scheduler.md) via
+  `asyncio.create_task(scheduler.scheduler_loop())`.
 - Renders templates owned by [gateway-ui.md](gateway-ui.md).
 
 ## How to Test
@@ -66,6 +74,10 @@ curl -s http://localhost:8080/ | grep -F 'feed-now'
 
 ## Open Gaps / Roadmap
 
+- Record and day-note mutation have JSON APIs
+  (`POST/PATCH/DELETE /api/records`, `PUT /api/day_notes/{date}`),
+  consumed by the `skill/` agent client; the old form routes
+  (`/records*`) remain for the web UI only.
 - `/ui/*` and `/records*` routes are not behind `check_token`;
   LAN-trust is assumed. Could move under the same dependency when
   `GATEWAY_TOKEN` is set, but no work tracked yet.

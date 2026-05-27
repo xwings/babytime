@@ -36,7 +36,7 @@ enum class FontFamily : uint8_t { Ascii, CjkMixed };
 struct TextStyle {
   Color      color  = COLOR_WHITE;
   FontFamily family = FontFamily::Ascii;
-  uint8_t    scale  = 2;  // 1 = footer/IP, 2 = body, 3 = sync banner
+  uint8_t    scale  = 2;  // 1 = footer/IP, 2 = body, 3 = headline
 };
 
 class Display {
@@ -62,7 +62,7 @@ class Display {
 // Semantic input events. Bound by the app to actions like "cycle view"
 // or "toggle feeding"; the binding stays the same across boards. The
 // backend decides what raw hardware event maps to each (DNESP32S3B:
-// K1-short / K2 / K1-long; ESP32-P4-7B: three touch regions).
+// K1 / K2; ESP32-P4-7B: two touch regions).
 using ActionCallback = void(*)();
 
 class InputSource {
@@ -71,7 +71,6 @@ class InputSource {
 
   virtual void onPrimaryAction(ActionCallback cb) = 0;    // cycle view
   virtual void onSecondaryAction(ActionCallback cb) = 0;  // toggle feeding
-  virtual void onSyncRequest(ActionCallback cb) = 0;      // manual sync
 
   // Called from loop(); reads hardware state and fires callbacks.
   virtual void poll() = 0;

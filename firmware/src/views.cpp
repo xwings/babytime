@@ -103,18 +103,15 @@ void drawFooterHint(Display& d, const char* hint) {
 }
 
 const char* buttonHint() {
-  return gatewayMode() ? "K2 feed  K1 next (hold=sync)"
-                       : "K2 feed  K1 next";
+  return "K2 feed  K1 next";
 }
 
 const char* counterHint() {
-  return gatewayMode() ? "K2 toggle  K1 next (hold=sync)"
-                       : "K2 toggle  K1 next";
+  return "K2 toggle  K1 next";
 }
 
 const char* historyHint() {
-  return gatewayMode() ? "K1 next  (hold=sync)"
-                       : "K1 next";
+  return "K1 next";
 }
 
 }  // namespace
@@ -272,14 +269,6 @@ void drawHistoryScreen() {
   }
 
   drawFooterHint(d, historyHint());
-  d.flush();
-}
-
-void drawSyncStatus(const String& title, const String& body, uint16_t titleColor) {
-  Display& d = hal::currentBoard().display();
-  d.clear(hal::COLOR_BLACK);
-  d.drawText(20,  80, title.c_str(), {titleColor,       FontFamily::Ascii, 3});
-  d.drawText(20, 140, body.c_str(),  {hal::COLOR_WHITE, FontFamily::Ascii, 2});
   d.flush();
 }
 

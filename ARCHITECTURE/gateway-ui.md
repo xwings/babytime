@@ -7,9 +7,10 @@ top-right tabs (Records / Configuration), a per-browser language
 switch (English / 中文) seated to the left of the tabs, a feed-now
 panel with live 1 Hz elapsed-time counter and Start/Stop button, an
 Add-record form with header-action button, and per-date collapsible
-record groups with select-all + auto-check of the last 24 h for
-upload. Per-date headers also show the day's `total_ml` (omitted
-when zero, so days with no volume logged stay clean).
+record groups with select-all + auto-check of the last 24 h. Each
+date group carries a free-text day-note input, and per-date headers
+also show the day's `total_ml` (omitted when zero, so days with no
+volume logged stay clean).
 
 ## Status
 
@@ -30,10 +31,10 @@ when zero, so days with no volume logged stay clean).
 - `gateway/app/templates/base.html:13-16` — `.lang-switch` anchors point at `/lang/{code}`; the active language gets `.active` from server-rendered `lang` context.
 - `gateway/app/templates/base.html:22-28` — inline script populating `window.I18N` with unit strings (hour/minute/second) used by the live-elapsed counter — keeps Chinese rendering as `1时 30分` without a second roundtrip.
 - `gateway/app/templates/base.html:30` — IIFE wiring tab buttons; reads initial tab from URL hash (`#records` / `#config`).
-- `gateway/app/i18n.py:41-130` — `TRANSLATIONS` dict with EN + ZH covering 38 keys (nav, feed-now, records, columns, pagination, config, sync banner, unit strings).
+- `gateway/app/i18n.py:41-130` — `TRANSLATIONS` dict with EN + ZH covering nav, feed-now, records, columns, day-note, pagination, config, and unit strings.
 - `gateway/app/i18n.py:142` — `normalize(code)` clamps any input to a supported lang or `DEFAULT_LANG`.
 - `gateway/app/i18n.py:147` — `read_lang(request)` returns the cookie-backed lang.
-- `gateway/app/i18n.py:151` — `t(key, lang, **kwargs)` looks up the entry and substitutes `{name}` placeholders with `str.replace` (no `str.format`, so literal braces in `config_template_hint_html` pass through untouched).
+- `gateway/app/i18n.py:151` — `t(key, lang, **kwargs)` looks up the entry and substitutes `{name}` placeholders with `str.replace` (no `str.format`, so any literal braces in a translated string pass through untouched).
 - `gateway/app/templates/index.html:12` — `<section class="feed-now">` with 3-column grid (detail | live counter | button); status text varies on `active`.
 - `gateway/app/templates/index.html:36` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch.
 - `gateway/app/templates/index.html:63` — `<section class="add-record">` with header-row + top-right Add button; ml/Device prefilled from `config.default_volume_ml` / `config.default_device_id`.
@@ -49,14 +50,15 @@ when zero, so days with no volume logged stay clean).
   `dates_per_page`, plus `lang` / `html_lang` / `t` for the i18n
   layer.
 - Submits to [gateway-api.md](gateway-api.md): `/ui/feed`,
-  `/records`, `/records/save`, `/records/delete`, `/config`,
-  `/sync`, and the language switch hits `/lang/{code}` (303 back to
-  referer with the `lang` cookie set, max-age 1 year).
+  `/records`, `/records/save` (persists both record edits and the
+  per-date day notes), `/records/delete`, `/config`, and the
+  language switch hits `/lang/{code}` (303 back to referer with the
+  `lang` cookie set, max-age 1 year).
 - The live counter is purely client-side off the server-rendered
   `start_epoch` — there is no server push.
 - Translation table lives in `app/i18n.py` and covers every visible
   string in both templates. Config field identifiers
-  (`webhook_url`, `default_volume_ml`, …) are intentionally not
+  (`auto_stop_minutes`, `default_volume_ml`, …) are intentionally not
   translated — they're config keys, not labels.
 
 ## How to Test
@@ -73,6 +75,8 @@ Pass means all of:
   `YYYY-MM-DD (N)`.
 - Date-header checkbox toggles all rows in that day; rows from the
   last 24 h are pre-checked on page load.
+- Each date group has a day-note text input; editing it and clicking
+  Save persists the note (round-trips on reload).
 - Tabs (Records / Configuration) sit on the right of the header and
   switch sections without a full reload.
 - Language switch chip (EN / 中文) sits left of the tabs; clicking
@@ -94,6 +98,3 @@ Pass means all of:
   more dict in `app/i18n.py` plus a button in `base.html`. There
   is no `Accept-Language` auto-detection — the default is hard-
   coded to EN.
-- Operational error messages from `openclaw.send_sync` (rendered
-  after the sync banner prefix) remain in English; only the
-  banner prefix is translated.

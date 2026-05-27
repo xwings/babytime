@@ -1,7 +1,8 @@
-# OpenClaw Feeding Gateway
+# Babytime Feeding Gateway
 
 Tiny FastAPI + SQLite service that lets multiple ESP32 baby-feeding trackers
-share state and forwards records to OpenClaw on demand or on a schedule.
+share one durable activity log, edited from a web UI or driven by a remote
+agent over a JSON API.
 
 ## Run
 
@@ -9,19 +10,25 @@ share state and forwards records to OpenClaw on demand or on a schedule.
 docker compose up -d --build
 ```
 
-Then open http://localhost:8080/ — records, manual edit, and OpenClaw config
-all live on one page.
+Then open http://localhost:8080/ — records, manual edit, per-day notes, and
+configuration all live on one page.
 
 Persisted in `./babytime/` on the host (mounted to `/babytime` in the container):
 
-- `gateway.db` — SQLite, holds activity records.
-- `config.json` — OpenClaw settings, message/record templates, sync schedule,
-  timezone, UI options. Editable from the web UI **or** by hand; written
-  atomically. Keys match those in the Config section below.
+- `gateway.db` — SQLite, holds activity records and per-day notes.
+- `config.json` — auto-stop cap, UI prefills, activity types, timezone, UI
+  options. Editable from the web UI **or** by hand; written atomically. Keys
+  match those in the Config section below.
 
 Change the host path or host port in `docker-compose.yml` if you need different
 bindings. If you're upgrading from a build that stored config in SQLite, the
 gateway copies the old `config` table into `config.json` on first start.
+
+Remote agents read and edit records over the JSON API
+(`GET/POST /api/records`, `PATCH/DELETE /api/records/{id}`) and write per-day
+notes (`GET /api/day_notes`, `PUT /api/day_notes/{date}`). The `skill/` folder
+at the repo root packages this for a third-party agent — install it and point
+`BABYTIME_GATEWAY_URL` / `BABYTIME_GATEWAY_TOKEN` at this gateway.
 
 ## Auth
 
@@ -37,44 +44,44 @@ Device-facing:
   starts a session (no-op if one is already active) or stops the active one.
   Returns the new state payload.
 - `GET /api/state` — returns `{active, history (last 8), server_epoch}`.
-- `POST /api/sync` — body `{record_ids?: [..]}`. Posts the chosen records (or
-  the newest `webhook_default_sync_count` if omitted) to OpenClaw.
+
+Agent-facing:
+
+- `GET /api/records` / `POST /api/records` — list (newest-first) and create.
+- `PATCH /api/records/{id}` / `DELETE /api/records/{id}` — edit / remove.
+- `GET /api/day_notes` — `{date: note}` map of all per-day notes.
+- `PUT /api/day_notes/{date}` — `{note: "..."}` upserts one day's note
+  (blank note clears it). `date` must be `YYYY-MM-DD`.
+- `GET /api/config` — non-secret config dump.
 
 UI/admin:
 
-- `GET /` — web UI: records table with inline edit, add-record form, OpenClaw
-  config form, "Sync selected" button.
-- `POST /records`, `POST /records/{id}/edit`, `POST /records/{id}/delete` —
-  form actions.
+- `GET /` — web UI: records table with inline edit, add-record form, per-date
+  day-note field, configuration form.
+- `POST /records`, `POST /records/save`, `POST /records/delete` — form
+  actions. `POST /records/save` persists both record edits and day notes.
 - `POST /config` — saves the form.
-- `POST /sync` — same as `/api/sync` but redirects back to the UI.
 
-## Auto-sync
+## Day notes
 
-Set `auto_sync_enabled = 1` and `auto_sync_hours = 6` in the Config form.
-The scheduler checks once a minute and posts the newest
-`webhook_default_sync_count` records every N hours.
+Each calendar date can carry one free-text note. Edit it inline in the date
+group's header on the web UI and click **Save**, or write it over the JSON API
+(`PUT /api/day_notes/{date}`) — that's the path a remote agent uses to record
+a daily summary.
+
+## Auto-stop
+
+`auto_stop_minutes` caps any active session: a background loop checks once a
+minute and stops a session that has run longer than the cap (default 15;
+`0` disables). Guards against a device that started a session and dropped off
+the network without sending `stop`.
 
 ## Config keys
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `openclaw_url` | "" | e.g. `http://host:18789/hooks/agent` |
-| `webhook_token` | "" | bearer token for the webhook |
-| `openclaw_agent_id` | `main` | |
-| `openclaw_session_key` | "" | optional |
-| `openclaw_channel` | `last` | `last` or `discord` |
-| `openclaw_to` | "" | required when channel = `discord` |
-| `openclaw_name` | `ESP32 Baby Feeding` | |
-| `openclaw_wake_mode` | `now` | |
-| `openclaw_deliver` | `1` | `1`/`0` |
-| `webhook_default_sync_count` | `8` | how many newest records to send |
-| `webhook_message_template` | (multi-line) | use `{records}` placeholder |
-| `webhook_record_format` | `{date} {start_time} -> {stop_time} ({duration}, {volume}ml) {notes}` | per-line template |
-| `auto_sync_enabled` | `0` | `1` to enable scheduler |
-| `auto_sync_hours` | `6` | interval in hours |
+| `activity_types` | `feeding` | comma-separated; `feeding` always first |
 | `auto_stop_minutes` | `15` | auto-stop an active session after this many minutes (0 disables) |
 | `default_volume_ml` | `` | pre-fills the ml field of the Add-record form |
-| `default_device_id` | `` | pre-fills the Device field of the Add-record form |
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |
-| `ui_show_count` | `10` | dates per page on the web UI (records grouped by date; rows from the last 24h are pre-checked for upload) |
+| `ui_show_count` | `10` | dates per page on the web UI (records grouped by date; rows from the last 24h are pre-checked) |

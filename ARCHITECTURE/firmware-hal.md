@@ -30,7 +30,7 @@ Wi-Fi bring-up on hardware) is tracked in Open Gaps.
 | `firmware/src/hal/dnesp32s3b/display.h` | `DisplayLcdCam` interface declaration |
 | `firmware/src/hal/dnesp32s3b/display.cpp` | ST7789V via `Arduino_ESP32LCD8` + `Arduino_ST7789` + `Arduino_Canvas`; ASCII default font + u8g2 cubic11 CJK |
 | `firmware/src/hal/dnesp32s3b/input.h` | `InputXl9555` interface + button-state FSM |
-| `firmware/src/hal/dnesp32s3b/input.cpp` | XL9555 (I²C `0x20`) polling, debounce, K1-short/long FSM |
+| `firmware/src/hal/dnesp32s3b/input.cpp` | XL9555 (I²C `0x20`) polling, debounce, K1/K2 release FSM |
 | `firmware/src/hal/dnesp32s3b/board.cpp` | LCD-before-Wire bring-up, backlight via XL9555 P0.7, factory binding |
 | `firmware/src/hal/esp32p4_7b/display.h` | `DisplayMipiDsi` stub interface (1024×600 dimensions are panel-truth) |
 | `firmware/src/hal/esp32p4_7b/display.cpp` | All paint primitives are no-ops; `measureText` returns plausible widths so views.cpp layout math doesn't divide by zero |
@@ -58,7 +58,7 @@ the bodies.
 - `firmware/src/hal/hal.h:66` — `using ActionCallback = void(*)()`.
 - `firmware/src/hal/hal.h:68-78` — `class InputSource` —
   `onPrimaryAction` (cycle view), `onSecondaryAction` (toggle
-  feeding), `onSyncRequest` (manual sync), `poll()`.
+  feeding), `poll()`.
 - `firmware/src/hal/hal.h:80-95` — `class Board` —
   `init/display/input/backlight`.
 - `firmware/src/hal/hal.h:99` — `Board& currentBoard()` — provided
@@ -75,11 +75,9 @@ the bodies.
   — assumes Board already brought up Wire + XL9555.
 - `firmware/src/hal/dnesp32s3b/input.cpp:34-46` — `InputXl9555::poll`
   — reads XL9555 input port 0, dispatches K1/K2 FSM.
-- `firmware/src/hal/dnesp32s3b/input.cpp:48-68` —
-  `InputXl9555::handleShortOrLong` — K1 short on release if
-  long-fire didn't claim it; long fires at `K1_LONG_PRESS_MS = 1500`.
-- `firmware/src/hal/dnesp32s3b/input.cpp:70-77` —
-  `InputXl9555::handleRelease` — K2 fires on release after debounce.
+- `firmware/src/hal/dnesp32s3b/input.cpp` —
+  `InputXl9555::handleRelease` — K1 (cycle view) and K2 (toggle
+  feeding) each fire on release after debounce.
 - `firmware/src/hal/esp32p4_7b/board.cpp:11-16` —
   `Esp32P4_7BBoard::init` — stub log, then display + input stubs.
 
@@ -105,9 +103,8 @@ the bodies.
   `SUCCESS` with the esp32p4_7b RAM/Flash usage table (first run
   pulls the RISC-V toolchain, ~5–10 min).
 - `make flash-monitor DEVICE=dnesp32s3b` — pass = serial prints `LCD
-  init...`, then `Backlight ON`, then Wi-Fi/NTP lines; K1 short
-  cycles view, K1 long (≥1.5 s) shows sync banner, K2 toggles
-  feeding.
+  init...`, then `Backlight ON`, then Wi-Fi/NTP lines; K1 cycles
+  view, K2 toggles feeding.
 - `make flash-monitor DEVICE=esp32p4_7b` (if hardware available) —
   pass = serial prints `[hal-esp32p4-7b] display stub — MIPI-DSI
   bring-up pending` and the app then idles. Screen stays blank; no
@@ -122,8 +119,8 @@ the bodies.
   `firmware/platformio.ini` `[env:esp32p4_7b]` `lib_deps`.
 - **Phase B — GT911 touch.** Replace `hal/esp32p4_7b/input.cpp`
   no-op `poll()` with GT911 I²C polling (shared bus with the LCD
-  path: SCL=GPIO8, SDA=GPIO7). Map three on-screen regions to
-  primary/secondary/sync callbacks — keep the semantic split so app
+  path: SCL=GPIO8, SDA=GPIO7). Map two on-screen regions to
+  primary/secondary callbacks — keep the semantic split so app
   code is unchanged.
 - **Phase B — Wi-Fi via esp_hosted.** The 7B board's Wi-Fi 6 comes
   from an onboard ESP32-C6 over SDIO. Verify the slave firmware is

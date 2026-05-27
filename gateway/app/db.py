@@ -35,6 +35,11 @@ def init() -> None:
                 created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
             );
             CREATE INDEX IF NOT EXISTS idx_records_start ON records(start_epoch DESC);
+            CREATE TABLE IF NOT EXISTS day_notes (
+                date TEXT PRIMARY KEY,
+                note TEXT NOT NULL DEFAULT '',
+                updated_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
+            );
             """
         )
         conn.commit()
@@ -174,5 +179,38 @@ def count_records() -> int:
     with _lock:
         row = conn.execute("SELECT COUNT(*) AS n FROM records").fetchone()
     return int(row["n"]) if row else 0
+
+
+def get_day_notes(dates: Optional[list] = None) -> dict:
+    """Map of `{date: note}`. With `dates`, only those dates; otherwise all."""
+    conn = get_conn()
+    with _lock:
+        if dates:
+            qmarks = ",".join("?" * len(dates))
+            rows = conn.execute(
+                f"SELECT date, note FROM day_notes WHERE date IN ({qmarks})", dates
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT date, note FROM day_notes").fetchall()
+    return {r["date"]: r["note"] for r in rows}
+
+
+def set_day_note(date: str, note: str) -> None:
+    """Upsert a day's note. A blank note clears the entry (deletes the row),
+    so "no note" and "empty note" are the same state."""
+    conn = get_conn()
+    text = (note or "").strip()
+    with _lock:
+        if not text:
+            conn.execute("DELETE FROM day_notes WHERE date=?", (date,))
+        else:
+            conn.execute(
+                "INSERT INTO day_notes (date, note, updated_at) "
+                "VALUES (?, ?, CAST(strftime('%s','now') AS INTEGER)) "
+                "ON CONFLICT(date) DO UPDATE SET note=excluded.note, "
+                "updated_at=excluded.updated_at",
+                (date, text),
+            )
+        conn.commit()
 
 

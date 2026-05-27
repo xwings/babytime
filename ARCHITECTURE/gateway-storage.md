@@ -2,11 +2,14 @@
 
 ## Goal
 
-Persistence for the gateway. Two stores:
+Persistence for the gateway. Three stores:
 
 - SQLite `records` table — durable activity log (start, stop, volume,
   notes, activity type, device id, created_at). `volume_ml` is only
   meaningful for the `feeding` activity.
+- SQLite `day_notes` table — one free-text note per calendar date
+  (`YYYY-MM-DD`), edited in the web UI or written by an agent over the
+  JSON API.
 - JSON config file (`config.json`) — user-editable settings written
   atomically; backwards-compatible with the legacy `config` SQLite
   table via one-shot migration on first boot.
@@ -19,7 +22,7 @@ Persistence for the gateway. Two stores:
 
 | File | Role |
 | ---- | ---- |
-| `gateway/app/db.py` | SQLite connection, schema, record CRUD, active-session helpers, legacy config reader |
+| `gateway/app/db.py` | SQLite connection, schema, record CRUD, active-session helpers, day-note get/set, legacy config reader |
 | `gateway/app/config.py` | JSON-backed config: defaults, atomic write, in-memory cache, legacy migration |
 
 ## Key Types and Entry Points
@@ -41,8 +44,15 @@ Persistence for the gateway. Two stores:
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_records_start ON records(start_epoch DESC);
+  CREATE TABLE IF NOT EXISTS day_notes (
+    date TEXT PRIMARY KEY,
+    note TEXT NOT NULL DEFAULT '',
+    updated_at INTEGER NOT NULL
+  );
   ```
 
+- `get_day_notes(dates=None)` — `{date: note}` map (all rows, or just the listed dates).
+- `set_day_note(date, note)` — upsert one day's note; a blank note deletes the row, so "no note" and "empty note" collapse to one state.
 - `legacy_config_rows()` — returns rows from any pre-existing `config` table; used by `config.migrate_from`.
 - `get_active(activity=None)` — the open (`stop_epoch IS NULL`) session for that activity, or the most recent open session of any activity when `activity` is `None`; or `None`. One session may be open per activity type concurrently.
 - `stop_active(stop_epoch=..., activity=None)` — close the open session for that activity (or the latest open one); returns truthy if a row was updated.
@@ -51,7 +61,7 @@ Persistence for the gateway. Two stores:
 - `delete_record(id)`.
 - `list_records(limit=..., ids=..., offset=...)` — newest-first pagination.
 - `count_records()`.
-- `gateway/app/config.py` — `DEFAULTS` — full key list with seed values (OpenClaw, scheduler, UI prefills, `activity_types`, timezone).
+- `gateway/app/config.py` — `DEFAULTS` — full key list with seed values (`auto_stop_minutes`, UI prefills, `activity_types`, timezone, `ui_show_count`).
 - `activity_list(cfg)` — split/dedupe `activity_types`, always with `feeding` first; reused by the app + UI for dropdowns.
 - `load()` — returns merged-with-defaults dict from cache (lazy init from disk).
 - `update(items)` — merges into the on-disk JSON via atomic `os.replace`, refreshes cache.
@@ -60,9 +70,8 @@ Persistence for the gateway. Two stores:
 ## Interactions
 
 - Consumed on every route in [gateway-api.md](gateway-api.md).
-- [gateway-openclaw.md](gateway-openclaw.md) reads `get_active`,
-  writes via `stop_active` (auto-stop) and reads `list_records`
-  (auto-sync bundle).
+- [gateway-scheduler.md](gateway-scheduler.md) reads `get_active` and
+  writes via `stop_active` (auto-stop).
 
 ## How to Test
 

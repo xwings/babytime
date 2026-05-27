@@ -1,7 +1,8 @@
 # babytime
 
 Baby-feeding tracker for the Alientek DNESP32S3B board. An optional Docker
-gateway lets multiple units share state and forward records to OpenClaw.
+gateway lets multiple units share a durable activity log, edited from a web
+UI or driven by a remote agent over a JSON API.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for design rationale and
 [gateway/README.md](gateway/README.md) for the gateway API and config keys.
@@ -14,8 +15,8 @@ Pick one in `firmware/include/config.local.h`:
   last 8 feedings, no networking except NTP. Cleared on reboot.
 - **Gateway** — `GATEWAY_URL` set to your Docker host (e.g.
   `http://192.168.1.1:8080`). Events go to the gateway, which keeps a
-  durable SQLite log, hosts the web UI, and forwards records to OpenClaw on
-  demand or on a schedule. Multiple ESP32s can share one gateway.
+  durable SQLite log, hosts the web UI, and exposes a JSON API a remote
+  agent can read and write. Multiple ESP32s can share one gateway.
 
 ## Hardware
 
@@ -56,15 +57,14 @@ docker compose up -d --build
 ```
 
 Open <http://localhost:8080/>. One page: records table with inline edit, an
-Add-record form, and the OpenClaw config form. Set `GATEWAY_TOKEN` in
-`docker-compose.yml` to require bearer auth on `/api/*`; leave empty to
-trust the LAN.
+Add-record form, per-date day-note fields, and the configuration form. Set
+`GATEWAY_TOKEN` in `docker-compose.yml` to require bearer auth on `/api/*`;
+leave empty to trust the LAN.
 
 ## Buttons
 
-- **K2 short** — toggle feeding (start ↔ stop). Display flips to the counter view.
-- **K1 short** — cycle Clock → History → Counter views.
-- **K1 long (≥1.5s)** — gateway mode: sync records to OpenClaw via the gateway. Standalone: no-op.
+- **K2** — toggle feeding (start ↔ stop). Display flips to the counter view.
+- **K1** — cycle Clock → History → Counter views.
 
 GPIO 0 is the chip's BOOT strap pin; holding it during reset puts the chip
 into download mode for flashing.

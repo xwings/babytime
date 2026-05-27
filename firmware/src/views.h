@@ -12,6 +12,5 @@ void drawStatus(const String& title, const String& body);
 void drawClockScreen();
 void drawCounter(uint32_t elapsedSeconds);
 void drawHistoryScreen();
-void drawSyncStatus(const String& title, const String& body, uint16_t titleColor);
 
 void redrawCurrentView();

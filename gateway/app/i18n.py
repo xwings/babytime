@@ -2,13 +2,12 @@
 
 The set is intentionally small: just the strings rendered by
 `templates/base.html` and `templates/index.html`. Config field
-identifiers (`webhook_url`, `default_volume_ml`, etc.) are not
+identifiers (`activity_types`, `default_volume_ml`, etc.) are not
 translated — they're config keys, not labels.
 
 Placeholders use ``{name}`` and are substituted via :func:`t` with a
-plain :py:meth:`str.replace` so literal braces in other entries
-(e.g. ``{records}`` in the template hint) don't trip Python's
-``str.format`` machinery.
+plain :py:meth:`str.replace`, so any literal braces in other entries
+don't trip Python's ``str.format`` machinery.
 """
 
 from __future__ import annotations
@@ -47,10 +46,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "records_select_all": "Select all on page",
         "records_save": "Save",
         "records_delete": "Delete",
-        "records_upload": "Upload",
         "records_delete_confirm": "Delete the selected record(s)?",
         "records_toggle_aria": "Toggle",
         "records_select_all_on": "Select all on {date}",
+        "col_day_note": "Day note",
+        "day_note_placeholder": "Note for this day…",
         # Add-record
         "add_heading": "Add record",
         "add_btn": "Add",
@@ -70,15 +70,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Config tab
         "config_heading": "Configuration",
         "config_save": "Save",
-        "config_template_hint_html": (
-            "Template placeholders: <code>{records}</code> in message, and "
-            "<code>{date}</code> <code>{start_time}</code> <code>{stop_time}</code> "
-            "<code>{duration}</code> <code>{volume}</code> <code>{activity}</code> "
-            "<code>{notes}</code> <code>{device_id}</code> in each record line."
-        ),
-        # Sync banner
-        "sync_banner_ok": "Sync ok",
-        "sync_banner_fail": "Sync error",
         # Time units (read by the live-elapsed JS in index.html)
         "unit_hour": "h",
         "unit_minute": "m",
@@ -105,10 +96,11 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "records_select_all": "选中本页全部",
         "records_save": "保存",
         "records_delete": "删除",
-        "records_upload": "上传",
         "records_delete_confirm": "确认删除所选记录?",
         "records_toggle_aria": "折叠",
         "records_select_all_on": "选中 {date} 全部",
+        "col_day_note": "每日备注",
+        "day_note_placeholder": "当天备注…",
         # Add-record
         "add_heading": "添加记录",
         "add_btn": "添加",
@@ -128,15 +120,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Config tab
         "config_heading": "设置",
         "config_save": "保存",
-        "config_template_hint_html": (
-            "模板占位符:消息体中的 <code>{records}</code>,以及每条记录行中的 "
-            "<code>{date}</code> <code>{start_time}</code> <code>{stop_time}</code> "
-            "<code>{duration}</code> <code>{volume}</code> <code>{activity}</code> "
-            "<code>{notes}</code> <code>{device_id}</code>。"
-        ),
-        # Sync banner
-        "sync_banner_ok": "同步成功",
-        "sync_banner_fail": "同步失败",
         # Time units
         "unit_hour": "时",
         "unit_minute": "分",

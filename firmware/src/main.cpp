@@ -220,18 +220,6 @@ bool gatewayFetchState() {
   return true;
 }
 
-bool gatewayTriggerSync() {
-  if (WiFi.status() != WL_CONNECTED) return false;
-  HttpSession s;
-  if (!beginHttp(s, gatewayUrl("/api/sync"), 15000)) return false;
-  s.http.addHeader("Content-Type", "application/json");
-  int status = s.http.POST("{}");
-  String body = s.http.getString();
-  s.http.end();
-  Serial.printf("Sync -> %d %s\n", status, body.c_str());
-  return status >= 200 && status < 300;
-}
-
 void drainPendingQueue() {
   while (true) {
     PendingEvent ev;
@@ -291,18 +279,6 @@ void toggleFeeding() {
   setCounter(feedingActive ? "Feeding now" : "Last fed",
              feedingActive ? "开始喂养"      : "结束喂养",
              0);
-}
-
-void manualSync() {
-  if (!gatewayMode()) return;
-  activeCounter.active = false;  // sync banner replaces the counter view
-  drawSyncStatus("Sync", "Posting...", hal::COLOR_CYAN);
-  bool ok = gatewayTriggerSync();
-  drawSyncStatus(ok ? "Sync OK"     : "Sync failed",
-                 ok ? "Posted to OpenClaw" : "Gateway error",
-                 ok ? hal::COLOR_GREEN : hal::COLOR_RED);
-  delay(2000);
-  redrawCurrentView();
 }
 
 // ---- View tickers ---------------------------------------------------------
@@ -443,7 +419,6 @@ void setup() {
   hal::InputSource& in = board.input();
   in.onPrimaryAction(cycleView);
   in.onSecondaryAction(toggleFeeding);
-  in.onSyncRequest(manualSync);
 
   connectWiFi();
 
