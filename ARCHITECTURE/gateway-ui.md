@@ -11,9 +11,9 @@ right-aligned `Last fed:` panel showing a live 1 Hz counter since the
 most recent finished feeding, an Add-record form with header-action
 button, and per-date collapsible record groups with select-all +
 auto-check of the last 24 h. Each date group carries a full-width
-free-text day-note textarea seated *below* that date's records
-(labelled "Notes for Today" on the current date, "Day note"
-otherwise), and per-date headers also show the day's `total_ml`
+free-text day-note textarea seated between that date's header and
+its records (labelled "Notes for Today" on the current date, "Day
+note" otherwise), and per-date headers also show the day's `total_ml`
 (omitted when zero, so days with no volume logged stay clean).
 
 ## Status
@@ -42,9 +42,9 @@ otherwise), and per-date headers also show the day's `total_ml`
 - `gateway/app/templates/index.html` — `<section class="activity-bar">` holds a left `.activity-buttons` group rendering one `<form action="/ui/activity">` per activity from `active_map` (button `.idle` blue "tap to start" or `.running` red with a `.live-elapsed` timer, by open-session state) and a right-aligned `.last-fed` panel — a `Last fed:` label plus a `.last-fed-counter.live-elapsed` ticking since `last_fed.stop_epoch` (the most recent finished feeding; omitted when none).
 - `gateway/app/templates/index.html` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch (drives the running-activity timer).
 - `gateway/app/templates/index.html:63` — `<section class="add-record">` with header-row + top-right Add button; ml/Device prefilled from `config.default_volume_ml` / `config.default_device_id`.
-- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`. Below the date's records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`.
+- `gateway/app/templates/index.html:84` — `<section class="records">` — per-date `.date-group` blocks with chevron fold toggle, per-date select-all checkbox (indeterminate state when partial), 24 h auto-check (`row.start_epoch >= auto_check_cutoff`), header reads `{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} ml{% endif %})`. Between the header and the records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`. Each row shows its activity as read-only text (`.activity-cell`) plus a hidden `activity_{id}` field that round-trips the value — there is no per-row or per-add activity picker.
 - `gateway/app/templates/index.html:222` — `<section class="config">` (Configuration tab body).
-- `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row holding `.activity-buttons` (left, flex group of `.activity-btn.idle` blue / `.activity-btn.running` red with a tabular-nums `.activity-timer`) and `.last-fed` (`margin-left:auto`, label + tabular-nums `.last-fed-counter`), `.day-note-block`/`.day-note` textarea styling (`border-top`, sits below the table), `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
+- `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row holding `.activity-buttons` (left, flex group of `.activity-btn.idle` blue / `.activity-btn.running` red with a tabular-nums `.activity-timer`) and `.last-fed` (`margin-left:auto`, label + tabular-nums `.last-fed-counter`), `.day-note-block`/`.day-note` textarea styling (`border-bottom`, sits between header and table), `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform.
 
 ## Interactions
 
@@ -83,9 +83,13 @@ Pass means all of:
   `YYYY-MM-DD (N)`.
 - Date-header checkbox toggles all rows in that day; rows from the
   last 24 h are pre-checked on page load.
-- Each date group has a multi-line day-note textarea below that date's
-  records (labelled "Notes for Today" on the current date); editing it
-  and clicking Save persists the note (round-trips on reload).
+- Each date group has a multi-line day-note textarea between the date
+  header and that date's records (labelled "Notes for Today" on the
+  current date); editing it and clicking Save persists the note
+  (round-trips on reload).
+- Rows show their activity as read-only text (no dropdown); the
+  Add-record form has no activity picker and defaults new records to
+  Feeding.
 - Tabs (Records / Configuration) sit on the right of the header and
   switch sections without a full reload.
 - Language switch chip (EN / 中文) sits left of the tabs; clicking

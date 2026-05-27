@@ -67,13 +67,6 @@
       <label>{{ t('col_stop') }} <input type="time" name="stop_time" value="{{ now_time }}"></label>
       <label>{{ t('col_ml') }} <input type="number" name="volume_ml" min="0" step="1"
                        class="ml-input" value="{{ config.default_volume_ml or '' }}"></label>
-      <label>{{ t('col_activity') }}
-        <select name="activity" class="activity-select">
-          {% for a in activities %}
-          <option value="{{ a }}">{{ al(a) }}</option>
-          {% endfor %}
-        </select>
-      </label>
     </div>
   </form>
 </section>
@@ -100,6 +93,11 @@
           <input type="checkbox" class="date-check" title="{{ t('records_select_all_on', date=g.date) }}">
           <span class="date-label">{{ g.date }} ({{ g.records | length }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
         </label>
+      </div>
+      <div class="day-note-block">
+        <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('day_note_today') if g.date == now_date else t('col_day_note') }}</label>
+        <textarea class="day-note" id="day_note_{{ g.date }}" name="day_note_{{ g.date }}"
+                  rows="3" placeholder="{{ t('day_note_placeholder') }}">{{ g.note }}</textarea>
       </div>
       <table class="records-table">
         <thead>
@@ -137,24 +135,13 @@
                      {% if r.activity != 'feeding' %}disabled data-feeding-only="1"{% endif %}>
             </td>
             <td>
-              <select name="activity_{{ r.id }}" class="activity-select">
-                {% for a in activities %}
-                <option value="{{ a }}" {% if a == r.activity %}selected{% endif %}>{{ al(a) }}</option>
-                {% endfor %}
-                {% if r.activity and r.activity not in activities %}
-                <option value="{{ r.activity }}" selected>{{ al(r.activity) }}</option>
-                {% endif %}
-              </select>
+              <span class="activity-cell">{{ al(r.activity) }}</span>
+              <input type="hidden" name="activity_{{ r.id }}" value="{{ r.activity }}">
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-      <div class="day-note-block">
-        <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('day_note_today') if g.date == now_date else t('col_day_note') }}</label>
-        <textarea class="day-note" id="day_note_{{ g.date }}" name="day_note_{{ g.date }}"
-                  rows="3" placeholder="{{ t('day_note_placeholder') }}">{{ g.note }}</textarea>
-      </div>
     </div>
     {% else %}
     <p class="empty">{{ t('no_records') }}</p>
@@ -202,25 +189,6 @@
       fold?.addEventListener('click', () => {
         group.classList.toggle('collapsed');
       });
-    });
-
-    // ml is only meaningful for feeding: disable + show "--" otherwise.
-    document.querySelectorAll('.activity-select').forEach(sel => {
-      const row = sel.closest('tr') || sel.closest('.row-form');
-      const ml = row && row.querySelector('.ml-input');
-      if (!ml) return;
-      function sync() {
-        const feeding = sel.value === 'feeding';
-        ml.disabled = !feeding;
-        if (feeding) {
-          ml.placeholder = '';
-        } else {
-          ml.value = '';
-          ml.placeholder = '--';
-        }
-      }
-      sel.addEventListener('change', sync);
-      sync();
     });
 
     document.getElementById('check-all-btn')?.addEventListener('click', () => {
