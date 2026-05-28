@@ -13,17 +13,24 @@ using hal::FontFamily;
 using hal::TextStyle;
 
 // ---- Seven-segment renderer ------------------------------------------------
-// Pure fillRect math; size/spacing are caller-supplied so we can scale per
-// display in the future. Layout matches the pre-HAL 320×240 numbers when the
-// caller passes those defaults.
+// Pure fillRect math; size/spacing are caller-supplied via DigitMetrics so a
+// screen can scale the numerals to suit its layout. `CLOCK_DIGITS` matches the
+// pre-HAL 320×240 numbers; `COUNTER_DIGITS` is a smaller set that leaves the
+// counter screen room for its larger today-tally line.
 
-constexpr int DIGIT_W       = 50;
-constexpr int DIGIT_H       = 150;
-constexpr int SEG_THICKNESS = 8;
-constexpr int CHAR_GAP      = 16;
-constexpr int COLON_W       = 14;
+struct DigitMetrics {
+  int w;          // digit cell width
+  int h;          // digit cell height
+  int thickness;  // segment thickness
+  int gap;        // inter-character gap
+  int colonW;     // colon cell width
+};
 
-void drawDigit(Display& d, int x, int y, int digit, Color color) {
+constexpr DigitMetrics CLOCK_DIGITS   = {50, 150, 8, 16, 14};
+constexpr DigitMetrics COUNTER_DIGITS = {34, 96, 6, 11, 10};
+
+void drawDigit(Display& d, int x, int y, int digit, Color color,
+               const DigitMetrics& m) {
   static const bool segments[10][7] = {
     {true, true, true, true, true, true, false},
     {false, true, true, false, false, false, false},
@@ -37,9 +44,9 @@ void drawDigit(Display& d, int x, int y, int digit, Color color) {
     {true, true, true, true, false, true, true},
   };
   if (digit < 0 || digit > 9) return;
-  const int t = SEG_THICKNESS;
-  const int w = DIGIT_W;
-  const int h = DIGIT_H;
+  const int t = m.thickness;
+  const int w = m.w;
+  const int h = m.h;
   const int horizontalW = w - (2 * t);
   const int upperH = (h - (3 * t)) / 2;
   const int middleY = y + t + upperH;
@@ -54,11 +61,11 @@ void drawDigit(Display& d, int x, int y, int digit, Color color) {
   if (segments[digit][6]) d.fillRect(x + t,     middleY,       horizontalW, t,      color);
 }
 
-void drawColon(Display& d, int x, int y, Color color) {
-  const int dot     = SEG_THICKNESS + 2;
-  const int dotX    = x + ((COLON_W - dot) / 2);
-  const int centerY = y + (DIGIT_H / 2);
-  const int offset  = DIGIT_H / 4;
+void drawColon(Display& d, int x, int y, Color color, const DigitMetrics& m) {
+  const int dot     = m.thickness + 2;
+  const int dotX    = x + ((m.colonW - dot) / 2);
+  const int centerY = y + (m.h / 2);
+  const int offset  = m.h / 4;
   d.fillRect(dotX, centerY - offset, dot, dot, color);
   d.fillRect(dotX, centerY + offset - dot, dot, dot, color);
 }
@@ -66,11 +73,12 @@ void drawColon(Display& d, int x, int y, Color color) {
 // Heartbeat: 500 ms on / 500 ms off, one full blink per second. Callers
 // redraw at 500 ms cadence so the colon's animation lines up.
 void drawBigDigits(Display& d, const String& text, int y,
-                   Color hourColor, Color colonColor, Color minuteColor) {
+                   Color hourColor, Color colonColor, Color minuteColor,
+                   const DigitMetrics& m) {
   int totalWidth = 0;
   for (size_t i = 0; i < text.length(); i++) {
-    totalWidth += (text.charAt(i) == ':') ? COLON_W : DIGIT_W;
-    if (i + 1 < text.length()) totalWidth += CHAR_GAP;
+    totalWidth += (text.charAt(i) == ':') ? m.colonW : m.w;
+    if (i + 1 < text.length()) totalWidth += m.gap;
   }
   // Bright orange MM weighs more than dark red HH; nudge left so the optical
   // center sits at the midline.
@@ -81,13 +89,13 @@ void drawBigDigits(Display& d, const String& text, int y,
   for (size_t i = 0; i < text.length(); i++) {
     char c = text.charAt(i);
     if (c == ':') {
-      if (showColon) drawColon(d, x, y, colonColor);
-      x += COLON_W + CHAR_GAP;
+      if (showColon) drawColon(d, x, y, colonColor, m);
+      x += m.colonW + m.gap;
       if (section < 1) section++;
     } else {
       Color color = (section == 0) ? hourColor : minuteColor;
-      drawDigit(d, x, y, c - '0', color);
-      x += DIGIT_W + CHAR_GAP;
+      drawDigit(d, x, y, c - '0', color, m);
+      x += m.w + m.gap;
     }
   }
 }
@@ -145,7 +153,8 @@ void drawClockScreen() {
   }
 
   if (synced) {
-    drawBigDigits(d, clock, 50, hal::COLOR_RED, hal::COLOR_WHITE, hal::COLOR_ORANGE);
+    drawBigDigits(d, clock, 50, hal::COLOR_RED, hal::COLOR_WHITE, hal::COLOR_ORANGE,
+                  CLOCK_DIGITS);
   }
 
   // Footer-2: IP + gateway status, one line above the button hint.
@@ -187,16 +196,18 @@ void drawCounter(uint32_t elapsedSeconds) {
                {hal::COLOR_YELLOW, FontFamily::CjkMixed, 2});
   }
 
-  // Today's feeding tally, centered between the title and the big digits.
+  // Today's feeding tally — the headline number on this screen, so it's
+  // size-2 and the elapsed clock below it uses the smaller COUNTER_DIGITS.
   char today[40];
   snprintf(today, sizeof(today), "Today: %d feeds  %d ml", todayFeeds, todayMl);
-  int todayW = d.measureText(today, FontFamily::Ascii, 1);
+  int todayW = d.measureText(today, FontFamily::Ascii, 2);
   int tx = (d.width() - todayW) / 2;
   if (tx < 0) tx = 0;
-  d.drawText(tx, 40, today, {hal::COLOR_GREEN, FontFamily::Ascii, 1});
+  d.drawText(tx, 48, today, {hal::COLOR_GREEN, FontFamily::Ascii, 2});
 
-  drawBigDigits(d, formatElapsed(elapsedSeconds), 50,
-                hal::COLOR_RED, hal::COLOR_WHITE, hal::COLOR_ORANGE);
+  drawBigDigits(d, formatElapsed(elapsedSeconds), 74,
+                hal::COLOR_RED, hal::COLOR_WHITE, hal::COLOR_ORANGE,
+                COUNTER_DIGITS);
 
   String stamp = currentTimestamp();
   if (stamp.length() > 0) {
