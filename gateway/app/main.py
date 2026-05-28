@@ -208,7 +208,7 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 def state_payload() -> dict:
     return {
         "active": db.get_active("feeding"),
-        "history": db.list_records(limit=8),
+        "history": db.list_records(limit=8, activity="feeding"),
         "server_epoch": int(time.time()),
     }
 

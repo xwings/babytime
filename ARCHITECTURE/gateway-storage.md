@@ -59,7 +59,7 @@ Persistence for the gateway. Three stores:
 - `create_record(..., activity='feeding')` — insert. "At most one active per activity" is enforced by the caller (`api_post_event` / `ui_activity_toggle`) checking `get_active(activity)` first, not by this function.
 - `update_record(id, **fields)` — inline UI edit path; `activity` is an allowed field.
 - `delete_record(id)`.
-- `list_records(limit=..., ids=..., offset=...)` — newest-first pagination.
+- `list_records(limit=..., ids=..., offset=..., activity=...)` — newest-first pagination; `activity` filters to one type (e.g. `"feeding"` for the device-facing `/api/state` history).
 - `count_records()`.
 - `gateway/app/config.py` — `DEFAULTS` — full key list with seed values (`auto_stop_minutes`, UI prefills, `activity_types`, `timed_activities`, timezone, `ui_show_count`).
 - `activity_list(cfg)` — split/dedupe `activity_types`, always with `feeding` first; reused by the app + UI for dropdowns.

@@ -153,6 +153,7 @@ def list_records(
     limit: Optional[int] = None,
     ids: Optional[list] = None,
     offset: int = 0,
+    activity: Optional[str] = None,
 ) -> list:
     conn = get_conn()
     with _lock:
@@ -162,15 +163,17 @@ def list_records(
                 f"SELECT * FROM records WHERE id IN ({qmarks}) ORDER BY start_epoch DESC",
                 ids,
             ).fetchall()
-        elif limit is not None:
-            rows = conn.execute(
-                "SELECT * FROM records ORDER BY start_epoch DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
         else:
-            rows = conn.execute(
-                "SELECT * FROM records ORDER BY start_epoch DESC"
-            ).fetchall()
+            sql = "SELECT * FROM records"
+            params: list = []
+            if activity is not None:
+                sql += " WHERE activity = ?"
+                params.append(activity)
+            sql += " ORDER BY start_epoch DESC"
+            if limit is not None:
+                sql += " LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
+            rows = conn.execute(sql, params).fetchall()
     return [dict(r) for r in rows]
 
 
