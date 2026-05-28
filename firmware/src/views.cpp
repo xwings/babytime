@@ -187,6 +187,14 @@ void drawCounter(uint32_t elapsedSeconds) {
                {hal::COLOR_YELLOW, FontFamily::CjkMixed, 2});
   }
 
+  // Today's feeding tally, centered between the title and the big digits.
+  char today[40];
+  snprintf(today, sizeof(today), "Today: %d feeds  %d ml", todayFeeds, todayMl);
+  int todayW = d.measureText(today, FontFamily::Ascii, 1);
+  int tx = (d.width() - todayW) / 2;
+  if (tx < 0) tx = 0;
+  d.drawText(tx, 40, today, {hal::COLOR_GREEN, FontFamily::Ascii, 1});
+
   drawBigDigits(d, formatElapsed(elapsedSeconds), 50,
                 hal::COLOR_RED, hal::COLOR_WHITE, hal::COLOR_ORANGE);
 
@@ -208,17 +216,16 @@ void drawCounter(uint32_t elapsedSeconds) {
 void drawHistoryScreen() {
   Display& d = hal::currentBoard().display();
   d.clear(hal::COLOR_BLACK);
-  d.drawText(14, 8, "Last feedings", {hal::COLOR_CYAN, FontFamily::Ascii, 2});
+  d.drawText(14, 8, "Activity", {hal::COLOR_CYAN, FontFamily::Ascii, 2});
 
   if (feedHistoryCount == 0) {
-    d.drawText(14, 50, "No feedings yet.",
+    d.drawText(14, 50, "No records yet.",
                {hal::COLOR_DARKGREY, FontFamily::Ascii, 2});
   } else {
     const int lineH = 18;
     const int maxY  = d.height() - 22;  // leave one line for the footer
     int y = 32;
     char prevDate[16] = "";
-    unsigned dayIndex = 0;
     for (size_t i = 0; i < feedHistoryCount; i++) {
       size_t idx = (feedHistoryHead + HISTORY_SIZE - 1 - i) % HISTORY_SIZE;
       const FeedSession& s = feedHistory[idx];
@@ -231,11 +238,9 @@ void drawHistoryScreen() {
       if (strcmp(dateStr, prevDate) != 0) {
         if (y + lineH > maxY) break;
         d.drawText(14, y, dateStr, {hal::COLOR_YELLOW, FontFamily::Ascii, 2});
-        y += lineH;
-        strcpy(prevDate, dateStr);
-        // Count entries on this date so we number earliest=1, latest=N
-        // even though the loop walks newest-first.
-        dayIndex = 0;
+        // Day's feeding volume, right-aligned on the date row. Only feeding
+        // carries ml, so this is the day's total intake.
+        int dayMl = 0;
         for (size_t j = i; j < feedHistoryCount; j++) {
           size_t jdx = (feedHistoryHead + HISTORY_SIZE - 1 - j) % HISTORY_SIZE;
           struct tm tmJ;
@@ -244,23 +249,32 @@ void drawHistoryScreen() {
           snprintf(ds, sizeof(ds), "%04d-%02d-%02d",
                    tmJ.tm_year + 1900, tmJ.tm_mon + 1, tmJ.tm_mday);
           if (strcmp(ds, dateStr) != 0) break;
-          dayIndex++;
+          dayMl += feedHistory[jdx].volumeMl;
         }
+        if (dayMl > 0) {
+          char mlStr[16];
+          snprintf(mlStr, sizeof(mlStr), "%dml", dayMl);
+          int w = d.measureText(mlStr, FontFamily::Ascii, 2);
+          int mx = d.width() - w - 14;
+          if (mx < 0) mx = 0;
+          d.drawText(mx, y, mlStr, {hal::COLOR_ORANGE, FontFamily::Ascii, 2});
+        }
+        y += lineH;
+        strcpy(prevDate, dateStr);
       }
 
       char line[48];
+      const char* act = s.activity[0] ? s.activity : "?";
       if (s.stopEpoch == 0) {
-        snprintf(line, sizeof(line), "%u. %02d:%02d -  ...",
-                 dayIndex, tmStart.tm_hour, tmStart.tm_min);
+        snprintf(line, sizeof(line), "%02d:%02d-...  %s",
+                 tmStart.tm_hour, tmStart.tm_min, act);
       } else {
         struct tm tmStop;
         localtime_r(&s.stopEpoch, &tmStop);
-        snprintf(line, sizeof(line), "%u. %02d:%02d - %02d:%02d",
-                 dayIndex,
+        snprintf(line, sizeof(line), "%02d:%02d-%02d:%02d %s",
                  tmStart.tm_hour, tmStart.tm_min,
-                 tmStop.tm_hour,  tmStop.tm_min);
+                 tmStop.tm_hour,  tmStop.tm_min, act);
       }
-      dayIndex--;
       if (y + lineH > maxY) break;
       Color rowColor = (s.stopEpoch == 0) ? hal::COLOR_YELLOW : hal::COLOR_WHITE;
       d.drawText(24, y, line, {rowColor, FontFamily::Ascii, 2});

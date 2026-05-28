@@ -2,7 +2,7 @@
 
 ## Goal
 
-Board-agnostic firmware logic: app state (feeding history ring, active
+Board-agnostic firmware logic: app state (activity history ring, active
 counter, pending-event queue), the gateway HTTP client (POST events,
 poll `/api/state`) running on Core 0, NTP setup, view orchestration and
 500 ms tickers, and the two semantic-action handlers (`cycleView`,
@@ -31,16 +31,16 @@ not what app state exists.
 ## Key Types and Entry Points
 
 - `firmware/src/state.h:17` — `enum ViewMode { VIEW_CLOCK, VIEW_HISTORY, VIEW_COUNTER }`.
-- `firmware/src/state.h:19` — `struct FeedSession { startEpoch, stopEpoch }`.
+- `firmware/src/state.h:19` — `struct FeedSession { startEpoch, stopEpoch, activity[12], volumeMl }` — the history ring holds every activity type; `activity`/`volumeMl` drive the activity screen's per-row label and per-day ml total.
 - `firmware/src/state.h:26` — `struct ActiveCounter` — title, subtitle, base elapsed + start ms.
-- `firmware/src/state.h:34-40` — extern globals (`currentView`, `feedHistory[]`, `feedHistoryCount`, `feedHistoryHead`, `activeCounter`, `gatewayOnline`, `stateMutex`).
+- `firmware/src/state.h:34-43` — extern globals (`currentView`, `feedHistory[]`, `feedHistoryCount`, `feedHistoryHead`, `lastFeedingStop`, `todayFeeds`, `todayMl`, `activeCounter`, `gatewayOnline`, `stateMutex`). `lastFeedingStop` is the stop epoch of the most recent feeding (0 = none), feeding the "Last fed" counter independently of the mixed-activity history ring; `todayFeeds`/`todayMl` are the gateway-computed daily feeding tally shown on the counter screen.
 - `firmware/src/main.cpp:33-39` — global definitions.
 - `firmware/src/main.cpp:51-53` — `PendingEvent` + 16-slot `pendingQueue` (Core 1 producer, Core 0 consumer).
 - `firmware/src/main.cpp:73-87` — `enqueuePendingEvent` (mutex-guarded, drops oldest on overflow).
 - `firmware/src/main.cpp:90-100` — `setCounter` — flips view to `VIEW_COUNTER` and paints.
 - `firmware/src/main.cpp:110-128` — `HttpSession` + `beginHttp` — TLS-aware `HTTPClient` factory.
 - `firmware/src/main.cpp:130-144` — `gatewayPostEvent` — POST `/api/events`.
-- `firmware/src/main.cpp:146-198` — `applyGatewayState` — reconciles local state from `/api/state`; **skips reconciliation while `pendingCount > 0`** so optimistic local edits aren't clobbered by stale server truth.
+- `firmware/src/main.cpp:146-213` — `applyGatewayState` — reconciles local state from `/api/state`; **skips reconciliation while `pendingCount > 0`** so optimistic local edits aren't clobbered by stale server truth. Fills the history ring from `history` (all activities, incl. `activity`/`volume_ml`), caches `today_feeds`/`today_ml`, then drives the live counter: open feeding (`active`) → "Feeding now"; else `last_feeding.stop_epoch` (→ `lastFeedingStop`) → "Last fed".
 - `firmware/src/main.cpp:200-214` — `gatewayFetchState`.
 - `firmware/src/main.cpp` — `drainPendingQueue` — POST + pop loop.
 - `firmware/src/main.cpp` — `gatewayTask` — Core 0 RTOS body; cadence = `GATEWAY_POLL_MS` (30 s).
@@ -53,8 +53,8 @@ not what app state exists.
 - `firmware/src/views.cpp:80-105` — `drawBigDigits` — seven-segment renderer with 500 ms colon heartbeat.
 - `firmware/src/views.cpp:135-145` — `drawStatus`.
 - `firmware/src/views.cpp:147-186` — `drawClockScreen` — time + date + IP + gateway online indicator.
-- `firmware/src/views.cpp:188-225` — `drawCounter` — centered ASCII title + CJK subtitle + big digits + timestamp.
-- `firmware/src/views.cpp:227-289` — `drawHistoryScreen` — date-grouped, numbered earliest-to-latest within each day.
+- `firmware/src/views.cpp:188-225` — `drawCounter` — centered ASCII title + CJK subtitle + today's feeding tally (`todayFeeds`/`todayMl`) + big digits + timestamp.
+- `firmware/src/views.cpp:227-289` — `drawHistoryScreen` ("Activity") — date-grouped; each row is `start-stop activity`, and the date header carries the day's feeding-volume total (right-aligned ml).
 - `firmware/src/views.cpp` — `redrawCurrentView` — view-state machine.
 
 ## Interactions
@@ -86,8 +86,8 @@ not what app state exists.
 
 - ES8311 audio codec absent on this board variant; the alarm /
   voice-msg-to-gateway path is unimplemented.
-- History view shows only the in-RAM 8-slot ring; full feeding log
-  lives in the gateway and is reachable only via the web UI.
+- Activity view shows only the in-RAM 8-slot ring (all activity types);
+  the full log lives in the gateway and is reachable only via the web UI.
 - No retry/backoff for `gatewayFetchState` beyond the next 30 s
   tick.
 - Reads on Core 1 don't lock `stateMutex` (preserves pre-refactor

@@ -5,7 +5,7 @@ import ipaddress
 import os
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -206,9 +206,17 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 
 def state_payload() -> dict:
+    tz = zoneinfo(config.load().get("timezone") or "UTC")
+    day_start = datetime.now(tz=tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = (day_start + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    today = db.feeding_totals(int(day_start.timestamp()), int(day_end.timestamp()))
+    last_feeding = db.list_records(limit=1, activity="feeding")
     return {
         "active": db.get_active("feeding"),
-        "history": db.list_records(limit=8, activity="feeding"),
+        "last_feeding": last_feeding[0] if last_feeding else None,
+        "today_feeds": today["feeds"],
+        "today_ml": today["ml"],
+        "history": db.list_records(limit=8),
         "server_epoch": int(time.time()),
     }
 

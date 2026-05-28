@@ -27,6 +27,9 @@ ViewMode           currentView      = VIEW_CLOCK;
 FeedSession        feedHistory[HISTORY_SIZE];
 size_t             feedHistoryCount = 0;
 size_t             feedHistoryHead  = 0;
+time_t             lastFeedingStop  = 0;
+int                todayFeeds       = 0;
+int                todayMl          = 0;
 ActiveCounter      activeCounter;
 volatile bool      gatewayOnline    = true;
 SemaphoreHandle_t  stateMutex       = nullptr;
@@ -56,6 +59,7 @@ void recordFeedStart() {
   FeedSession s;
   s.startEpoch = now;
   s.stopEpoch  = 0;
+  strncpy(s.activity, "feeding", sizeof(s.activity) - 1);
   feedHistory[feedHistoryHead] = s;
   feedHistoryHead = (feedHistoryHead + 1) % HISTORY_SIZE;
   if (feedHistoryCount < HISTORY_SIZE) feedHistoryCount++;
@@ -67,6 +71,7 @@ void recordFeedStop() {
   time_t now;
   time(&now);
   feedHistory[lastIdx].stopEpoch = now;
+  lastFeedingStop = now;
 }
 
 void enqueuePendingEvent(const char* type, time_t epoch) {
@@ -172,10 +177,27 @@ void applyGatewayState(JsonDocument& doc) {
     s.startEpoch = (time_t)(long)r["start_epoch"];
     JsonVariant stop = r["stop_epoch"];
     s.stopEpoch = stop.isNull() ? 0 : (time_t)(long)stop;
+    const char* act = r["activity"] | "";
+    strncpy(s.activity, act, sizeof(s.activity) - 1);
+    s.volumeMl = r["volume_ml"] | 0;
     feedHistory[feedHistoryHead] = s;
     feedHistoryHead = (feedHistoryHead + 1) % HISTORY_SIZE;
     if (feedHistoryCount < HISTORY_SIZE) feedHistoryCount++;
   }
+
+  // "Last fed" is feeding-specific: the gateway sends the most recent
+  // completed feeding separately so a newer sleep/poopoo in `history`
+  // never overrides it.
+  JsonVariant lastFed = doc["last_feeding"];
+  if (!lastFed.isNull()) {
+    JsonVariant stop = lastFed["stop_epoch"];
+    lastFeedingStop = stop.isNull() ? 0 : (time_t)(long)stop;
+  } else {
+    lastFeedingStop = 0;
+  }
+
+  todayFeeds = doc["today_feeds"] | 0;
+  todayMl    = doc["today_ml"] | 0;
 
   if (feedingActive) {
     JsonObject act = active.as<JsonObject>();
@@ -185,16 +207,12 @@ void applyGatewayState(JsonDocument& doc) {
     activeCounter.subtitle           = "开始喂养";
     activeCounter.baseElapsedSeconds = (now > startEpoch) ? (uint32_t)(now - startEpoch) : 0;
     activeCounter.startedAtMs        = millis();
-  } else if (feedHistoryCount > 0) {
-    size_t lastIdx = (feedHistoryHead + HISTORY_SIZE - 1) % HISTORY_SIZE;
-    const FeedSession& s = feedHistory[lastIdx];
-    if (s.stopEpoch != 0) {
-      activeCounter.active             = true;
-      activeCounter.title              = "Last fed";
-      activeCounter.subtitle           = "结束喂养";
-      activeCounter.baseElapsedSeconds = (now > s.stopEpoch) ? (uint32_t)(now - s.stopEpoch) : 0;
-      activeCounter.startedAtMs        = millis();
-    }
+  } else if (lastFeedingStop != 0) {
+    activeCounter.active             = true;
+    activeCounter.title              = "Last fed";
+    activeCounter.subtitle           = "结束喂养";
+    activeCounter.baseElapsedSeconds = (now > lastFeedingStop) ? (uint32_t)(now - lastFeedingStop) : 0;
+    activeCounter.startedAtMs        = millis();
   } else {
     activeCounter.active = false;
   }

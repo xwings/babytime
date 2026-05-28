@@ -184,6 +184,22 @@ def count_records() -> int:
     return int(row["n"]) if row else 0
 
 
+def feeding_totals(start_epoch: int, stop_epoch: int) -> dict:
+    """Feeding tally over a half-open `start_epoch <= start < stop_epoch`
+    window (caller derives the bounds, e.g. local midnight to midnight).
+    `feeds` counts only feedings that carry a volume, so it pairs with
+    `ml` — mirrors the "N times / total ml" coupling shown in the web UI."""
+    conn = get_conn()
+    with _lock:
+        row = conn.execute(
+            "SELECT COUNT(*) AS feeds, COALESCE(SUM(volume_ml), 0) AS ml "
+            "FROM records WHERE activity='feeding' AND volume_ml IS NOT NULL "
+            "AND start_epoch >= ? AND start_epoch < ?",
+            (start_epoch, stop_epoch),
+        ).fetchone()
+    return {"feeds": int(row["feeds"]), "ml": int(row["ml"])}
+
+
 def get_day_notes(dates: Optional[list] = None) -> dict:
     """Map of `{date: note}`. With `dates`, only those dates; otherwise all."""
     conn = get_conn()

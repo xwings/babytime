@@ -30,7 +30,7 @@ store through the web UI.
 - `gateway/app/main.py:81` — `lifespan` — startup: `db.init()`, `config.migrate_from(...)`, spawn `scheduler.scheduler_loop` as a background task.
 - `gateway/app/main.py` — `require_auth` — one global dependency (`FastAPI(dependencies=[...])`) gating every route, API and browser UI alike. Order: no-op when `GATEWAY_TOKEN` is unset → pass when the effective client IP is in a `trusted_networks` CIDR (default `10.0.0.0/8`) → otherwise the request must carry the token, as `Authorization: Bearer <token>` (machines) or HTTP Basic where the password is the token (browsers; username ignored). On failure it returns `401` with `WWW-Authenticate: Basic realm="babytime"` so browsers pop the native login; the token compare uses `hmac.compare_digest`. The `/static` mount is a sub-app and stays open (CSS only).
 - `gateway/app/main.py` — `_effective_client_ip` — the IP the trust check keys on. Normally `request.client.host` (the TCP peer). When that peer is in `trusted_proxies` (CIDR list, empty by default) it walks the `X-Forwarded-For` chain from the connection side inward, skipping further trusted-proxy hops, to the real client behind the reverse proxy. `X-Forwarded-For` is ignored when the peer isn't a configured proxy, so a direct client can't spoof a LAN IP. uvicorn is launched with `--no-proxy-headers` (see `Dockerfile`) so it leaves `request.client` as the real peer instead of rewriting it from forwarded headers — this module is the single authority on proxy headers.
-- `gateway/app/main.py:109` — `state_payload` — assembles `{active, history, server_epoch}` for `/api/state`. The device is feeding-centric, so both fields are filtered to feeding: `active` is `db.get_active("feeding")` and `history` is `db.list_records(limit=8, activity="feeding")`. A newer sleep/poopoo record never masquerades as the device's active session or its "last fed" time.
+- `gateway/app/main.py:109` — `state_payload` — assembles `{active, last_feeding, today_feeds, today_ml, history, server_epoch}` for `/api/state`. `history` is `db.list_records(limit=8)` — **all** activity types, so the device's activity screen can list everything. The feeding-specific fields keep the live counter accurate regardless of what tops the history: `active` is `db.get_active("feeding")` (open feeding session) and `last_feeding` is `db.list_records(limit=1, activity="feeding")[0]` (most recent feeding) — so a newer sleep/poopoo never masquerades as the active session or the "last fed" time. `today_feeds`/`today_ml` come from `db.feeding_totals` over the local-midnight-to-midnight window (gateway timezone) and feed the counter screen's daily tally; the count pairs with ml (feedings carrying a volume only).
 - `gateway/app/main.py:128` — `POST /api/events` — start/stop toggle; honors `timestamp_epoch` override.
 - `gateway/app/main.py:142` — `GET /api/state` — device polling target.
 - `GET /api/records` — JSON record list (newest-first, `limit`).
@@ -69,8 +69,8 @@ curl -s http://localhost:8080/api/state | jq .
 curl -s http://localhost:8080/ | grep -F 'activity-bar'
 ```
 
-- Pass = first `curl` prints a JSON object with `active`, `history`,
-  and `server_epoch` keys.
+- Pass = first `curl` prints a JSON object with `active`, `last_feeding`,
+  `today_feeds`, `today_ml`, `history`, and `server_epoch` keys.
 - Pass = second `curl` prints at least one line containing
   `activity-bar` (HTML rendered with the activity-button bar).
 
