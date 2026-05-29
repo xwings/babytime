@@ -59,9 +59,9 @@ the bodies.
 - `firmware/src/hal/hal.h:68-78` — `class InputSource` —
   `onPrimaryAction` (cycle view), `onSecondaryAction` (toggle
   feeding), `poll()`.
-- `firmware/src/hal/hal.h:80-95` — `class Board` —
+- `firmware/src/hal/hal.h:79-95` — `class Board` —
   `init/display/input/backlight`.
-- `firmware/src/hal/hal.h:99` — `Board& currentBoard()` — provided
+- `firmware/src/hal/hal.h:98` — `Board& currentBoard()` — provided
   by exactly one backend per env.
 - `firmware/src/hal/dnesp32s3b/board.cpp:33-53` —
   `DnEsp32S3bBoard::init` — LCD-before-Wire ordering, XL9555

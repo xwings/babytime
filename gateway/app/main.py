@@ -240,8 +240,12 @@ async def api_post_event(event: EventIn):
     ts = event.timestamp_epoch or int(time.time())
     if event.type == "start":
         if db.get_active(event.activity) is None:
+            cfg = config.load()
             db.create_record(
-                start_epoch=ts, activity=event.activity, device_id=event.device_id
+                start_epoch=ts,
+                activity=event.activity,
+                device_id=event.device_id,
+                volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
             )
     else:
         db.stop_active(stop_epoch=ts, activity=event.activity)
@@ -489,7 +493,12 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
     elif db.get_active(activity):
         db.stop_active(stop_epoch=ts, activity=activity)
     else:
-        db.create_record(start_epoch=ts, activity=activity, device_id="web")
+        db.create_record(
+            start_epoch=ts,
+            activity=activity,
+            device_id="web",
+            volume_ml=_feeding_volume(activity, config.load().get("default_volume_ml")),
+        )
     return RedirectResponse("/", status_code=303)
 
 

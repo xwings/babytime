@@ -28,7 +28,7 @@ network without ever sending the `stop`.
   is not in `config.timed_activities(cfg)` are skipped — instant events
   are logged closed and must never be capped (belt-and-suspenders, since
   the UI never opens them).
-- `gateway/app/scheduler.py:23` — `scheduler_loop()` — `async` task:
+- `gateway/app/scheduler.py:25` — `scheduler_loop()` — `async` task:
   wakes every 60 s and calls `_enforce_auto_stop`. Cancellable via
   `asyncio.CancelledError`.
 
