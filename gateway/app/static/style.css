@@ -476,46 +476,51 @@ code {
   .bulk-actions { width: 100%; }
   .bulk-actions button { flex: 1; }
 
-  /* Records table -> stacked cards */
+  /* Records table -> two-row cards. A flat 7-column row is too dense on a
+     phone, so each record becomes a small card laid out as a 4-column grid
+     over two rows: row 1 is "when" (checkbox · start · stop · duration),
+     row 2 is "what" (ml · activity · note), indented under the times. */
   .records-table thead { display: none; }
   .records-table,
-  .records-table tbody,
-  .records-table tr,
-  .records-table td {
-    display: block;
-    width: 100%;
-  }
+  .records-table tbody { display: block; width: 100%; }
   .records-table tr {
+    display: grid;
+    grid-template-columns: auto 1fr 1fr 1.3fr;
+    align-items: center;
+    gap: 0.3rem 0.5rem;
     border: 1px solid #232834;
     border-radius: 6px;
     margin-bottom: 0.6rem;
-    padding: 0.35rem 0.6rem;
+    padding: 0.5rem 0.6rem;
     background: #14171e;
   }
   .records-table td {
-    border-bottom: none;
-    padding: 0.3rem 0;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    min-width: 0;
+    padding: 0;
+    border-bottom: none;
   }
-  .records-table td::before {
+  /* Row 1: checkbox | start | stop | duration */
+  .records-table td:nth-child(1) { grid-area: 1 / 1; }
+  .records-table td:nth-child(2) { grid-area: 1 / 2; }
+  .records-table td:nth-child(3) { grid-area: 1 / 3; }
+  .records-table td:nth-child(4) { grid-area: 1 / 4; color: #7d8a9e; }
+  /* Row 2: (checkbox column left empty) | ml | activity | note */
+  .records-table td:nth-child(5) { grid-area: 2 / 2; gap: 0.3rem; }
+  .records-table td:nth-child(6) { grid-area: 2 / 3; }
+  .records-table td:nth-child(7) { grid-area: 2 / 4; }
+  /* Show the "ml" unit after the volume so the bare number isn't ambiguous. */
+  .records-table td:nth-child(5)::after {
     content: attr(data-label);
-    flex: 0 0 5rem;
-    color: #a4b1c5;
+    flex: 0 0 auto;
+    color: #7d8a9e;
     font-size: 0.8rem;
   }
-  /* First cell is the checkbox + hidden date — the card's top bar, no label. */
-  .records-table td:first-child::before { content: none; }
-  .records-table td input[type=text],
-  .records-table td input[type=time],
-  .records-table td input[type=number],
-  .records-table td .activity-select {
-    flex: 1;
-    width: auto;
-  }
+  .records-table td input,
+  .records-table td select { width: 100%; min-width: 0; flex: 1; }
   .records-table .notes-input { min-width: 0; }
-  .row-check { width: 1.2rem; height: 1.2rem; }
+  .row-check { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; }
 
   /* Add-record form: let each field take the full row. */
   .row-form label { flex: 1 1 100%; }
