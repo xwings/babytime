@@ -120,11 +120,11 @@
               <input type="hidden" name="date_{{ r.id }}"
                      value="{{ r.start_epoch | localdate_input(tz) }}">
             </td>
-            <td>
+            <td data-label="{{ t('col_start') }}">
               <input type="time" name="start_time_{{ r.id }}"
                      value="{{ r.start_epoch | localtime_only(tz) }}" required>
             </td>
-            <td>
+            <td data-label="{{ t('col_stop') }}">
               {% if r.activity in timed %}
               <input type="time" name="stop_time_{{ r.id }}"
                      value="{{ (r.stop_epoch | localtime_only(tz)) if r.stop_epoch else '' }}">
@@ -132,14 +132,14 @@
               <span class="instant-dash">—</span>
               {% endif %}
             </td>
-            <td>{{ (r.start_epoch | duration(r.stop_epoch) or '—') if r.activity in timed else '—' }}</td>
-            <td>
+            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if r.activity in timed else '—' }}</td>
+            <td data-label="{{ t('col_ml') }}">
               <input type="number" name="volume_ml_{{ r.id }}" min="0" step="1"
                      class="ml-input"
                      value="{{ r.volume_ml if (r.volume_ml is not none and r.activity == 'feeding') else '' }}"
                      {% if r.activity != 'feeding' %}disabled data-feeding-only="1"{% endif %}>
             </td>
-            <td>
+            <td data-label="{{ t('col_activity') }}">
               <select name="activity_{{ r.id }}" class="activity-select">
                 {% for a in activities %}
                 <option value="{{ a }}" {% if a == r.activity %}selected{% endif %}>{{ al(a) }}</option>
@@ -149,7 +149,7 @@
                 {% endif %}
               </select>
             </td>
-            <td>
+            <td data-label="{{ t('col_notes') }}">
               <input type="text" name="notes_{{ r.id }}" class="notes-input"
                      value="{{ r.notes | default('') }}"
                      placeholder="{{ t('col_notes') }}">
