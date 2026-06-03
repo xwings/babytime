@@ -115,8 +115,7 @@
           {% for r in g.records %}
           <tr>
             <td>
-              <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check"
-                     {% if r.start_epoch >= auto_check_cutoff %}checked{% endif %}>
+              <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check">
               <input type="hidden" name="date_{{ r.id }}"
                      value="{{ r.start_epoch | localdate_input(tz) }}">
             </td>

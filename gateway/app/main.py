@@ -421,9 +421,6 @@ async def ui_home(
         for d in page_dates
     ]
 
-    now_epoch = int(time.time())
-    auto_check_cutoff = now_epoch - 86400
-
     activities = config.activity_list(cfg)
     timed = config.timed_activities(cfg)
     active_map = {a: s for a in activities if a in timed and (s := db.get_active(a))}
@@ -449,7 +446,6 @@ async def ui_home(
             "timed": sorted(timed),
             "active_map": active_map,
             "last_fed": last_fed,
-            "now_epoch": now_epoch,
             "config": cfg,
             "tz": tz_name,
             "now_date": now.strftime("%Y-%m-%d"),
@@ -459,7 +455,6 @@ async def ui_home(
             "total_records": len(all_records),
             "total_dates": total_dates,
             "dates_per_page": dates_per_page,
-            "auto_check_cutoff": auto_check_cutoff,
             "config_keys_simple": [
                 "auto_stop_minutes",
                 "default_volume_ml",
