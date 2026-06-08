@@ -212,6 +212,17 @@
       const target = !Array.from(all).every(c => c.checked);
       all.forEach(c => { c.checked = target; });
     });
+
+    // Editing any field in a record auto-selects that row, so the edit is
+    // included when Save persists only the checked rows. The checkbox itself
+    // is excluded (so it can still be unticked); day-note edits live outside a
+    // <tr> and are saved separately, so they don't trigger this.
+    document.getElementById('records-form')?.addEventListener('input', (e) => {
+      const field = e.target;
+      if (field.classList.contains('row-check')) return;
+      const check = field.closest('tr')?.querySelector('.row-check');
+      if (check) check.checked = true;
+    });
   })();
 </script>
 
