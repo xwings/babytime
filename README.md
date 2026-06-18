@@ -58,7 +58,7 @@ docker compose up -d --build
 
 Open <http://localhost:8080/>. One page: records table with inline edit, an
 Add-record form, per-date day-note fields, and the configuration form. Set
-`feeding_alert_minutes` there to blink the top activity buttons and device
+`feeding_alert_minutes` there to blink the top Feeding button and device
 display after the last feeding is that many minutes old (`120` by default).
 Set
 `GATEWAY_TOKEN` in `docker-compose.yml` to require the token on every route

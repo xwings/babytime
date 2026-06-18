@@ -409,11 +409,11 @@ code {
 .activity-btn.running { background: #b03a3a; }
 .activity-btn.running:hover { background: #c64545; }
 
-.activity-bar.feeding-alert .activity-btn.idle {
+.activity-bar.feeding-alert .activity-btn.idle.feeding-due {
   animation: feeding-alert-flash 0.9s steps(1, end) infinite;
 }
 
-.activity-bar.feeding-alert .activity-btn.idle:hover {
+.activity-bar.feeding-alert .activity-btn.idle.feeding-due:hover {
   animation: feeding-alert-flash 0.9s steps(1, end) infinite;
 }
 
