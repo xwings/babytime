@@ -6,7 +6,7 @@
 <section class="activity-bar">
   {% for a in activities %}
   {% set s = active_map.get(a) %}
-  <form method="post" action="/ui/activity">
+  <form method="post" action="/ui/activity" class="activity-form">
     <input type="hidden" name="activity" value="{{ a }}">
     <button type="submit" class="activity-btn {{ 'running' if s else 'idle' }}">
       <span class="activity-name">{{ al(a) }}</span>
@@ -45,6 +45,40 @@
     }
     tick();
     setInterval(tick, 1000);
+  })();
+</script>
+
+<script>
+  (function () {
+    function setBusy(form, busy) {
+      const button = form.querySelector('.activity-btn');
+      if (!button) return;
+      button.disabled = busy;
+      button.classList.toggle('is-pending', busy);
+      if (busy) {
+        button.setAttribute('aria-busy', 'true');
+      } else {
+        button.removeAttribute('aria-busy');
+      }
+    }
+
+    document.querySelectorAll('.activity-form').forEach(form => {
+      form.addEventListener('submit', event => {
+        if (form.dataset.submitting === '1') {
+          event.preventDefault();
+          return;
+        }
+        form.dataset.submitting = '1';
+        setBusy(form, true);
+      });
+    });
+
+    window.addEventListener('pageshow', () => {
+      document.querySelectorAll('.activity-form[data-submitting="1"]').forEach(form => {
+        form.dataset.submitting = '0';
+        setBusy(form, false);
+      });
+    });
   })();
 </script>
 

@@ -393,6 +393,7 @@ code {
 .activity-btn {
   width: 100%;
   height: 100%;
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -407,6 +408,43 @@ code {
 .activity-btn.idle:hover { background: #3573e8; }
 .activity-btn.running { background: #b03a3a; }
 .activity-btn.running:hover { background: #c64545; }
+
+.activity-btn.is-pending,
+.activity-btn:disabled {
+  cursor: progress;
+  opacity: 0.78;
+}
+
+.activity-btn.idle.is-pending,
+.activity-btn.idle:disabled,
+.activity-btn.idle.is-pending:hover,
+.activity-btn.idle:disabled:hover {
+  background: #2454b6;
+}
+
+.activity-btn.running.is-pending,
+.activity-btn.running:disabled,
+.activity-btn.running.is-pending:hover,
+.activity-btn.running:disabled:hover {
+  background: #8f3030;
+}
+
+.activity-btn.is-pending::after {
+  content: "";
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: activity-pending-spin 0.7s linear infinite;
+}
+
+@keyframes activity-pending-spin {
+  to { transform: rotate(360deg); }
+}
 
 .activity-name { font-size: 1.1rem; }
 
