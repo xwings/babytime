@@ -4,7 +4,10 @@
 <div class="tab-panel active" data-tab="records">
 
 <section class="activity-bar {{ 'feeding-alert' if feeding_alert.due else '' }}"
-         data-feeding-alert-minutes="{{ feeding_alert.threshold_minutes }}">
+         data-feeding-alert-minutes="{{ feeding_alert.threshold_minutes }}"
+         data-last-fed-label="{{ t('last_fed') }}"
+         data-feeding-alert-label="{{ t('feeding_alert_due') }}"
+         data-activity-start-label="{{ t('activity_start_btn') }}">
   {% for a in activities %}
   {% set s = active_map.get(a) %}
   <form method="post" action="/ui/activity" class="activity-form">
@@ -30,6 +33,83 @@
 <script>
   (function () {
     const U = (window.I18N || { unit_hour: 'h', unit_minute: 'm', unit_second: 's' });
+    const bar = document.querySelector('.activity-bar');
+    const feeding = document.querySelector('.activity-btn[data-activity="feeding"]');
+    const feedingName = feeding?.querySelector('.activity-name')?.textContent || 'Feeding';
+    let serverOffsetSeconds = 0;
+    let syncInFlight = false;
+
+    function span(className, text) {
+      const el = document.createElement('span');
+      el.className = className;
+      if (text !== undefined) el.textContent = text;
+      return el;
+    }
+
+    function timerSpan(className, since) {
+      const el = span('activity-timer live-elapsed' + (className ? ' ' + className : ''), '...');
+      el.dataset.since = String(since);
+      return el;
+    }
+
+    function hasNumber(value) {
+      return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+    }
+
+    function renderFeeding(state) {
+      if (!bar || !feeding || !state) return;
+      const alert = state.feeding_alert || {};
+      if (hasNumber(state.server_epoch)) {
+        serverOffsetSeconds = Number(state.server_epoch) - Math.floor(Date.now() / 1000);
+      }
+      if (hasNumber(alert.threshold_minutes)) {
+        bar.dataset.feedingAlertMinutes = String(alert.threshold_minutes);
+      }
+
+      const active = state.active && hasNumber(state.active.start_epoch)
+        ? state.active
+        : null;
+      const last = state.last_feeding && hasNumber(state.last_feeding.stop_epoch)
+        ? state.last_feeding
+        : null;
+
+      feeding.replaceChildren(span('activity-name', feedingName));
+      if (active) {
+        feeding.classList.add('running');
+        feeding.classList.remove('idle', 'feeding-due');
+        feeding.appendChild(timerSpan('', active.start_epoch));
+      } else {
+        feeding.classList.add('idle');
+        feeding.classList.remove('running');
+        if (last) {
+          feeding.appendChild(span('activity-alert', bar.dataset.feedingAlertLabel || 'Time to feed?'));
+          feeding.appendChild(span('activity-sub', bar.dataset.lastFedLabel || 'Last fed:'));
+          feeding.appendChild(timerSpan('feeding-last-elapsed', last.stop_epoch));
+        } else {
+          feeding.appendChild(span('activity-hint', bar.dataset.activityStartLabel || 'Tap to start'));
+        }
+      }
+
+      tick();
+    }
+
+    async function syncState() {
+      if (!bar || !feeding || syncInFlight) return;
+      syncInFlight = true;
+      try {
+        const res = await fetch('/api/state', {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+          cache: 'no-store'
+        });
+        if (res.ok) renderFeeding(await res.json());
+      } catch (e) {
+        // Keep the last rendered state; the next poll or refresh can recover.
+      } finally {
+        syncInFlight = false;
+      }
+    }
+
     function fmt(s) {
       if (s < 0) s = 0;
       const h = Math.floor(s / 3600);
@@ -40,14 +120,12 @@
       return sec + U.unit_second;
     }
     function tick() {
-      const now = Math.floor(Date.now() / 1000);
+      const now = Math.floor(Date.now() / 1000) + serverOffsetSeconds;
       document.querySelectorAll('.live-elapsed').forEach(el => {
         const since = parseInt(el.dataset.since, 10);
         if (!Number.isFinite(since)) return;
         el.textContent = fmt(now - since) + (el.dataset.suffix || '');
       });
-      const bar = document.querySelector('.activity-bar');
-      const feeding = document.querySelector('.activity-btn[data-activity="feeding"]');
       const lastFed = feeding?.querySelector('.feeding-last-elapsed');
       const threshold = parseInt(bar?.dataset.feedingAlertMinutes || '0', 10);
       const since = parseInt(lastFed?.dataset.since || '', 10);
@@ -63,6 +141,12 @@
     }
     tick();
     setInterval(tick, 1000);
+    setInterval(syncState, 30000);
+    window.addEventListener('focus', syncState);
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) syncState();
+    });
+    syncState();
   })();
 </script>
 
