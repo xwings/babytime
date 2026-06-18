@@ -12,6 +12,24 @@ using hal::Display;
 using hal::FontFamily;
 using hal::TextStyle;
 
+constexpr Color COLOR_ALERT_BG = 0x7800;
+
+bool alertFlashOn() {
+  return feedingAlertDue && (((millis() / 500) & 1U) == 0);
+}
+
+Color screenBackground() {
+  return alertFlashOn() ? COLOR_ALERT_BG : hal::COLOR_BLACK;
+}
+
+Color alertSafeRed() {
+  return alertFlashOn() ? hal::COLOR_WHITE : hal::COLOR_RED;
+}
+
+Color alertSafeOrange() {
+  return alertFlashOn() ? hal::COLOR_YELLOW : hal::COLOR_ORANGE;
+}
+
 // ---- Seven-segment renderer ------------------------------------------------
 // Pure fillRect math; size/spacing are caller-supplied via DigitMetrics so a
 // screen can scale the numerals to suit its layout. `CLOCK_DIGITS` matches the
@@ -128,7 +146,7 @@ const char* historyHint() {
 
 void drawStatus(const String& title, const String& body) {
   Display& d = hal::currentBoard().display();
-  d.clear(hal::COLOR_BLACK);
+  d.clear(screenBackground());
   d.drawText(12, 12, title.c_str(), {hal::COLOR_CYAN,  FontFamily::Ascii, 2});
   d.drawText(12, 50, body.c_str(),  {hal::COLOR_WHITE, FontFamily::Ascii, 2});
   drawFooterHint(d, buttonHint());
@@ -140,9 +158,9 @@ void drawClockScreen() {
   String clock;
   bool synced = getClockText(clock);
 
-  d.clear(hal::COLOR_BLACK);
-  d.drawText(14, 12, synced ? "Time" : "Syncing time...",
-             {hal::COLOR_CYAN, FontFamily::Ascii, 2});
+  d.clear(screenBackground());
+  d.drawText(14, 12, feedingAlertDue ? "Time to feed?" : (synced ? "Time" : "Syncing time..."),
+             {feedingAlertDue ? hal::COLOR_WHITE : hal::COLOR_CYAN, FontFamily::Ascii, 2});
 
   String date;
   if (getDateText(date)) {
@@ -153,7 +171,7 @@ void drawClockScreen() {
   }
 
   if (synced) {
-    drawBigDigits(d, clock, 50, hal::COLOR_RED, hal::COLOR_WHITE, hal::COLOR_ORANGE,
+    drawBigDigits(d, clock, 50, alertSafeRed(), hal::COLOR_WHITE, alertSafeOrange(),
                   CLOCK_DIGITS);
   }
 
@@ -176,7 +194,7 @@ void drawClockScreen() {
 
 void drawCounter(uint32_t elapsedSeconds) {
   Display& d = hal::currentBoard().display();
-  d.clear(hal::COLOR_BLACK);
+  d.clear(screenBackground());
 
   // Centered title: ASCII title + (optional) CJK subtitle, baseline-aligned.
   int titleW = d.measureText(activeCounter.title.c_str(), FontFamily::Ascii, 2);
@@ -203,10 +221,11 @@ void drawCounter(uint32_t elapsedSeconds) {
   int todayW = d.measureText(today, FontFamily::Ascii, 2);
   int tx = (d.width() - todayW) / 2;
   if (tx < 0) tx = 0;
-  d.drawText(tx, 48, today, {hal::COLOR_GREEN, FontFamily::Ascii, 2});
+  d.drawText(tx, 48, today,
+             {feedingAlertDue ? hal::COLOR_WHITE : hal::COLOR_GREEN, FontFamily::Ascii, 2});
 
   drawBigDigits(d, formatElapsed(elapsedSeconds), 74,
-                hal::COLOR_RED, hal::COLOR_WHITE, hal::COLOR_ORANGE,
+                alertSafeRed(), hal::COLOR_WHITE, alertSafeOrange(),
                 COUNTER_DIGITS);
 
   String stamp = currentTimestamp();
@@ -226,8 +245,9 @@ void drawCounter(uint32_t elapsedSeconds) {
 
 void drawHistoryScreen() {
   Display& d = hal::currentBoard().display();
-  d.clear(hal::COLOR_BLACK);
-  d.drawText(14, 8, "Activity", {hal::COLOR_CYAN, FontFamily::Ascii, 2});
+  d.clear(screenBackground());
+  d.drawText(14, 8, feedingAlertDue ? "Time to feed?" : "Activity",
+             {feedingAlertDue ? hal::COLOR_WHITE : hal::COLOR_CYAN, FontFamily::Ascii, 2});
 
   if (feedHistoryCount == 0) {
     d.drawText(14, 50, "No records yet.",

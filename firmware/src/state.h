@@ -41,6 +41,9 @@ extern size_t             feedHistoryHead;
 extern time_t             lastFeedingStop;  // stop epoch of the most recent completed feeding; 0 = none
 extern int                todayFeeds;       // count of today's feedings carrying a volume
 extern int                todayMl;          // sum of today's feeding volume (ml)
+extern volatile bool      feedingAlertDue;  // gateway says the last feeding is past the configured interval
+extern uint32_t           feedingAlertElapsedSeconds;
+extern uint16_t           feedingAlertThresholdMinutes;
 extern ActiveCounter      activeCounter;
 extern volatile bool      gatewayOnline;
 extern SemaphoreHandle_t  stateMutex;

@@ -11,6 +11,7 @@ DEFAULTS: dict = {
     "activity_types": "feeding,sleep,poopoo",
     "timed_activities": "feeding,sleep",
     "auto_stop_minutes": "15",
+    "feeding_alert_minutes": "120",
     "default_volume_ml": "",
     "default_language": "en",
     "timezone": "UTC",
@@ -129,6 +130,29 @@ def trusted_proxies(cfg: dict) -> list:
     direct peer is a configured proxy, so a client can't spoof a LAN IP to
     bypass auth."""
     return _parse_cidrs(cfg.get("trusted_proxies") or "")
+
+
+def int_value(cfg: dict, key: str, default: int = 0, minimum: Optional[int] = None) -> int:
+    """Parse an integer config value, falling back on bad input.
+
+    Config is user-editable text, so callers that need arithmetic should avoid
+    open-coding `int(...)` and accidentally breaking a route on one bad field.
+    """
+    try:
+        value = int(str(cfg.get(key) or "").strip())
+    except (TypeError, ValueError):
+        value = default
+    if minimum is not None and value < minimum:
+        return minimum
+    return value
+
+
+def feeding_alert_minutes(cfg: dict) -> int:
+    """Minutes after the last completed feeding before the due alert fires.
+
+    `0` disables the alert. The default is two hours.
+    """
+    return int_value(cfg, "feeding_alert_minutes", default=120, minimum=0)
 
 
 def timed_activities(cfg: dict) -> set:

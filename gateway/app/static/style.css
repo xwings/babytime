@@ -409,6 +409,19 @@ code {
 .activity-btn.running { background: #b03a3a; }
 .activity-btn.running:hover { background: #c64545; }
 
+.activity-bar.feeding-alert .activity-btn.idle {
+  animation: feeding-alert-flash 0.9s steps(1, end) infinite;
+}
+
+.activity-bar.feeding-alert .activity-btn.idle:hover {
+  animation: feeding-alert-flash 0.9s steps(1, end) infinite;
+}
+
+@keyframes feeding-alert-flash {
+  0%, 49% { background: #2a64d6; }
+  50%, 100% { background: #b03a3a; }
+}
+
 .activity-btn.is-pending,
 .activity-btn:disabled {
   cursor: progress;
@@ -447,6 +460,22 @@ code {
 }
 
 .activity-name { font-size: 1.1rem; }
+
+.activity-alert {
+  display: none;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.activity-btn.feeding-due {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2) inset;
+}
+
+.activity-btn.feeding-due .activity-alert {
+  display: block;
+}
 
 .activity-timer {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

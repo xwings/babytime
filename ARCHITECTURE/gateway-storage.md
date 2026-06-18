@@ -62,7 +62,7 @@ Persistence for the gateway. Three stores:
 - `list_records(limit=..., ids=..., offset=..., activity=...)` — newest-first pagination; `activity` filters to one type (e.g. `"feeding"` for the device-facing `/api/state` history).
 - `count_records()`.
 - `feeding_totals(start_epoch, stop_epoch)` — `{feeds, ml}` for feedings (with a volume) in a half-open start-epoch window; drives `/api/state`'s `today_feeds`/`today_ml` (caller passes local-midnight bounds).
-- `gateway/app/config.py` — `DEFAULTS` — full key list with seed values (`auto_stop_minutes`, UI prefills, `activity_types`, `timed_activities`, timezone, `ui_show_count`).
+- `gateway/app/config.py` — `DEFAULTS` — full key list with seed values (`auto_stop_minutes`, `feeding_alert_minutes`, UI prefills, `activity_types`, `timed_activities`, timezone, `ui_show_count`).
 - `activity_list(cfg)` — split/dedupe `activity_types`, always with `feeding` first; reused by the app + UI for dropdowns.
 - `timed_activities(cfg)` — set of activities recorded as start→stop sessions (the rest are instant single-timestamp logs); always includes `feeding`. Used by the UI and scheduler to tell timed from instant activities.
 - `load()` — returns merged-with-defaults dict from cache (lazy init from disk).

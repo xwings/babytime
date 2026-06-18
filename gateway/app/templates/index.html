@@ -3,18 +3,22 @@
 
 <div class="tab-panel active" data-tab="records">
 
-<section class="activity-bar">
+<section class="activity-bar {{ 'feeding-alert' if feeding_alert.due else '' }}"
+         data-feeding-alert-minutes="{{ feeding_alert.threshold_minutes }}">
   {% for a in activities %}
   {% set s = active_map.get(a) %}
   <form method="post" action="/ui/activity" class="activity-form">
     <input type="hidden" name="activity" value="{{ a }}">
-    <button type="submit" class="activity-btn {{ 'running' if s else 'idle' }}">
+    <button type="submit"
+            data-activity="{{ a }}"
+            class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if a == 'feeding' and feeding_alert.due else '' }}">
       <span class="activity-name">{{ al(a) }}</span>
       {% if s %}
       <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
       {% elif a == 'feeding' and last_fed %}
+      <span class="activity-alert">{{ t('feeding_alert_due') }}</span>
       <span class="activity-sub">{{ t('last_fed') }}</span>
-      <span class="activity-timer live-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
+      <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
       <span class="activity-hint">{{ t('activity_start_btn') if a in timed else t('activity_log_btn') }}</span>
       {% endif %}
@@ -42,6 +46,20 @@
         if (!Number.isFinite(since)) return;
         el.textContent = fmt(now - since) + (el.dataset.suffix || '');
       });
+      const bar = document.querySelector('.activity-bar');
+      const feeding = document.querySelector('.activity-btn[data-activity="feeding"]');
+      const lastFed = feeding?.querySelector('.feeding-last-elapsed');
+      const threshold = parseInt(bar?.dataset.feedingAlertMinutes || '0', 10);
+      const since = parseInt(lastFed?.dataset.since || '', 10);
+      const due = Boolean(
+        bar && feeding && lastFed &&
+        feeding.classList.contains('idle') &&
+        Number.isFinite(threshold) && threshold > 0 &&
+        Number.isFinite(since) &&
+        now - since >= threshold * 60
+      );
+      bar?.classList.toggle('feeding-alert', due);
+      feeding?.classList.toggle('feeding-due', due);
     }
     tick();
     setInterval(tick, 1000);
@@ -175,7 +193,7 @@
             <td data-label="{{ t('col_activity') }}">
               <select name="activity_{{ r.id }}" class="activity-select">
                 {% for a in activities %}
-                <option value="{{ a }}" {% if a == r.activity %}selected{% endif %}>{{ al(a) }}</option>
+                <option value="{{ a }}" data-timed="{{ '1' if a in timed else '0' }}" {% if a == r.activity %}selected{% endif %}>{{ al(a) }}</option>
                 {% endfor %}
                 {% if r.activity and r.activity not in activities %}
                 <option value="{{ r.activity }}" selected>{{ al(r.activity) }}</option>
@@ -216,6 +234,54 @@
 
 <script>
   (function () {
+    const MAX_DURATION_MINUTES = {{ max_record_duration_minutes | tojson }};
+    const DURATION_INVALID = {{ t('record_duration_invalid', minutes=max_record_duration_minutes) | tojson }};
+
+    function minutesFromTime(value) {
+      const parts = String(value || '').split(':');
+      if (parts.length < 2) return null;
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+      return hours * 60 + minutes;
+    }
+
+    function durationMinutes(startValue, stopValue) {
+      const start = minutesFromTime(startValue);
+      const stop = minutesFromTime(stopValue);
+      if (start === null || stop === null) return null;
+      let duration = stop - start;
+      if (duration < 0) duration += 24 * 60;
+      return duration;
+    }
+
+    function clearValidityOnInput(input) {
+      input?.addEventListener('input', () => input.setCustomValidity(''), { once: true });
+    }
+
+    function validateDuration(startInput, stopInput) {
+      if (!stopInput || !stopInput.value) return true;
+      const duration = durationMinutes(startInput?.value, stopInput.value);
+      if (duration === null || duration <= MAX_DURATION_MINUTES) return true;
+      stopInput.setCustomValidity(DURATION_INVALID);
+      stopInput.reportValidity();
+      clearValidityOnInput(stopInput);
+      return false;
+    }
+
+    const addForm = document.querySelector('.add-record form');
+    addForm?.addEventListener('submit', event => {
+      const select = addForm.querySelector('.add-activity-select');
+      const timed = select?.selectedOptions?.[0]?.dataset.timed === '1';
+      if (!timed) return;
+      if (!validateDuration(
+        addForm.querySelector('input[name="start_time"]'),
+        addForm.querySelector('input[name="stop_time"]')
+      )) {
+        event.preventDefault();
+      }
+    });
+
     document.querySelectorAll('.date-group').forEach(group => {
       const fold = group.querySelector('.fold-toggle');
       fold?.addEventListener('click', () => {
@@ -245,6 +311,24 @@
       const all = document.querySelectorAll('.row-check');
       const target = !Array.from(all).every(c => c.checked);
       all.forEach(c => { c.checked = target; });
+    });
+
+    document.getElementById('records-form')?.addEventListener('submit', event => {
+      const action = event.submitter?.getAttribute('formaction') || '';
+      if (action.includes('/records/delete')) return;
+      for (const row of document.querySelectorAll('.records-table tbody tr')) {
+        const checked = row.querySelector('.row-check')?.checked;
+        const select = row.querySelector('.activity-select');
+        const timed = select?.selectedOptions?.[0]?.dataset.timed === '1';
+        if (!checked || !timed) continue;
+        if (!validateDuration(
+          row.querySelector('input[name^="start_time_"]'),
+          row.querySelector('input[name^="stop_time_"]')
+        )) {
+          event.preventDefault();
+          return;
+        }
+      }
     });
 
     // Editing any field in a record auto-selects that row, so the edit is

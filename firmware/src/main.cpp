@@ -30,6 +30,9 @@ size_t             feedHistoryHead  = 0;
 time_t             lastFeedingStop  = 0;
 int                todayFeeds       = 0;
 int                todayMl          = 0;
+volatile bool      feedingAlertDue  = false;
+uint32_t           feedingAlertElapsedSeconds = 0;
+uint16_t           feedingAlertThresholdMinutes = 0;
 ActiveCounter      activeCounter;
 volatile bool      gatewayOnline    = true;
 SemaphoreHandle_t  stateMutex       = nullptr;
@@ -38,6 +41,7 @@ namespace {
 
 uint32_t      lastCounterDrawMs = 0;
 uint32_t      lastClockDrawMs   = 0;
+uint32_t      lastAlertDrawMs   = 0;
 bool          feedingActive     = false;
 volatile bool gatewayStateDirty = false;
 
@@ -199,6 +203,17 @@ void applyGatewayState(JsonDocument& doc) {
   todayFeeds = doc["today_feeds"] | 0;
   todayMl    = doc["today_ml"] | 0;
 
+  JsonVariant alert = doc["feeding_alert"];
+  if (!alert.isNull()) {
+    feedingAlertDue = alert["due"] | false;
+    feedingAlertElapsedSeconds = alert["elapsed_seconds"] | 0;
+    feedingAlertThresholdMinutes = alert["threshold_minutes"] | 0;
+  } else {
+    feedingAlertDue = false;
+    feedingAlertElapsedSeconds = 0;
+    feedingAlertThresholdMinutes = 0;
+  }
+
   if (feedingActive) {
     JsonObject act = active.as<JsonObject>();
     time_t startEpoch = (time_t)(long)act["start_epoch"];
@@ -209,8 +224,8 @@ void applyGatewayState(JsonDocument& doc) {
     activeCounter.startedAtMs        = millis();
   } else if (lastFeedingStop != 0) {
     activeCounter.active             = true;
-    activeCounter.title              = "Last fed";
-    activeCounter.subtitle           = "结束喂养";
+    activeCounter.title              = feedingAlertDue ? "Time to feed?" : "Last fed";
+    activeCounter.subtitle           = feedingAlertDue ? "该喂奶了" : "结束喂养";
     activeCounter.baseElapsedSeconds = (now > lastFeedingStop) ? (uint32_t)(now - lastFeedingStop) : 0;
     activeCounter.startedAtMs        = millis();
   } else {
@@ -288,6 +303,8 @@ void toggleFeeding() {
   xSemaphoreTake(stateMutex, portMAX_DELAY);
   if (feedingActive) recordFeedStart();
   else               recordFeedStop();
+  feedingAlertDue = false;
+  feedingAlertElapsedSeconds = 0;
   xSemaphoreGive(stateMutex);
 
   if (gatewayMode()) {
@@ -315,6 +332,13 @@ void updateClockScreen() {
   if (millis() - lastClockDrawMs < 500) return;
   lastClockDrawMs = millis();
   drawClockScreen();
+}
+
+void updateAlertBlink() {
+  if (!feedingAlertDue || currentView != VIEW_HISTORY) return;
+  if (millis() - lastAlertDrawMs < 500) return;
+  lastAlertDrawMs = millis();
+  drawHistoryScreen();
 }
 
 // ---- NTP ------------------------------------------------------------------
@@ -456,6 +480,7 @@ void loop() {
   }
   updateCounter();
   updateClockScreen();
+  updateAlertBlink();
   hal::currentBoard().input().poll();
   delay(5);
 }

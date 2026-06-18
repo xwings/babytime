@@ -25,6 +25,7 @@ from . import config, db, i18n, scheduler
 from .util import zoneinfo
 
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "").strip()
+MAX_RECORD_DURATION_SECONDS = 30 * 60
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -102,6 +103,17 @@ def _to_epoch(value, tz_name: str = "UTC") -> Optional[int]:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=zoneinfo(tz_name))
     return int(dt.timestamp())
+
+
+def _normalize_stop_epoch(start_epoch: int, stop_epoch: Optional[int]) -> Optional[int]:
+    if stop_epoch is None:
+        return None
+    if stop_epoch < start_epoch:
+        stop_epoch += 86400  # session crossed midnight
+    duration = stop_epoch - start_epoch
+    if duration > MAX_RECORD_DURATION_SECONDS:
+        raise HTTPException(400, "stop time must be within 30 minutes of start time")
+    return stop_epoch
 
 
 @asynccontextmanager
@@ -205,19 +217,46 @@ app = FastAPI(
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 
+def _feeding_alert_payload(
+    cfg: dict,
+    active: Optional[dict],
+    last_feeding: Optional[dict],
+    now_epoch: Optional[int] = None,
+) -> dict:
+    threshold_minutes = config.feeding_alert_minutes(cfg)
+    now_epoch = int(now_epoch or time.time())
+    elapsed_seconds = 0
+    due = False
+    stop_epoch = last_feeding.get("stop_epoch") if last_feeding else None
+    if threshold_minutes > 0 and active is None and stop_epoch:
+        elapsed_seconds = max(0, now_epoch - int(stop_epoch))
+        due = elapsed_seconds >= threshold_minutes * 60
+    return {
+        "due": due,
+        "threshold_minutes": threshold_minutes,
+        "elapsed_seconds": elapsed_seconds,
+        "message": "Time to feed?",
+    }
+
+
 def state_payload() -> dict:
-    tz = zoneinfo(config.load().get("timezone") or "UTC")
+    cfg = config.load()
+    tz = zoneinfo(cfg.get("timezone") or "UTC")
     day_start = datetime.now(tz=tz).replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = (day_start + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     today = db.feeding_totals(int(day_start.timestamp()), int(day_end.timestamp()))
     last_feeding = db.list_records(limit=1, activity="feeding")
+    active = db.get_active("feeding")
+    last = last_feeding[0] if last_feeding else None
+    server_epoch = int(time.time())
     return {
-        "active": db.get_active("feeding"),
-        "last_feeding": last_feeding[0] if last_feeding else None,
+        "active": active,
+        "last_feeding": last,
         "today_feeds": today["feeds"],
         "today_ml": today["ml"],
         "history": db.list_records(limit=8),
-        "server_epoch": int(time.time()),
+        "server_epoch": server_epoch,
+        "feeding_alert": _feeding_alert_payload(cfg, active, last, server_epoch),
     }
 
 
@@ -284,9 +323,7 @@ async def api_create_record(body: RecordIn):
     start = _to_epoch(body.start, tz)
     if start is None:
         raise HTTPException(400, "start is required")
-    stop = _to_epoch(body.stop, tz)
-    if stop is not None and stop < start:
-        stop += 86400  # session crossed midnight
+    stop = _normalize_stop_epoch(start, _to_epoch(body.stop, tz))
     rid = db.create_record(
         start_epoch=start,
         stop_epoch=stop,
@@ -322,6 +359,11 @@ async def api_update_record(rid: int, body: RecordIn):
             fields["volume_ml"] = None  # non-feeding never carries volume
     elif "volume_ml" in provided:
         fields["volume_ml"] = _feeding_volume(effective_activity, provided["volume_ml"])
+
+    if "start_epoch" in fields or "stop_epoch" in fields:
+        start_epoch = fields.get("start_epoch", existing["start_epoch"])
+        stop_epoch = fields.get("stop_epoch", existing["stop_epoch"])
+        fields["stop_epoch"] = _normalize_stop_epoch(start_epoch, stop_epoch)
 
     db.update_record(rid, **fields)
     return _require_record(rid)
@@ -429,6 +471,11 @@ async def ui_home(
          if r.get("stop_epoch") and r["activity"] == "feeding"),
         None,
     )
+    feeding_alert = _feeding_alert_payload(
+        cfg,
+        active_map.get("feeding"),
+        last_fed,
+    )
 
     now = datetime.now(tz=tz)
     lang = i18n.read_lang(request, cfg.get("default_language"))
@@ -446,6 +493,7 @@ async def ui_home(
             "timed": sorted(timed),
             "active_map": active_map,
             "last_fed": last_fed,
+            "feeding_alert": feeding_alert,
             "config": cfg,
             "tz": tz_name,
             "now_date": now.strftime("%Y-%m-%d"),
@@ -455,8 +503,10 @@ async def ui_home(
             "total_records": len(all_records),
             "total_dates": total_dates,
             "dates_per_page": dates_per_page,
+            "max_record_duration_minutes": MAX_RECORD_DURATION_SECONDS // 60,
             "config_keys_simple": [
                 "auto_stop_minutes",
+                "feeding_alert_minutes",
                 "default_volume_ml",
                 "timezone",
                 "ui_show_count",
@@ -516,8 +566,7 @@ async def ui_create(
         stop_epoch = start_epoch  # instant event: a single closed timestamp
     else:
         stop_epoch = combine_date_time(date, stop_time, tz) if stop_time.strip() else None
-        if stop_epoch is not None and stop_epoch < start_epoch:
-            stop_epoch += 86400  # session crossed midnight
+        stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
     db.create_record(
         start_epoch=start_epoch,
         stop_epoch=stop_epoch,
@@ -547,8 +596,7 @@ async def ui_bulk_save(request: Request):
             stop_epoch = start_epoch  # instant event has no editable stop
         else:
             stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
-            if stop_epoch is not None and stop_epoch < start_epoch:
-                stop_epoch += 86400  # session crossed midnight
+            stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
         volume_ml = form.get(f"volume_ml_{rid}") or ""
         db.update_record(
             rid,

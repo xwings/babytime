@@ -32,6 +32,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_config": "Configuration",
         # Live activity panel
         "last_fed": "Last fed:",
+        "feeding_alert_due": "Time to feed?",
         "activity_start_btn": "tap to start",
         "activity_log_btn": "tap to log",
         # Activity display labels (custom types fall back to their raw name)
@@ -45,6 +46,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "records_delete": "Delete",
         "records_delete_confirm": "Delete the selected record(s)?",
         "records_toggle_aria": "Toggle",
+        "record_duration_invalid": "Stop time must be within {minutes} minutes of start time.",
         "date_count": "{n} time{plural}",
         "col_day_note": "Day note",
         "day_note_today": "Notes for Today",
@@ -85,6 +87,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_config": "设置",
         # Live activity panel
         "last_fed": "上次喂食:",
+        "feeding_alert_due": "该喂奶了?",
         "activity_start_btn": "点击开始",
         "activity_log_btn": "点击记录",
         # Activity display labels
@@ -99,6 +102,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "records_delete": "删除",
         "records_delete_confirm": "确认删除所选记录?",
         "records_toggle_aria": "折叠",
+        "record_duration_invalid": "结束时间必须在开始后 {minutes} 分钟内。",
         "date_count": "{n} 次",
         "col_day_note": "每日备注",
         "day_note_today": "今日备注",

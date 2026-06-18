@@ -16,9 +16,9 @@ configuration all live on one page.
 Persisted in `./babytime/` on the host (mounted to `/babytime` in the container):
 
 - `gateway.db` — SQLite, holds activity records and per-day notes.
-- `config.json` — auto-stop cap, UI prefills, activity types, timezone, UI
-  options. Editable from the web UI **or** by hand; written atomically. Keys
-  match those in the Config section below.
+- `config.json` — auto-stop cap, feed-due alert threshold, UI prefills,
+  activity types, timezone, UI options. Editable from the web UI **or** by
+  hand; written atomically. Keys match those in the Config section below.
 
 Change the host path or host port in `docker-compose.yml` if you need different
 bindings. If you're upgrading from a build that stored config in SQLite, the
@@ -68,12 +68,15 @@ Device-facing:
 - `POST /api/events` — `{type: "start"|"stop", device_id, timestamp_epoch?}`
   starts a session (no-op if one is already active) or stops the active one.
   Returns the new state payload.
-- `GET /api/state` — returns `{active, history (last 8), server_epoch}`.
+- `GET /api/state` — returns `{active, last_feeding, today_feeds, today_ml,
+  history (last 8), server_epoch, feeding_alert}`.
 
 Agent-facing:
 
 - `GET /api/records` / `POST /api/records` — list (newest-first) and create.
+  A supplied stop time must be within 30 minutes of the start time.
 - `PATCH /api/records/{id}` / `DELETE /api/records/{id}` — edit / remove.
+  Edits that leave a record longer than 30 minutes are rejected.
 - `GET /api/day_notes` — `{date: note}` map of all per-day notes.
 - `PUT /api/day_notes/{date}` — `{note: "..."}` upserts one day's note
   (blank note clears it). `date` must be `YYYY-MM-DD`.
@@ -84,7 +87,8 @@ UI/admin:
 - `GET /` — web UI: records table with inline edit, add-record form, per-date
   day-note field, configuration form.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
-  actions. `POST /records/save` persists both record edits and day notes.
+  actions. Timed records must stop within 30 minutes of their start.
+  `POST /records/save` persists both record edits and day notes.
 - `POST /config` — saves the form.
 
 ## Day notes
@@ -108,6 +112,7 @@ the network without sending `stop`.
 | `activity_types` | `feeding,sleep,poopoo` | comma-separated; `feeding` always first |
 | `timed_activities` | `feeding,sleep` | comma-separated subset of `activity_types` that record as start→stop sessions with a timer; the rest log a single instant timestamp. `feeding` is always timed |
 | `auto_stop_minutes` | `15` | auto-stop an active session after this many minutes (0 disables) |
+| `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web activity buttons blink blue/red, and the device display blinks a red background. `0` disables |
 | `default_volume_ml` | `` | pre-fills the ml field of the Add-record form |
 | `default_language` | `en` | UI language (`en`/`zh`) for browsers without a `lang` cookie; the per-browser switch still overrides it |
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |
