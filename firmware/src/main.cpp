@@ -39,13 +39,15 @@ SemaphoreHandle_t  stateMutex       = nullptr;
 
 namespace {
 
-uint32_t      lastCounterDrawMs = 0;
-uint32_t      lastClockDrawMs   = 0;
-uint32_t      lastAlertDrawMs   = 0;
-bool          feedingActive     = false;
-volatile bool gatewayStateDirty = false;
+uint32_t      lastCounterDrawMs    = 0;
+uint32_t      lastClockDrawMs      = 0;
+uint32_t      lastAlertDrawMs      = 0;
+uint32_t      lastIdleViewSwitchMs = 0;
+bool          feedingActive        = false;
+volatile bool gatewayStateDirty    = false;
 
 constexpr uint32_t K1_LONG_PRESS_MS = 1500;  // referenced by docs; HAL owns timing
+constexpr uint32_t IDLE_VIEW_SWITCH_MS = 5000;
 
 // ---- Pending event queue (Core 1 producer, Core 0 consumer) ---------------
 
@@ -102,6 +104,7 @@ void setCounter(const String& title, const String& subtitle = "",
   activeCounter.baseElapsedSeconds = baseElapsedSeconds;
   activeCounter.startedAtMs        = millis();
   lastCounterDrawMs                = 0;
+  lastIdleViewSwitchMs             = millis();
   currentView                      = VIEW_COUNTER;
   drawCounter(baseElapsedSeconds);
 }
@@ -292,6 +295,7 @@ void cycleView() {
     if (currentView == VIEW_COUNTER && !activeCounter.active) continue;
     break;
   }
+  lastIdleViewSwitchMs = millis();
   redrawCurrentView();
 }
 
@@ -339,6 +343,23 @@ void updateAlertBlink() {
   if (millis() - lastAlertDrawMs < 500) return;
   lastAlertDrawMs = millis();
   drawHistoryScreen();
+}
+
+void updateIdleViewSwitch() {
+  const uint32_t nowMs = millis();
+  const bool canSwitch = !feedingActive &&
+                         activeCounter.active &&
+                         lastFeedingStop != 0 &&
+                         (currentView == VIEW_CLOCK || currentView == VIEW_COUNTER);
+  if (!canSwitch) {
+    lastIdleViewSwitchMs = nowMs;
+    return;
+  }
+  if (nowMs - lastIdleViewSwitchMs < IDLE_VIEW_SWITCH_MS) return;
+
+  lastIdleViewSwitchMs = nowMs;
+  currentView = (currentView == VIEW_CLOCK) ? VIEW_COUNTER : VIEW_CLOCK;
+  redrawCurrentView();
 }
 
 // ---- NTP ------------------------------------------------------------------
@@ -477,7 +498,9 @@ void loop() {
   if (gatewayStateDirty) {
     gatewayStateDirty = false;
     redrawCurrentView();
+    lastIdleViewSwitchMs = millis();
   }
+  updateIdleViewSwitch();
   updateCounter();
   updateClockScreen();
   updateAlertBlink();

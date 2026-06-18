@@ -34,22 +34,23 @@ not what app state exists.
 - `firmware/src/state.h:20` — `struct FeedSession { startEpoch, stopEpoch, activity[12], volumeMl }` — the history ring holds every activity type; `activity`/`volumeMl` drive the activity screen's per-row label and per-day ml total.
 - `firmware/src/state.h:29` — `struct ActiveCounter` — title, subtitle, base elapsed + start ms.
 - `firmware/src/state.h:37-46` — extern globals (`currentView`, `feedHistory[]`, `feedHistoryCount`, `feedHistoryHead`, `lastFeedingStop`, `todayFeeds`, `todayMl`, `feedingAlertDue`, `activeCounter`, `gatewayOnline`, `stateMutex`). `lastFeedingStop` is the stop epoch of the most recent feeding (0 = none), feeding the "Last fed" counter independently of the mixed-activity history ring; `todayFeeds`/`todayMl` are the gateway-computed daily feeding tally shown on the counter screen. `feedingAlertDue` mirrors `/api/state.feeding_alert.due` and drives the red-background blink.
-- `firmware/src/main.cpp:26-35` — global definitions.
-- `firmware/src/main.cpp:48` — `PendingEvent` + 16-slot `pendingQueue` (Core 1 producer, Core 0 consumer).
-- `firmware/src/main.cpp:77` — `enqueuePendingEvent` (mutex-guarded, drops oldest on overflow).
-- `firmware/src/main.cpp:93` — `setCounter` — flips view to `VIEW_COUNTER` and paints.
-- `firmware/src/main.cpp:115` — `HttpSession` + `beginHttp` — TLS-aware `HTTPClient` factory.
-- `firmware/src/main.cpp:138` — `gatewayPostEvent` — POST `/api/events`.
-- `firmware/src/main.cpp:154` — `applyGatewayState` — reconciles local state from `/api/state`; **skips reconciliation while `pendingCount > 0`** so optimistic local edits aren't clobbered by stale server truth. Fills the history ring from `history` (all activities, incl. `activity`/`volume_ml`), caches `today_feeds`/`today_ml` and `feeding_alert`, then drives the live counter: open feeding (`active`) → "Feeding now"; else `last_feeding.stop_epoch` (→ `lastFeedingStop`) → "Last fed" or "Time to feed?" when the alert is due.
-- `firmware/src/main.cpp:224` — `gatewayFetchState`.
-- `firmware/src/main.cpp:241` — `drainPendingQueue` — POST + pop loop.
-- `firmware/src/main.cpp:262` — `gatewayTask` — Core 0 RTOS body; cadence = `GATEWAY_POLL_MS` (30 s).
-- `firmware/src/main.cpp:274` — `cycleView` (PrimaryAction handler).
-- `firmware/src/main.cpp:283` — `toggleFeeding` (SecondaryAction handler).
-- `firmware/src/main.cpp:304` — `updateCounter` / `updateClockScreen` / `updateAlertBlink` — 500 ms tickers driving live redraws and the history-screen alert blink.
-- `firmware/src/main.cpp:349` — `connectWiFi` + NTP server lists.
-- `firmware/src/main.cpp:429` — `setup()` — board init, callback wiring, Wi-Fi+NTP, gateway task spawn at Core 0.
-- `firmware/src/main.cpp:452` — `loop()` — gateway-dirty redraw, tickers, `input().poll()`, 5 ms idle.
+- `firmware/src/main.cpp:26-38` — global definitions.
+- `firmware/src/main.cpp:54` — `PendingEvent` + 16-slot `pendingQueue` (Core 1 producer, Core 0 consumer).
+- `firmware/src/main.cpp:83` — `enqueuePendingEvent` (mutex-guarded, drops oldest on overflow).
+- `firmware/src/main.cpp:99` — `setCounter` — flips view to `VIEW_COUNTER` and paints.
+- `firmware/src/main.cpp:122` — `HttpSession` + `beginHttp` — TLS-aware `HTTPClient` factory.
+- `firmware/src/main.cpp:145` — `gatewayPostEvent` — POST `/api/events`.
+- `firmware/src/main.cpp:161` — `applyGatewayState` — reconciles local state from `/api/state`; **skips reconciliation while `pendingCount > 0`** so optimistic local edits aren't clobbered by stale server truth. Fills the history ring from `history` (all activities, incl. `activity`/`volume_ml`), caches `today_feeds`/`today_ml` and `feeding_alert`, then drives the live counter: open feeding (`active`) → "Feeding now"; else `last_feeding.stop_epoch` (→ `lastFeedingStop`) → "Last fed" or "Time to feed?" when the alert is due.
+- `firmware/src/main.cpp:242` — `gatewayFetchState`.
+- `firmware/src/main.cpp:259` — `drainPendingQueue` — POST + pop loop.
+- `firmware/src/main.cpp:280` — `gatewayTask` — Core 0 RTOS body; cadence = `GATEWAY_POLL_MS` (30 s).
+- `firmware/src/main.cpp:292` — `cycleView` (PrimaryAction handler).
+- `firmware/src/main.cpp:302` — `toggleFeeding` (SecondaryAction handler).
+- `firmware/src/main.cpp:325` — `updateCounter` / `updateClockScreen` / `updateAlertBlink` — 500 ms tickers driving live redraws and the history-screen alert blink.
+- `firmware/src/main.cpp:348` — `updateIdleViewSwitch` — when feeding is idle and a completed feeding exists, automatically alternates Clock and Last fed counter views every 5 seconds; History and active-feeding counters are left under explicit user/action control.
+- `firmware/src/main.cpp:394` — `connectWiFi` + NTP server lists.
+- `firmware/src/main.cpp:474` — `setup()` — board init, callback wiring, Wi-Fi+NTP, gateway task spawn at Core 0.
+- `firmware/src/main.cpp:497` — `loop()` — gateway-dirty redraw, tickers, `input().poll()`, 5 ms idle.
 - `firmware/src/views.cpp:75` — `drawBigDigits` — caller-sized seven-segment renderer (`DigitMetrics`) with 500 ms colon heartbeat.
 - `firmware/src/views.cpp:129` — `drawStatus`.
 - `firmware/src/views.cpp:138` — `drawClockScreen` — time + date + IP + gateway online indicator (`CLOCK_DIGITS`); when `feedingAlertDue`, the header reads "Time to feed?" and the background alternates dark red/black.
@@ -80,7 +81,8 @@ not what app state exists.
   `DHCP ok, IP=`, `NTP ok via <server>`, then `Gateway mode -> ...`
   (or `Standalone mode` when `GATEWAY_URL` is empty).
 - On hardware: K1 cycles view; K2 toggles feeding and the counter
-  view appears with a live 500 ms tick.
+  view appears with a live 500 ms tick. After feeding is stopped,
+  Clock and Last fed alternate every 5 seconds while idle.
 
 ## Open Gaps / Roadmap
 

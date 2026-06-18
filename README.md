@@ -71,6 +71,10 @@ trust everyone.
 - **K2** — toggle feeding (start ↔ stop). Display flips to the counter view.
 - **K1** — cycle Clock → History → Counter views.
 
+When idle and a completed feeding exists, the firmware alternates the Clock
+and Last fed counter views every 5 seconds. An active feeding stays on the live
+counter view.
+
 GPIO 0 is the chip's BOOT strap pin; holding it during reset puts the chip
 into download mode for flashing.
 
