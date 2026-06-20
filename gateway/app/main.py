@@ -59,7 +59,7 @@ def filter_duration(start: Optional[int], stop: Optional[int]) -> str:
         d = 0
     if d >= 3600:
         return f"{d // 3600}h {(d % 3600) // 60}m"
-    return f"{d // 60}m {d % 60}s"
+    return f"{d // 60}m"
 
 
 templates.env.filters["localtime"] = filter_localtime
