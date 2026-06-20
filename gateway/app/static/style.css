@@ -204,7 +204,7 @@ section h2 {
 }
 
 .records-table .notes-input {
-  min-width: 12rem;
+  min-width: 10rem;
 }
 
 /* Drop the number-input spinner on ml fields — it eats ~1.5 digits of width
@@ -226,8 +226,10 @@ section h2 {
    forcing a large min-width that could overflow. */
 @media (min-width: 641px) {
   .records-table th:nth-child(5),
-  .records-table td:nth-child(5) { width: 5.5rem; }
-  .records-table input[type=number].ml-input { max-width: 5rem; }
+  .records-table td:nth-child(5) { width: 4.5rem; }
+  /* min-width gives ml a firm floor so the greedy Notes column can't squeeze
+     it; without it `max-width` alone collapses the field to min-content. */
+  .records-table input[type=number].ml-input { min-width: 3.5rem; max-width: 4rem; }
   .records-table th:nth-child(7),
   .records-table td:nth-child(7) { width: 100%; }
 }
