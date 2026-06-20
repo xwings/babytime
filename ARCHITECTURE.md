@@ -147,59 +147,76 @@ map to the same primary / secondary / sync semantic actions.
 
 ## Coding Discipline
 
-This project's code is written and reviewed against the following
-eight principles. The standards applied when reviewing are the same
-standards followed when writing.
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with
+project-specific instructions as needed.
 
-1. **Module Depth.** Substantial functionality behind a simple
-   interface. Maximize the gap between interface complexity and
-   implementation complexity. Avoid trivial wrappers, one-use methods,
-   and shallow classes. Prefer general-purpose interfaces; keep the
-   common case simple.
+**Tradeoff:** These guidelines bias toward caution over speed. For
+trivial tasks, use judgment.
 
-2. **Information Hiding.** Encapsulate design decisions (data
-   structures, algorithms, assumptions) inside one module. `private`
-   alone is not hiding — getters/setters that expose internals still
-   leak. Watch for back-door leakage (multiple modules knowing the
-   same format) and temporal decomposition (one class per execution
-   phase when the same knowledge is reused).
+### 1. Think Before Coding
 
-3. **Abstraction Layers.** Each layer presents a different abstraction
-   from the layers above and below. Eliminate pass-through methods and
-   pass-through variables. Pull complexity down into modules rather
-   than pushing it up to callers; internal representation should
-   differ from the external interface.
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
 
-4. **Cohesion & Separation.** Together-or-apart decisions matter at
-   every scope. Combine code that shares information, is always
-   co-used, or can't be understood independently. Separate
-   general-purpose mechanisms from special-purpose logic. Split
-   methods to clarify abstractions, never just to shorten them.
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
 
-5. **Error Handling.** Reduce the *places* where errors must be
-   handled. Define errors out of existence by redesigning APIs so the
-   "exceptional" case is normal. Mask exceptions at low levels;
-   aggregate handling at high levels. Crash on unrecoverable errors
-   instead of layering speculative recovery.
+### 2. Simplicity First
 
-6. **Naming & Obviousness.** Names should make a reader's first guess
-   correct. Avoid `data`, `info`, `count`, `status` — be precise
-   (`fileBlock`, not `block`). Use a given name for one concept
-   everywhere, and never reuse it for a different concept. Match
-   reader expectations; document anything that violates them.
+**Minimum code that solves the problem. Nothing speculative.**
 
-7. **Documentation.** Comments capture what code cannot: rationale,
-   intent, invariants, units, null/edge semantics. Don't restate what
-   the code already shows. Write interface docs while designing — it
-   forces clearer abstractions. Cross-module design decisions live in
-   obvious central locations, not buried in implementations.
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
 
-8. **Strategic Design.** Working code is not enough. Invest ~10–20% of
-   dev time in design quality; every modification should leave the
-   design better than it was. Develop in increments of abstractions,
-   not features. Avoid premature optimization, but stay aware of
-   fundamentally expensive operations (network, disk, allocation,
-   cache misses).
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If
+yes, simplify.
+
+### 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make
+it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs,
+fewer rewrites due to overcomplication, and clarifying questions come
+before implementation rather than after mistakes.
 
 ## Index
 

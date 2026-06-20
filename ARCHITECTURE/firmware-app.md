@@ -33,7 +33,7 @@ not what app state exists.
 - `firmware/src/state.h:18` — `enum ViewMode { VIEW_CLOCK, VIEW_HISTORY, VIEW_COUNTER }`.
 - `firmware/src/state.h:20` — `struct FeedSession { startEpoch, stopEpoch, activity[12], volumeMl }` — the history ring holds every activity type; `activity`/`volumeMl` drive the activity screen's per-row label and per-day ml total.
 - `firmware/src/state.h:29` — `struct ActiveCounter` — title, subtitle, base elapsed + start ms.
-- `firmware/src/state.h:37-46` — extern globals (`currentView`, `feedHistory[]`, `feedHistoryCount`, `feedHistoryHead`, `lastFeedingStop`, `todayFeeds`, `todayMl`, `feedingAlertDue`, `activeCounter`, `gatewayOnline`, `stateMutex`). `lastFeedingStop` is the stop epoch of the most recent feeding (0 = none), feeding the "Last fed" counter independently of the mixed-activity history ring; `todayFeeds`/`todayMl` are the gateway-computed daily feeding tally shown on the counter screen. `feedingAlertDue` mirrors `/api/state.feeding_alert.due` and drives the red-background blink.
+- `firmware/src/state.h:37-49` — extern globals (`currentView`, `feedHistory[]`, `feedHistoryCount`, `feedHistoryHead`, `lastFeedingStop`, `todayFeeds`, `todayMl`, `feedingAlertDue`, `activeCounter`, `gatewayOnline`, `stateMutex`). `lastFeedingStop` is the stop epoch of the most recent feeding (0 = none), feeding the "Last fed" counter independently of the mixed-activity history ring; `todayFeeds`/`todayMl` are the gateway-computed daily feeding tally shown on the counter screen. `feedingAlertDue` mirrors `/api/state.feeding_alert.due` and drives the red-background blink.
 - `firmware/src/main.cpp:26-38` — global definitions.
 - `firmware/src/main.cpp:54` — `PendingEvent` + 16-slot `pendingQueue` (Core 1 producer, Core 0 consumer).
 - `firmware/src/main.cpp:83` — `enqueuePendingEvent` (mutex-guarded, drops oldest on overflow).
@@ -51,12 +51,12 @@ not what app state exists.
 - `firmware/src/main.cpp:394` — `connectWiFi` + NTP server lists.
 - `firmware/src/main.cpp:474` — `setup()` — board init, callback wiring, Wi-Fi+NTP, gateway task spawn at Core 0.
 - `firmware/src/main.cpp:497` — `loop()` — gateway-dirty redraw, tickers, `input().poll()`, 5 ms idle.
-- `firmware/src/views.cpp:75` — `drawBigDigits` — caller-sized seven-segment renderer (`DigitMetrics`) with 500 ms colon heartbeat.
-- `firmware/src/views.cpp:129` — `drawStatus`.
-- `firmware/src/views.cpp:138` — `drawClockScreen` — time + date + IP + gateway online indicator (`CLOCK_DIGITS`); when `feedingAlertDue`, the header reads "Time to feed?" and the background alternates dark red/black.
-- `firmware/src/views.cpp:177` — `drawCounter` — centered ASCII title + CJK subtitle + size-2 today's-feeding tally (`todayFeeds`/`todayMl`) + smaller `COUNTER_DIGITS` big digits + timestamp.
-- `firmware/src/views.cpp:227` — `drawHistoryScreen` ("Activity") — date-grouped; each row is `start-stop activity`, and the date header carries the day's feeding-volume total (right-aligned ml).
-- `firmware/src/views.cpp:300` — `redrawCurrentView` — view-state machine.
+- `firmware/src/views.cpp:93` — `drawBigDigits` — caller-sized seven-segment renderer (`DigitMetrics`) with 500 ms colon heartbeat.
+- `firmware/src/views.cpp:147` — `drawStatus`.
+- `firmware/src/views.cpp:156` — `drawClockScreen` — time + date + IP + gateway online indicator (`CLOCK_DIGITS`); when `feedingAlertDue`, the header reads "Time to feed?" and the background alternates dark red/black.
+- `firmware/src/views.cpp:195` — `drawCounter` — centered ASCII title + CJK subtitle + size-2 today's-feeding tally (`todayFeeds`/`todayMl`) + smaller `COUNTER_DIGITS` big digits + timestamp.
+- `firmware/src/views.cpp:246` — `drawHistoryScreen` ("Activity") — date-grouped; each row is `start-stop activity`, and the date header carries the day's feeding-volume total (right-aligned ml).
+- `firmware/src/views.cpp:320` — `redrawCurrentView` — view-state machine.
 
 ## Interactions
 

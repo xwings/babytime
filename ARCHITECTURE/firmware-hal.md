@@ -18,8 +18,8 @@ Infrastructure under every feature; no milestone gate.
 `done` — `make build DEVICE=dnesp32s3b` passes and hardware behavior
 is unchanged from before the refactor. ESP32-P4-7B backend is a
 `scaffolding` stub: `make build DEVICE=esp32p4_7b` links cleanly,
-but `init()` only logs a TODO, no pixels are pushed, and touch
-events never fire. Phase B (real MIPI-DSI + GT911 + esp_hosted
+but each `init()` only prints a `"[hal-esp32p4-7b] … stub …"` line,
+no pixels are pushed, and touch events never fire. Phase B (real MIPI-DSI + GT911 + esp_hosted
 Wi-Fi bring-up on hardware) is tracked in Open Gaps.
 
 ## Code Structure
@@ -35,8 +35,8 @@ Wi-Fi bring-up on hardware) is tracked in Open Gaps.
 | `firmware/src/hal/esp32p4_7b/display.h` | `DisplayMipiDsi` stub interface (1024×600 dimensions are panel-truth) |
 | `firmware/src/hal/esp32p4_7b/display.cpp` | All paint primitives are no-ops; `measureText` returns plausible widths so views.cpp layout math doesn't divide by zero |
 | `firmware/src/hal/esp32p4_7b/input.h` | `InputTouch` stub — callbacks stored, never fired |
-| `firmware/src/hal/esp32p4_7b/input.cpp` | (empty body; touch wire-up deferred) |
-| `firmware/src/hal/esp32p4_7b/board.cpp` | Stub `init()` logs TODO; factory binding |
+| `firmware/src/hal/esp32p4_7b/input.cpp` | `InputTouch::init()` logs `"… touch stub — GT911 bring-up pending"`; `poll()` is a no-op (touch wire-up deferred) |
+| `firmware/src/hal/esp32p4_7b/board.cpp` | Stub `init()` logs `"… board stub — see ARCHITECTURE/firmware-hal.md"`, then calls the display/input stub `init()`s; factory binding |
 
 `build_src_filter` in `firmware/platformio.ini` excludes the other
 board's `hal/<board>/` subtree from each env, so exactly one
