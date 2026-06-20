@@ -207,6 +207,19 @@ section h2 {
   min-width: 12rem;
 }
 
+/* Desktop column sizing (mobile uses the two-row grid below). ml never needs
+   more than ~4 digits, so pin its column tight and let Notes — the last
+   column — take the freed width. `nth-child(5)`/`(7)` match the fixed column
+   order (… ml, activity, notes); a greedy `width:100%` on Notes absorbs the
+   slack without forcing a large min-width that could overflow. */
+@media (min-width: 641px) {
+  .records-table th:nth-child(5),
+  .records-table td:nth-child(5) { width: 4.5rem; }
+  .records-table input[type=number].ml-input { max-width: 4rem; }
+  .records-table th:nth-child(7),
+  .records-table td:nth-child(7) { width: 100%; }
+}
+
 input, textarea, button, select {
   font: inherit;
   color: inherit;
