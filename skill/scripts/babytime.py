@@ -18,6 +18,7 @@ Examples:
   babytime.py add --activity sleep --start "2026-05-27 21:00"
   babytime.py update 12 --activity poopoo
   babytime.py delete 12
+  babytime.py dump 2026-05-27            # that day's records + day note + totals
   babytime.py daynote get
   babytime.py daynote set 2026-05-27 --note "slept through the night"
 """
@@ -102,6 +103,10 @@ def cmd_activities(args) -> None:
     _print(_request("GET", "/api/activities"))
 
 
+def cmd_dump(args) -> None:
+    _print(_request("GET", f"/api/records?date={args.date}"))
+
+
 def cmd_daynote(args) -> None:
     if args.action == "get":
         _print(_request("GET", "/api/day_notes"))
@@ -146,6 +151,11 @@ def main() -> None:
     p_del = sub.add_parser("delete", help="delete a record by id")
     p_del.add_argument("id", type=int)
     p_del.set_defaults(func=cmd_delete)
+
+    p_dump = sub.add_parser("dump",
+                            help="all records + day note + summary for one date (gateway tz)")
+    p_dump.add_argument("date", help="YYYY-MM-DD")
+    p_dump.set_defaults(func=cmd_dump)
 
     p_note = sub.add_parser("daynote", help="read or write per-day notes")
     note_sub = p_note.add_subparsers(dest="action", required=True)

@@ -297,8 +297,32 @@ async def api_get_state():
 
 
 @app.get("/api/records")
-async def api_list_records(limit: int = 100):
-    return db.list_records(limit=limit)
+async def api_list_records(limit: int = 100, date: Optional[str] = None):
+    if date is None:
+        return db.list_records(limit=limit)
+    return _day_payload(_valid_date(date))
+
+
+def _day_payload(date: str) -> dict:
+    """All records on `date` (gateway-local), its day note, and a feeding
+    summary. The date bucketing matches the web UI's date grouping, and
+    `feeds`/`total_ml` use the same volume-bearing-feeding convention as the
+    date header, so the numbers line up with what the browser shows."""
+    tz = zoneinfo(config.load().get("timezone") or "UTC")
+    rows = [
+        r for r in db.list_records()
+        if datetime.fromtimestamp(int(r["start_epoch"]), tz=tz).strftime("%Y-%m-%d") == date
+    ]
+    rows.reverse()  # oldest-first reads like a daily log
+    return {
+        "date": date,
+        "records": rows,
+        "day_note": db.get_day_notes([date]).get(date, ""),
+        "summary": {
+            "feeds": sum(1 for r in rows if r["volume_ml"]),
+            "total_ml": sum((r["volume_ml"] or 0) for r in rows),
+        },
+    }
 
 
 class RecordIn(BaseModel):

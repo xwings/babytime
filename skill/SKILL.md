@@ -61,12 +61,23 @@ python3 scripts/babytime.py update 12 --stop "2026-05-27 14:50" --ml 120
 python3 scripts/babytime.py update 12 --activity poopoo        # volume is dropped automatically
 python3 scripts/babytime.py delete 12
 
+python3 scripts/babytime.py dump 2026-05-27                    # one day: {date, records, day_note, summary{feeds,total_ml}}
+
 python3 scripts/babytime.py daynote get                        # {date: note} map of all day notes
 python3 scripts/babytime.py daynote set 2026-05-27 --note "slept through the night"
 python3 scripts/babytime.py daynote set 2026-05-27             # blank note clears the day's note
 ```
 
 Non-2xx responses print to stderr and exit non-zero.
+
+## Daily dump
+
+`dump <YYYY-MM-DD>` returns everything for one calendar day in a single
+object: `{date, records, day_note, summary}`, where `records` are that day's
+entries oldest-first and `summary` is `{feeds, total_ml}` (volume-bearing
+feedings only — matching the web UI's per-day count). The date is bucketed in
+the **gateway's** timezone, so it lines up with what the browser shows. Use it
+for "show me everything from yesterday" or to build a daily review.
 
 ## Per-day notes
 
