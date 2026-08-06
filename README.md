@@ -58,8 +58,8 @@ docker compose up -d --build
 
 Open <http://localhost:8080/>. One page: records table with inline edit, a
 phone-friendly Add-record screen, per-date day-note fields, and the
-configuration form. A feeding asks for the milk amount and one timestamp,
-which is always its end time. Set
+configuration form. A feeding asks for a large milk amount plus start and
+end times; end defaults to the current time. Set
 `feeding_alert_minutes` there to blink the top Feeding button and device
 display after the last feeding is that many minutes old (`120` by default).
 Set

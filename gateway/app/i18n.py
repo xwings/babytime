@@ -57,6 +57,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "add_cancel": "Cancel",
         "add_record_hint": "Log a completed feeding with its milk amount and end time.",
         "milk_amount": "Milk amount",
+        "milk_decrease": "Decrease milk amount",
+        "milk_increase": "Increase milk amount",
         # Table columns
         "col_date": "Date",
         "col_start": "Start",
@@ -118,6 +120,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "add_cancel": "取消",
         "add_record_hint": "记录已完成的喂食、奶量和结束时间。",
         "milk_amount": "奶量",
+        "milk_decrease": "减少奶量",
+        "milk_increase": "增加奶量",
         # Table columns
         "col_date": "日期",
         "col_start": "开始",

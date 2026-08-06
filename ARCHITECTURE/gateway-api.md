@@ -46,7 +46,7 @@ store through the web UI.
 - `_normalize_stop_epoch(start_epoch, stop_epoch)` — shared record-duration guard. `None` remains open, a stop before start is treated as crossing midnight, and a duration over 30 minutes raises HTTP 400.
 - `gateway/app/main.py:447` — `ui_home` (`GET /`) — groups records by local date, paginates by date count (`ui_show_count`).
 - `POST /ui/activity` — feeding normally opens the browser dialog; a direct feeding post remains an end-time fallback using the configured default volume. Other timed activities still toggle and other point activities log immediately.
-- `gateway/app/main.py:604` — `POST /records` (`ui_create`) — the current dialog submits one `end_time`; the route stores both epochs equal and stamps `device_id="web"`. It still accepts the old start/stop form shape during upgrades.
+- `gateway/app/main.py:604` — `POST /records` (`ui_create`) — the feeding dialog submits start plus an end that defaults to now; the route stores that session and stamps `device_id="web"`. End-only callers still produce a closed point record.
 - `POST /records/save` — inline edit of checked rows plus day notes. Completed point records expose only their end input and keep both epochs equal when it changes; legacy/timed sessions retain start/end duration validation.
 - `POST /records/delete` — deletes the checked rows.
 - `POST /config` — saves the config form. The handler rebuilds `activity_types` and `timed_activities` from the per-row controls. Feeding is read-only and its timed control is disabled because it always uses an end time.

@@ -64,7 +64,7 @@ Persistence for the gateway. Three stores:
 - `feeding_totals(start_epoch, stop_epoch)` — `{feeds, ml}` for feedings (with a volume) in a half-open start-epoch window; drives `/api/state`'s `today_feeds`/`today_ml` (caller passes local-midnight bounds).
 - `gateway/app/config.py` — `DEFAULTS` — the 10 config keys with seed values: `activity_types`, `timed_activities`, `auto_stop_minutes`, `feeding_alert_minutes`, `default_volume_ml`, `default_language`, `timezone`, `ui_show_count`, `trusted_networks`, `trusted_proxies`.
 - `activity_list(cfg)` — split/dedupe `activity_types`, always with `feeding` first; reused by the app + UI for dropdowns.
-- `timed_activities(cfg)` — set of activities recorded as start→stop sessions (the rest are completed point-in-time logs). Feeding is always excluded because its one timestamp is its end time; legacy config entries naming it are ignored.
+- `timed_activities(cfg)` — activity types whose bar button opens/closes a running session. Feeding is excluded because it has its own Start/End milk dialog and one-press device flow; legacy config entries naming it are ignored.
 - `load()` — returns merged-with-defaults dict from cache (lazy init from disk).
 - `update(items)` — merges into the on-disk JSON via atomic `os.replace`, refreshes cache.
 - `migrate_from(legacy_loader)` — seed `config.json` from the legacy SQLite `config` table on first start; no-op once the file exists. `CONFIG_PATH` env `GATEWAY_CONFIG_PATH` (default `/babytime/config.json`).

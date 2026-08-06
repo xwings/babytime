@@ -89,8 +89,9 @@ Agent-facing:
 UI/admin:
 
 - `GET /` — web UI: records table with inline edit, a phone-sized Add-record
-  dialog with a large milk input and preset amounts, per-date day-note field,
-  and configuration form. The dialog's single time is always the end time.
+  dialog with large −/milk/+ controls and side-by-side Start/End fields,
+  per-date day-note field, and configuration form. End refreshes to the
+  current gateway time whenever the dialog opens.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
   actions. Timed records must stop within 30 minutes of their start.
   `POST /records/save` persists both record edits and day notes.
@@ -115,7 +116,7 @@ the network without sending `stop`.
 | Key | Default | Notes |
 | --- | --- | --- |
 | `activity_types` | `feeding,sleep,poopoo` | comma-separated; `feeding` always first |
-| `timed_activities` | `sleep` | comma-separated subset of `activity_types` that record as start→stop sessions with a timer; the rest log a completed point-in-time record. `feeding` always uses one end time and is ignored if listed here by an older config |
+| `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Feeding is handled separately by its Start/End milk dialog (and by one end-time press on ESP32), so legacy `feeding` entries here are ignored |
 | `auto_stop_minutes` | `15` | auto-stop an active session after this many minutes (0 disables) |
 | `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web Feeding button blinks blue/red, and the device display blinks a red background. `0` disables |
 | `default_volume_ml` | `` | pre-fills the web milk dialog and is attached to a feeding logged from an ESP32 button |

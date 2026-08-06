@@ -635,16 +635,21 @@ async def ui_create(
     tz = cfg.get("timezone") or "UTC"
     activity = activity or "feeding"
 
-    # The current web form submits a single end time. Store it in both epoch
-    # columns so existing API consumers and the SQLite schema remain
-    # compatible while the record is unambiguously complete. The legacy
-    # start/stop form shape is still accepted for bookmarked/older pages.
+    # The current feeding dialog submits start + end, with end defaulting to
+    # now. A caller that supplies only end still creates a completed point
+    # record, preserving the device/older-browser compatibility shape.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
             raise HTTPException(400, "date and end_time required")
-        start_epoch = end_epoch
-        stop_epoch = end_epoch
+        if start_time.strip():
+            start_epoch = combine_date_time(date, start_time, tz)
+            if start_epoch is None:
+                raise HTTPException(400, "date and start_time required")
+            stop_epoch = _normalize_stop_epoch(start_epoch, end_epoch)
+        else:
+            start_epoch = end_epoch
+            stop_epoch = end_epoch
     else:
         start_epoch = combine_date_time(date, start_time, tz)
         if start_epoch is None:
@@ -689,7 +694,10 @@ async def ui_bulk_save(request: Request):
             stop_epoch = end_epoch
         else:
             start_epoch = combine_date_time(date, start_time, tz)
-            if activity not in timed:
+            if activity == "feeding":
+                stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else start_epoch
+                stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
+            elif activity not in timed:
                 stop_epoch = start_epoch
             else:
                 stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None

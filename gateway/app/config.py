@@ -159,9 +159,9 @@ def timed_activities(cfg: dict) -> set:
     """Activities recorded as start->stop sessions (running timer); the rest
     are completed point-in-time records.
 
-    Feeding is deliberately never timed: its timestamp is the end of the feed,
-    whether it came from the web form or one device press. Ignore a legacy
-    ``feeding`` entry that may still exist in config.json.
+    Feeding is deliberately never an activity-bar timer: the web uses its
+    dedicated Start/End milk dialog and the device uses one end-time press.
+    Ignore a legacy ``feeding`` entry that may still exist in config.json.
     """
     raw = (cfg.get("timed_activities") or "").replace("\n", ",")
     out: set = set()

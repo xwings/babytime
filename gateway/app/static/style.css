@@ -434,41 +434,53 @@ button.danger:hover { background: #c64545; }
 
 .record-time-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
-.milk-volume-control {
-  display: flex;
-  align-items: center;
+.record-time-fields label { min-width: 0; }
+
+.milk-volume-stepper {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr) 4rem;
   gap: 0.65rem;
-  color: #f5c64a;
-  font-size: 1.15rem;
-  font-weight: 700;
+  align-items: stretch;
 }
 
 .record-dialog-body .milk-volume-input {
-  height: 4rem;
-  padding: 0.4rem 0.75rem;
+  width: 100%;
+  height: 5rem;
+  padding: 0.4rem 2.8rem 0.4rem 0.75rem;
   color: #fff;
-  font-size: 2rem;
+  font-size: 2.8rem;
   font-weight: 700;
   text-align: center;
 }
 
-.milk-presets {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.55rem;
+.milk-volume-value {
+  position: relative;
+  min-width: 0;
 }
 
-.milk-presets button {
-  min-height: 2.8rem;
-  padding: 0.5rem;
+.milk-volume-unit {
+  position: absolute;
+  top: 50%;
+  right: 0.8rem;
+  transform: translateY(-50%);
+  color: #a4b1c5;
+  font-size: 1rem;
+  pointer-events: none;
+}
+
+.milk-volume-stepper button {
+  min-height: 5rem;
+  padding: 0;
   background: #232f48;
   border: 1px solid #355386;
+  font-size: 2rem;
+  font-weight: 700;
 }
-.milk-presets button:hover { background: #2b4168; }
+.milk-volume-stepper button:hover { background: #2b4168; }
 
 .record-dialog-actions button {
   min-width: 6rem;
@@ -704,16 +716,9 @@ code {
   .bulk-actions button { flex: 1; }
 
   .record-dialog {
-    width: 100%;
-    max-width: none;
-    height: 100dvh;
-    max-height: 100dvh;
-    margin: 0;
-    border: 0;
-    border-radius: 0;
+    width: calc(100% - 1rem);
+    max-height: calc(100dvh - 1rem);
   }
-  .record-dialog-form { min-height: 100%; }
-  .record-dialog-body { flex: 1; }
   .record-dialog-actions {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
