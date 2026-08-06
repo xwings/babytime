@@ -635,9 +635,9 @@ async def ui_create(
     tz = cfg.get("timezone") or "UTC"
     activity = activity or "feeding"
 
-    # The current feeding dialog submits start + end, with end defaulting to
-    # now. A caller that supplies only end still creates a completed point
-    # record, preserving the device/older-browser compatibility shape.
+    # The current feeding dialog submits only an end time, defaulting to now,
+    # and stores it as a completed point record. Keep accepting start_time for
+    # older callers that still submit a timed record.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:

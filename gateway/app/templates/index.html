@@ -227,9 +227,6 @@
         </span>
       </label>
       <div class="record-time-fields">
-        <label>{{ t('col_start') }}
-          <input type="time" name="start_time" value="{{ now_time }}" required>
-        </label>
         <label>{{ t('col_end_time') }}
           <input type="time" name="end_time" value="{{ now_time }}" required>
         </label>
@@ -247,8 +244,6 @@
     const dialog = document.getElementById('add-record-dialog');
     const form = dialog?.querySelector('.record-dialog-form');
     const volume = form?.querySelector('input[name="volume_ml"]');
-    const maxDurationMinutes = {{ max_record_duration_minutes | tojson }};
-    const durationInvalid = {{ t('record_duration_invalid', minutes=max_record_duration_minutes) | tojson }};
     const renderedAt = Date.now();
     const renderedWallTime = new Date(
       (dialog?.dataset.nowDate || '') + 'T' + (dialog?.dataset.nowTime || '00:00') + ':00'
@@ -262,12 +257,10 @@
       if (!form || !Number.isFinite(renderedWallTime.getTime())) return;
       const now = new Date(renderedWallTime.getTime() + (Date.now() - renderedAt));
       const date = form.querySelector('input[name="date"]');
-      const startTime = form.querySelector('input[name="start_time"]');
       const endTime = form.querySelector('input[name="end_time"]');
       if (date) {
         date.value = now.getFullYear() + '-' + twoDigits(now.getMonth() + 1) + '-' + twoDigits(now.getDate());
       }
-      if (startTime) startTime.value = twoDigits(now.getHours()) + ':' + twoDigits(now.getMinutes());
       if (endTime) endTime.value = twoDigits(now.getHours()) + ':' + twoDigits(now.getMinutes());
     }
 
@@ -296,23 +289,6 @@
         volume.value = String(Math.max(0, current + step));
         volume.focus();
       });
-    });
-    form?.addEventListener('submit', event => {
-      const start = form.querySelector('input[name="start_time"]');
-      const end = form.querySelector('input[name="end_time"]');
-      const toMinutes = input => {
-        const parts = String(input?.value || '').split(':');
-        return parts.length >= 2 ? Number(parts[0]) * 60 + Number(parts[1]) : null;
-      };
-      const startMinutes = toMinutes(start);
-      const endMinutes = toMinutes(end);
-      if (startMinutes === null || endMinutes === null) return;
-      const duration = (endMinutes - startMinutes + 24 * 60) % (24 * 60);
-      if (duration <= maxDurationMinutes) return;
-      event.preventDefault();
-      end.setCustomValidity(durationInvalid);
-      end.reportValidity();
-      end.addEventListener('input', () => end.setCustomValidity(''), { once: true });
     });
     dialog?.querySelectorAll('[data-close-record-dialog]').forEach(button => {
       button.addEventListener('click', () => dialog.close());
