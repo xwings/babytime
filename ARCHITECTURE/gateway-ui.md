@@ -46,7 +46,7 @@ note" otherwise), and per-date headers also show the day's `total_ml`
 - `gateway/app/templates/index.html` — `#add-record-dialog` is shared by the Feeding and Add buttons. Its compact body is exactly two rows: large −/milk/+ controls, then Start/End times. The rendered gateway time advances while the page is open so each launch defaults End (and the initial Start) to the current gateway wall time.
 - `gateway/app/templates/index.html` — completed point rows show `—` for Start, expose an editable End time, and show no duration. Legacy/timed sessions retain Start, End, and duration. Editing a point end keeps both stored epochs equal.
 - `gateway/app/templates/index.html` — the Configuration activity list locks Feeding as an end-time type; only other activities can be marked timed.
-- `gateway/app/static/style.css` — desktop dialog/card/table styling plus the `max-width: 640px` layout. On phones the dialog stays a compact inset window, uses 16 px time controls to avoid iOS zoom, and gives the milk stepper large touch targets.
+- `gateway/app/static/style.css` — a shared light-mode palette drives the page, dialog, controls, tables, configuration, banners, and mobile cards. The `max-width: 640px` layout keeps the dialog as a compact inset window, uses 16 px time controls to avoid iOS zoom, and gives the milk stepper large touch targets.
 
 ## Interactions
 
