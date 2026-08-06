@@ -2,20 +2,16 @@
 
 ## Goal
 
-Browser-facing surface of the gateway: a single-page UI with two
-top-right tabs (Records / Configuration), a per-browser language
-switch (English / 中文) seated to the left of the tabs, an
-activity-button bar (one button per configured activity). Activities
-split into two kinds, set by the `timed_activities` config key: *timed*
-ones (feeding, sleep) are start→stop toggles — blue when idle ("tap to
-start"), red with a live 1 Hz in-progress timer when running; *instant*
-ones (poopoo, etc.) log a single timestamp on tap ("tap to log") and
-never enter a running state. The idle Feeding button carries an
-integrated `Last fed:` live 1 Hz counter
-since the most recent finished feeding; when that counter reaches
-`feeding_alert_minutes` it shows "Time to feed?" and the idle Feeding button
-blink blue/red. Below the activity bar is an Add-record form with
-header-action button, and per-date collapsible record groups (only today
+Browser-facing surface of the gateway: a single-page UI with Records /
+Configuration tabs, language switching, and one activity button per
+configured activity. Feeding is special: tapping it opens the same
+Add-record dialog as the Add button, with a large phone-friendly milk
+input, common-volume presets, and one explicit end time. It never starts
+a new timer. Other activity types still follow `timed_activities`:
+timed types such as sleep toggle start→stop, while point types log once.
+The idle Feeding button carries an integrated `Last fed:` live counter;
+after `feeding_alert_minutes` it shows "Time to feed?" and blinks. Below
+the activity bar is an Add-record launcher and per-date collapsible groups (only today
 expanded by default) with per-record selection (rows start unchecked). Each record row carries its own free-text
 note field (distinct from the per-day note). Each date group carries a full-width
 free-text day-note textarea seated between that date's header and
@@ -46,20 +42,19 @@ note" otherwise), and per-date headers also show the day's `total_ml`
 - `gateway/app/i18n.py:143` — `normalize(code)` clamps any input to a supported lang or `DEFAULT_LANG`.
 - `gateway/app/i18n.py:153` — `read_lang(request)` returns the cookie-backed lang.
 - `gateway/app/i18n.py:166` — `t(key, lang, **kwargs)` looks up the entry and substitutes `{name}` placeholders with `str.replace` (no `str.format`, so any literal braces in a translated string pass through untouched).
-- `gateway/app/templates/index.html` — `<section class="activity-bar">` renders one `<form action="/ui/activity">` per activity from `active_map`; the button is `.running` (red, `.live-elapsed` timer since `start_epoch`) when that activity has an open session, else `.idle` (blue). The activity forms carry a client-side submit guard: after the first submit, the clicked button is disabled, marked `aria-busy`, and given `.is-pending` until navigation completes, so repeated taps cannot enqueue extra toggles. The idle Feeding button is special: when `last_fed` exists it shows an `.activity-sub` "Last fed:" label plus a `.live-elapsed` counter since `last_fed.stop_epoch`; if that elapsed time reaches `feeding_alert_minutes`, the button also shows `.activity-alert` "Time to feed?" and `.activity-bar.feeding-alert` makes the idle `.feeding-due` button blink blue/red. Otherwise it shows the "tap to start" hint for timed activities (`a in timed`) and "tap to log" for instant ones. Instant activities never appear in `active_map` (their records are created closed, `stop == start`), so they have no running state.
-- `gateway/app/templates/index.html` — inline `<script>` defining `fmt(seconds)` + `tick()` that updates every `.live-elapsed` span once per second from its `data-since` epoch (drives the running-activity timer). The same block polls `/api/state` every 30 s and on focus/visibility return to refresh the top Feeding button from gateway truth, so device-driven start/stop events can transition an already-open browser page into the last-fed / flashing-alert state without a manual reload.
-- `gateway/app/templates/index.html:187` — `<section class="add-record">` with header-row + top-right Add button; the ml field is prefilled from `config.default_volume_ml` (there is no Device field — records logged here get `device_id="web"` server-side).
-- `gateway/app/templates/index.html:213` — `<section class="records">` — per-date `.date-group` blocks with a chevron fold toggle. Only the `now_date` group renders expanded; every other date carries the `collapsed` class on initial render (template `{% if g.date != now_date %}collapsed{% endif %}`, toggled client-side thereafter). The date header has no select-all checkbox — selection/deletion is per-record only (`.row-check` plus the page-wide `check-all-btn`). Rows render unchecked (no auto-selection); the header reads `{{ g.date }} (<count> time(s)[, <total_ml> ml])` via the `date_count` i18n string, where `<count>` (`g.ml_count`) is the number of that day's records that carry a volume — feedings only; records without ml (sleep, poopoo, a feeding with no volume entered) are not counted, so the count and the ml total describe the same set. English pluralizes "time"/"times"; ml appended only when `g.total_ml` is nonzero. Between the header and the records table, a `.day-note-block` holds the full-width `<textarea name="day_note_{date}">` (hidden when the group is collapsed; labelled "Notes for Today" when `g.date == now_date`, else "Day note"); it round-trips through `/records/save`. Each row has an `activity_{id}` `<select>` (`.activity-select`) for its activity and a `notes_{id}` free-text `.notes-input` for that record's own note (blank clears it); the Add-record form carries its own `activity` `<select>` (`.add-activity-select`, options tagged with `data-timed`) and `notes` field, so any configured activity can be logged manually. Client-side validation reports an error when a timed record's stop time is more than 30 minutes after start; the server enforces the same rule. `/records` (`ui_create`) closes instant activities at creation (`stop_epoch = start_epoch`) and keeps the entered stop for timed ones. A row whose activity is instant (`r.activity not in timed`) renders its Stop and Duration cells as a static `—` (no editable stop input); `/records/save` re-closes such rows (`stop == start`).
-- `gateway/app/templates/index.html:435` — `<section class="config">` (Configuration tab body). Activities are edited in a `.config-activities` fieldset: one `.activity-row` per activity with a name input and a `.timed-toggle` "timed" checkbox; a `+ Add activity` button appends a blank row (client-side, incrementing `activity_name_<i>` indices) and a per-row `×` removes one. The feeding row is read-only with a disabled (always-checked) timed box, reflecting that feeding is structurally required and always timed. The remaining scalar keys still render as plain text inputs from `config_keys_simple` (including `auto_stop_minutes`, `feeding_alert_minutes`, `default_volume_ml`, `timezone`, `ui_show_count` — `activity_types`/`timed_activities` are driven by the rows).
-- `gateway/app/static/style.css` — `.tabs { margin-left: auto }` (right-aligned tabs), `.activity-bar` flex row of `.activity-btn.idle` (blue) / `.activity-btn.running` (red) buttons with a tabular-nums `.activity-timer` and an `.activity-sub` micro-label (the idle Feeding button's "Last fed:"), `.day-note-block`/`.day-note` textarea styling (`border-bottom`, sits between header and table), `.date-group`/`.date-header`/`.fold-toggle` with chevron rotation transform. A `@media (min-width: 641px)` block tunes the desktop records-table columns: the ml column (`:nth-child(5)`) is pinned narrow (`4.5rem`, input capped at `4rem`) and the Notes column (`:nth-child(7)`) is greedy (`width:100%`) so it absorbs the freed width.
-- `gateway/app/static/style.css` — `@media (max-width: 640px)` mobile layout (the only breakpoint; desktop is the default). The records `<table>` can't reflow as columns on a phone, so `thead` is hidden and each `<tr>` becomes a two-row card via CSS grid (`grid-template-columns: auto 1fr 1fr 1.3fr`, cells placed with `grid-area` by `:nth-child`): **row 1** is the "when" (checkbox · start · stop · duration), **row 2** the "what" (ml · activity · note, indented under the times). The bare volume gets its unit back with `td:nth-child(5)::after { content: attr(data-label) }` (the `data-label="{{ t('col_*') }}"` attrs on the cells in `index.html` survive from the table markup; only the ml cell renders one on mobile). Inputs bump to `font-size:16px` to stop iOS focus-zoom; header/tabs wrap full-width, `section`/`main` padding shrinks, `.bulk-actions` buttons stretch, and `.row-form` fields go full-width.
+- `gateway/app/templates/index.html` — the activity bar keeps live Last fed / alert polling. Idle Feeding is a dialog opener; timed non-feeding buttons still submit guarded toggles. An open feeding left by old software is surfaced as running so one post can close it during upgrade.
+- `gateway/app/templates/index.html` — `#add-record-dialog` is shared by the Feeding and Add buttons. It contains activity, date, end time, a large required feeding-volume input, 30–180 ml presets, and notes. The rendered gateway time advances while the page is open so each launch defaults to the current gateway wall time.
+- `gateway/app/templates/index.html` — completed point rows show `—` for Start, expose an editable End time, and show no duration. Legacy/timed sessions retain Start, End, and duration. Editing a point end keeps both stored epochs equal.
+- `gateway/app/templates/index.html` — the Configuration activity list locks Feeding as an end-time type; only other activities can be marked timed.
+- `gateway/app/static/style.css` — desktop dialog/card/table styling plus the `max-width: 640px` layout. On phones the dialog fills `100dvh`, uses 16 px controls to avoid iOS zoom, keeps actions in a full-width footer, and gives the milk field/presets large touch targets.
 
 ## Interactions
 
 - Rendered by [gateway-api.md](gateway-api.md) `ui_home`; receives
   `groups` (each group carries `date`, `records`, `total_ml`, `note`),
   `activities`, `timed` (sorted list of timed activity names),
-  `active_map` (`{activity: open-session}`, timed activities only),
+  `active_map` (`{activity: open-session}` for timed activities plus any
+  legacy open feeding during upgrade),
   `last_fed` (most recent finished feeding, or `None`),
   `now_date`, `config`, `dates_per_page`, plus
   `lang` / `html_lang` / `t` / `al` for the i18n layer.
@@ -80,20 +75,18 @@ note" otherwise), and per-date headers also show the day's `total_ml`
 With the gateway running, open `http://localhost:8080/` in a browser.
 Pass means all of:
 
-- Activity bar renders one button per configured activity; an idle
-  timed activity is blue ("tap to start"), a running one is red and
-  shows a timer that ticks once per second. An instant activity (not in
-  `timed_activities`) is blue with a "tap to log" hint and never turns
-  red.
+- Activity bar renders one button per configured activity. Feeding says
+  "tap to log" and opens the Add-record dialog; other timed activities
+  still show start/running states and point activities log immediately.
 - Clicking a blue timed button posts `/ui/activity` and the page
   disables that button while the request is in progress, then returns
   with that button red + counting; clicking it again stops it.
   Clicking an instant button logs a single closed record (its row shows
-  `—` for Stop and Duration) and the button stays idle.
+  `—` for Start and Duration, with one End time) and the button stays idle.
 - The idle Feeding button shows a `Last fed:` counter ticking once per
-  second since the most recent finished feeding (just "tap to start"
-  until one feeding has been stopped); while feeding is running the
-  button is red and shows the in-progress timer instead.
+  second since the most recent finished feeding ("tap to log" until the
+  first record). Clicking it opens a dialog requiring milk amount and
+  labelling its single timestamp as End time.
 - Date headers collapse/expand on chevron click; only today's group is
   expanded on load, every other date starts collapsed. Each header shows
   `YYYY-MM-DD (N times[, M ml])` — the count reads "1 time" / "6 times"
@@ -108,21 +101,17 @@ Pass means all of:
   current date); editing it and clicking Save persists the note
   (round-trips on reload).
 - Each row has an activity dropdown and a free-text Note field that
-  round-trips on Save (blank clears it); the Add-record form has its
-  own activity dropdown (so any configured activity can be logged
-  manually) and its own Note field. Adding an instant activity stores
-  a closed record (`stop = start`); adding a timed one keeps the
-  entered stop when it is within 30 minutes of start. Rows for an
-  instant activity show `—` for Stop and Duration instead of an
-  editable stop time.
+  round-trips on Save. The Add dialog can log any activity at one end
+  time; for feeding it requires ml. Added records are closed points
+  (`stop = start = end`). Point rows show `—` for Start/Duration and an
+  editable End input; old/timed sessions retain their duration fields.
 - Tabs (Records / Configuration) sit on the right of the header and
   switch sections without a full reload.
 - The Configuration tab lists each activity as a row with a name field
   and a "timed" checkbox; `+ Add activity` adds a row, `×` removes one,
-  the feeding row is locked (read-only, always timed). Saving rebuilds
-  `activity_types` + `timed_activities`, and the rows reflect the stored
-  state on reload (feeding stays checked even though it isn't stored in
-  `timed_activities`). It also has a Default-language `<select>`
+  the feeding row is locked as an end-time record. Saving rebuilds
+  `activity_types` + `timed_activities`, ignoring any legacy Feeding
+  entry in the timed set. It also has a Default-language `<select>`
   (`name="default_language"`) that seeds the UI language for browsers
   without a `lang` cookie.
 - Language switch chip (EN / 中文) sits left of the tabs; clicking

@@ -60,7 +60,7 @@ class Display {
 };
 
 // Semantic input events. Bound by the app to actions like "cycle view"
-// or "toggle feeding"; the binding stays the same across boards. The
+// or "log feeding end"; the binding stays the same across boards. The
 // backend decides what raw hardware event maps to each (DNESP32S3B:
 // K1 / K2; ESP32-P4-7B: two touch regions).
 using ActionCallback = void(*)();
@@ -70,7 +70,7 @@ class InputSource {
   virtual ~InputSource() = default;
 
   virtual void onPrimaryAction(ActionCallback cb) = 0;    // cycle view
-  virtual void onSecondaryAction(ActionCallback cb) = 0;  // toggle feeding
+  virtual void onSecondaryAction(ActionCallback cb) = 0;  // log feeding end
 
   // Called from loop(); reads hardware state and fires callbacks.
   virtual void poll() = 0;

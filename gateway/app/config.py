@@ -9,7 +9,7 @@ CONFIG_PATH = os.environ.get("GATEWAY_CONFIG_PATH", "/babytime/config.json")
 
 DEFAULTS: dict = {
     "activity_types": "feeding,sleep,poopoo",
-    "timed_activities": "feeding,sleep",
+    "timed_activities": "sleep",
     "auto_stop_minutes": "15",
     "feeding_alert_minutes": "120",
     "default_volume_ml": "",
@@ -157,15 +157,17 @@ def feeding_alert_minutes(cfg: dict) -> int:
 
 def timed_activities(cfg: dict) -> set:
     """Activities recorded as start->stop sessions (running timer); the rest
-    are instant timestamps (start only, stop shown as '-').
+    are completed point-in-time records.
 
-    'feeding' is always timed — the firmware's session model and the volume
-    logic both assume a feeding session that opens and closes."""
+    Feeding is deliberately never timed: its timestamp is the end of the feed,
+    whether it came from the web form or one device press. Ignore a legacy
+    ``feeding`` entry that may still exist in config.json.
+    """
     raw = (cfg.get("timed_activities") or "").replace("\n", ",")
-    out = {"feeding"}
+    out: set = set()
     for part in raw.split(","):
         name = part.strip()
-        if name:
+        if name and name != "feeding":
             out.add(name)
     return out
 

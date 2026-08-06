@@ -59,24 +59,27 @@ constexpr size_t PENDING_QUEUE_SIZE = 16;
 PendingEvent pendingQueue[PENDING_QUEUE_SIZE];
 size_t       pendingCount = 0;
 
-void recordFeedStart() {
-  time_t now;
-  time(&now);
+void recordFeedEnd(time_t now) {
+  // A current button press means "the feeding ended now". Close an open
+  // legacy session if one is present; normally add a completed point record
+  // with start == stop so the existing wire/storage shape stays compatible.
+  if (feedingActive && feedHistoryCount > 0) {
+    size_t lastIdx = (feedHistoryHead + HISTORY_SIZE - 1) % HISTORY_SIZE;
+    if (feedHistory[lastIdx].stopEpoch == 0 &&
+        strcmp(feedHistory[lastIdx].activity, "feeding") == 0) {
+      feedHistory[lastIdx].stopEpoch = now;
+      lastFeedingStop = now;
+      return;
+    }
+  }
+
   FeedSession s;
   s.startEpoch = now;
-  s.stopEpoch  = 0;
+  s.stopEpoch  = now;
   strncpy(s.activity, "feeding", sizeof(s.activity) - 1);
   feedHistory[feedHistoryHead] = s;
   feedHistoryHead = (feedHistoryHead + 1) % HISTORY_SIZE;
   if (feedHistoryCount < HISTORY_SIZE) feedHistoryCount++;
-}
-
-void recordFeedStop() {
-  if (feedHistoryCount == 0) return;
-  size_t lastIdx = (feedHistoryHead + HISTORY_SIZE - 1) % HISTORY_SIZE;
-  time_t now;
-  time(&now);
-  feedHistory[lastIdx].stopEpoch = now;
   lastFeedingStop = now;
 }
 
@@ -299,25 +302,22 @@ void cycleView() {
   redrawCurrentView();
 }
 
-void toggleFeeding() {
-  feedingActive = !feedingActive;
+void logFeedingEnd() {
   time_t now;
   time(&now);
 
   xSemaphoreTake(stateMutex, portMAX_DELAY);
-  if (feedingActive) recordFeedStart();
-  else               recordFeedStop();
+  recordFeedEnd(now);
+  feedingActive = false;
   feedingAlertDue = false;
   feedingAlertElapsedSeconds = 0;
   xSemaphoreGive(stateMutex);
 
   if (gatewayMode()) {
-    enqueuePendingEvent(feedingActive ? "start" : "stop", now);
+    enqueuePendingEvent("log", now);
   }
 
-  setCounter(feedingActive ? "Feeding now" : "Last fed",
-             feedingActive ? "开始喂养"      : "结束喂养",
-             0);
+  setCounter("Last fed", "结束喂养", 0);
 }
 
 // ---- View tickers ---------------------------------------------------------
@@ -481,7 +481,7 @@ void setup() {
 
   hal::InputSource& in = board.input();
   in.onPrimaryAction(cycleView);
-  in.onSecondaryAction(toggleFeeding);
+  in.onSecondaryAction(logFeedingEnd);
 
   connectWiFi();
 

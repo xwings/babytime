@@ -14,9 +14,9 @@ headers are fixed (verification is grep-based).
 ## Mission
 
 A baby-feeding tracker firmware that runs on one of two ESP32 boards
-today. The device tracks one feeding session at a time (start / stop
-with a button or touch), shows a live clock + last-fed counter +
-recent history on its LCD, and runs untethered.
+today. One button/touch logs a completed feeding, using the press as
+its end time; the device shows a live clock + last-fed counter + recent
+history on its LCD and runs untethered.
 
 An optional Docker gateway turns the device into a multi-room
 deployment: durable SQLite log, a web UI for editing records and
@@ -87,7 +87,7 @@ README.md        user-facing setup notes
    bring-up (e.g. the DNESP32S3B "LCD before Wire" quirk lives
    inside `hal/dnesp32s3b/board.cpp`; the ESP32-P4-7B backend has
    its own ordering). The semantic input callbacks (`cycleView`,
-   `toggleFeeding`) are then bound on
+   `logFeedingEnd`) are then bound on
    `board.input()`, and Wi-Fi + NTP come up.
 2. In gateway mode, `xTaskCreatePinnedToCore(gatewayTask, …, 0)`
    pins the HTTP client to Core 0.
@@ -122,10 +122,10 @@ ship it. Phase B verifies this on hardware.
 
 | Pin source | Function |
 | ---------- | -------- |
-| GPIO 0 | K2 / BOOT (toggle feeding; also USB-DFU strap) |
+| GPIO 0 | K2 / BOOT (log feeding end; also USB-DFU strap) |
 | GPIO 45 | I²C SCL (XL9555) |
 | GPIO 48 | I²C SDA (XL9555) |
-| XL9555 P0.3 | K2 (toggle feeding, read via expander) |
+| XL9555 P0.3 | K2 (log feeding end, read via expander) |
 | XL9555 P0.4 | K1 (cycle views; long-press = sync) |
 | XL9555 P0.7 | LCD backlight enable |
 | LCD_CAM 8-bit parallel | ST7789V data (driven by Arduino_GFX ESP32S3PAR8 bus) |

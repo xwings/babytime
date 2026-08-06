@@ -57,8 +57,8 @@ the bodies.
   `width/height/clear/fillRect/drawText/measureText/flush`.
 - `firmware/src/hal/hal.h:66` — `using ActionCallback = void(*)()`.
 - `firmware/src/hal/hal.h:68-78` — `class InputSource` —
-  `onPrimaryAction` (cycle view), `onSecondaryAction` (toggle
-  feeding), `poll()`.
+  `onPrimaryAction` (cycle view), `onSecondaryAction` (log a
+  feeding end), `poll()`.
 - `firmware/src/hal/hal.h:79-95` — `class Board` —
   `init/display/input/backlight`.
 - `firmware/src/hal/hal.h:98` — `Board& currentBoard()` — provided
@@ -76,8 +76,8 @@ the bodies.
 - `firmware/src/hal/dnesp32s3b/input.cpp:34-46` — `InputXl9555::poll`
   — reads XL9555 input port 0, dispatches K1/K2 FSM.
 - `firmware/src/hal/dnesp32s3b/input.cpp` —
-  `InputXl9555::handleRelease` — K1 (cycle view) and K2 (toggle
-  feeding) each fire on release after debounce.
+  `InputXl9555::handleRelease` — K1 (cycle view) and K2 (log feeding
+  end) each fire on release after debounce.
 - `firmware/src/hal/esp32p4_7b/board.cpp:11-16` —
   `Esp32P4_7BBoard::init` — stub log, then display + input stubs.
 
@@ -104,7 +104,7 @@ the bodies.
   pulls the RISC-V toolchain, ~5–10 min).
 - `make flash-monitor DEVICE=dnesp32s3b` — pass = serial prints `LCD
   init...`, then `Backlight ON`, then Wi-Fi/NTP lines; K1 cycles
-  view, K2 toggles feeding.
+  view, K2 logs a completed feeding.
 - `make flash-monitor DEVICE=esp32p4_7b` (if hardware available) —
   pass = serial prints `[hal-esp32p4-7b] display stub — MIPI-DSI
   bring-up pending` and the app then idles. Screen stays blank; no

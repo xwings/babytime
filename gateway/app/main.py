@@ -245,9 +245,9 @@ def state_payload() -> dict:
     day_start = datetime.now(tz=tz).replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = (day_start + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     today = db.feeding_totals(int(day_start.timestamp()), int(day_end.timestamp()))
-    last_feeding = db.list_records(limit=1, activity="feeding")
+    feeding_history = db.list_records(activity="feeding")
     active = db.get_active("feeding")
-    last = last_feeding[0] if last_feeding else None
+    last = next((r for r in feeding_history if r.get("stop_epoch")), None)
     server_epoch = int(time.time())
     return {
         "active": active,
@@ -274,8 +274,8 @@ class EventIn(BaseModel):
 
 @app.post("/api/events")
 async def api_post_event(event: EventIn):
-    if event.type not in ("start", "stop"):
-        raise HTTPException(400, "type must be 'start' or 'stop'")
+    if event.type not in ("start", "stop", "log"):
+        raise HTTPException(400, "type must be 'start', 'stop', or 'log'")
     ts = event.timestamp_epoch or int(time.time())
     if event.type == "start":
         if db.get_active(event.activity) is None:
@@ -286,8 +286,22 @@ async def api_post_event(event: EventIn):
                 device_id=event.device_id,
                 volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
             )
-    else:
+    elif event.type == "stop":
         db.stop_active(stop_epoch=ts, activity=event.activity)
+    else:
+        # Current devices send one `log` event when a feed has finished. If
+        # an older client left a session open, this press closes that session;
+        # otherwise store a completed point-in-time record whose one timestamp
+        # is both the persisted start (for schema compatibility) and end.
+        if not db.stop_active(stop_epoch=ts, activity=event.activity):
+            cfg = config.load()
+            db.create_record(
+                start_epoch=ts,
+                stop_epoch=ts,
+                activity=event.activity,
+                device_id=event.device_id,
+                volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
+            )
     return state_payload()
 
 
@@ -344,15 +358,24 @@ def _require_record(rid: int) -> dict:
 @app.post("/api/records")
 async def api_create_record(body: RecordIn):
     tz = config.load().get("timezone") or "UTC"
+    activity = body.activity or "feeding"
     start = _to_epoch(body.start, tz)
     if start is None:
         raise HTTPException(400, "start is required")
-    stop = _normalize_stop_epoch(start, _to_epoch(body.stop, tz))
+    if activity == "feeding":
+        # For feeding, a supplied stop is the explicit end; otherwise the
+        # single `start` field used by older clients is interpreted as that
+        # same end time. Persist a completed point record either way.
+        end = _to_epoch(body.stop, tz) or start
+        start = end
+        stop = end
+    else:
+        stop = _normalize_stop_epoch(start, _to_epoch(body.stop, tz))
     rid = db.create_record(
         start_epoch=start,
         stop_epoch=stop,
-        volume_ml=_feeding_volume(body.activity, body.volume_ml),
-        activity=body.activity or "feeding",
+        volume_ml=_feeding_volume(activity, body.volume_ml),
+        activity=activity,
         notes=body.notes or None,
         device_id=body.device_id or "agent",
     )
@@ -384,7 +407,18 @@ async def api_update_record(rid: int, body: RecordIn):
     elif "volume_ml" in provided:
         fields["volume_ml"] = _feeding_volume(effective_activity, provided["volume_ml"])
 
-    if "start_epoch" in fields or "stop_epoch" in fields:
+    if effective_activity == "feeding" and (
+        "activity" in provided or "start_epoch" in fields or "stop_epoch" in fields
+    ):
+        end_epoch = (
+            fields.get("stop_epoch")
+            or fields.get("start_epoch")
+            or existing.get("stop_epoch")
+            or existing["start_epoch"]
+        )
+        fields["start_epoch"] = end_epoch
+        fields["stop_epoch"] = end_epoch
+    elif "start_epoch" in fields or "stop_epoch" in fields:
         start_epoch = fields.get("start_epoch", existing["start_epoch"])
         stop_epoch = fields.get("stop_epoch", existing["stop_epoch"])
         fields["stop_epoch"] = _normalize_stop_epoch(start_epoch, stop_epoch)
@@ -489,7 +523,12 @@ async def ui_home(
 
     activities = config.activity_list(cfg)
     timed = config.timed_activities(cfg)
-    active_map = {a: s for a in activities if a in timed and (s := db.get_active(a))}
+    # Feeding is point-in-time now, but surface and close any session left
+    # open by an older browser/device during an upgrade.
+    active_map = {
+        a: s for a in activities
+        if (a in timed or a == "feeding") and (s := db.get_active(a))
+    }
     last_fed = next(
         (r for r in all_records
          if r.get("stop_epoch") and r["activity"] == "feeding"),
@@ -555,7 +594,19 @@ def _feeding_volume(activity: str, raw_ml) -> Optional[int]:
 @app.post("/ui/activity")
 async def ui_activity_toggle(activity: str = Form("feeding")):
     ts = int(time.time())
-    if activity not in config.timed_activities(config.load()):
+    cfg = config.load()
+    if activity == "feeding":
+        # The normal browser path opens the milk-entry dialog and posts to
+        # /records. Keep direct/form-only callers safe and end-time based too.
+        if not db.stop_active(stop_epoch=ts, activity=activity):
+            db.create_record(
+                start_epoch=ts,
+                stop_epoch=ts,
+                activity=activity,
+                device_id="web",
+                volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
+            )
+    elif activity not in config.timed_activities(cfg):
         # Instant event: log a single closed timestamp (start == stop) so it
         # never looks like an open session to the device, scheduler, or UI.
         db.create_record(start_epoch=ts, stop_epoch=ts, activity=activity, device_id="web")
@@ -566,7 +617,6 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
             start_epoch=ts,
             activity=activity,
             device_id="web",
-            volume_ml=_feeding_volume(activity, config.load().get("default_volume_ml")),
         )
     return RedirectResponse("/", status_code=303)
 
@@ -574,7 +624,8 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
 @app.post("/records")
 async def ui_create(
     date: str = Form(...),
-    start_time: str = Form(...),
+    end_time: str = Form(""),
+    start_time: str = Form(""),
     stop_time: str = Form(""),
     volume_ml: str = Form(""),
     activity: str = Form("feeding"),
@@ -582,21 +633,34 @@ async def ui_create(
 ):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
-    start_epoch = combine_date_time(date, start_time, tz)
-    if start_epoch is None:
-        raise HTTPException(400, "date and start_time required")
     activity = activity or "feeding"
-    if activity not in config.timed_activities(cfg):
-        stop_epoch = start_epoch  # instant event: a single closed timestamp
+
+    # The current web form submits a single end time. Store it in both epoch
+    # columns so existing API consumers and the SQLite schema remain
+    # compatible while the record is unambiguously complete. The legacy
+    # start/stop form shape is still accepted for bookmarked/older pages.
+    if end_time.strip():
+        end_epoch = combine_date_time(date, end_time, tz)
+        if end_epoch is None:
+            raise HTTPException(400, "date and end_time required")
+        start_epoch = end_epoch
+        stop_epoch = end_epoch
     else:
-        stop_epoch = combine_date_time(date, stop_time, tz) if stop_time.strip() else None
-        stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
+        start_epoch = combine_date_time(date, start_time, tz)
+        if start_epoch is None:
+            raise HTTPException(400, "date and end_time required")
+        if activity not in config.timed_activities(cfg):
+            stop_epoch = start_epoch  # instant event: a single closed timestamp
+        else:
+            stop_epoch = combine_date_time(date, stop_time, tz) if stop_time.strip() else None
+            stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
     db.create_record(
         start_epoch=start_epoch,
         stop_epoch=stop_epoch,
         volume_ml=_feeding_volume(activity, volume_ml),
         activity=activity,
         notes=notes.strip() or None,
+        device_id="web",
     )
     return RedirectResponse("/", status_code=303)
 
@@ -608,19 +672,30 @@ async def ui_bulk_save(request: Request):
     form = await request.form()
     timed = config.timed_activities(cfg)
     rids = [int(v) for v in form.getlist("record_id") if str(v).isdigit()]
+    existing_by_id = {r["id"]: r for r in db.list_records(ids=rids)} if rids else {}
     for rid in rids:
         date = (form.get(f"date_{rid}") or "").strip()
         start_time = (form.get(f"start_time_{rid}") or "").strip()
         stop_time = (form.get(f"stop_time_{rid}") or "").strip()
-        if not date or not start_time:
+        if not date or (not start_time and not stop_time):
             continue
-        start_epoch = combine_date_time(date, start_time, tz)
         activity = (form.get(f"activity_{rid}") or "feeding").strip() or "feeding"
-        if activity not in timed:
-            stop_epoch = start_epoch  # instant event has no editable stop
+        existing = existing_by_id.get(rid)
+        if not start_time:
+            # Completed point-in-time rows expose only their end time. Keep
+            # the schema's two columns equal when that end is edited.
+            end_epoch = combine_date_time(date, stop_time, tz)
+            start_epoch = end_epoch
+            stop_epoch = end_epoch
         else:
-            stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
-            stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
+            start_epoch = combine_date_time(date, start_time, tz)
+            if activity not in timed:
+                stop_epoch = start_epoch
+            else:
+                stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
+                stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
+        if start_epoch is None or (existing is None):
+            continue
         volume_ml = form.get(f"volume_ml_{rid}") or ""
         db.update_record(
             rid,
@@ -660,8 +735,8 @@ async def ui_save_config(request: Request):
             items[key] = str(value)
     if rows:
         # Rebuild the two activity lists from the per-row name + timed toggle.
-        # config.activity_list / timed_activities re-force 'feeding', so the
-        # feeding row (read-only name, disabled checkbox) need not round-trip.
+        # config.activity_list re-forces 'feeding'; its disabled timed toggle
+        # need not round-trip because feeding is always an end-time event.
         items["activity_types"] = ",".join(name for _, name in rows if name)
         items["timed_activities"] = ",".join(
             name for ri, name in rows if name and ri in timed_rows

@@ -56,8 +56,10 @@ cd gateway
 docker compose up -d --build
 ```
 
-Open <http://localhost:8080/>. One page: records table with inline edit, an
-Add-record form, per-date day-note fields, and the configuration form. Set
+Open <http://localhost:8080/>. One page: records table with inline edit, a
+phone-friendly Add-record screen, per-date day-note fields, and the
+configuration form. A feeding asks for the milk amount and one timestamp,
+which is always its end time. Set
 `feeding_alert_minutes` there to blink the top Feeding button and device
 display after the last feeding is that many minutes old (`120` by default).
 Set
@@ -68,12 +70,12 @@ trust everyone.
 
 ## Buttons
 
-- **K2** — toggle feeding (start ↔ stop). Display flips to the counter view.
+- **K2** — log a completed feeding. The press time is its end time; in gateway
+  mode the configured `default_volume_ml` is attached automatically.
 - **K1** — cycle Clock → History → Counter views.
 
-When idle and a completed feeding exists, the firmware alternates the Clock
-and Last fed counter views every 5 seconds. An active feeding stays on the live
-counter view.
+After a feeding is logged, the firmware alternates the Clock and Last fed
+counter views every 5 seconds while idle.
 
 GPIO 0 is the chip's BOOT strap pin; holding it during reset puts the chip
 into download mode for flashing.

@@ -4,7 +4,7 @@
 namespace hal::esp32p4_7b {
 
 // Stub: 7B board has GT911 capacitive touch (no physical buttons). Phase B
-// will register callbacks against two on-screen regions (cycle / toggle).
+// will register callbacks against two on-screen regions (cycle / feed done).
 // Today the callbacks are stored but never fired.
 class InputTouch : public InputSource {
  public:

@@ -4,7 +4,7 @@
 namespace hal::dnesp32s3b {
 
 // Two buttons via XL9555 I/O expander on I²C (`0x20`):
-//   P0.3 = K2 → SecondaryAction (toggle feeding)
+//   P0.3 = K2 → SecondaryAction (log feeding end)
 //   P0.4 = K1 → PrimaryAction   (cycle view)
 //
 // Polled at ~60 ms cadence with 80 ms edge debounce. The XL9555 must

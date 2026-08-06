@@ -129,11 +129,11 @@ void drawFooterHint(Display& d, const char* hint) {
 }
 
 const char* buttonHint() {
-  return "K2 feed  K1 next";
+  return "K2 feed done  K1 next";
 }
 
 const char* counterHint() {
-  return "K2 toggle  K1 next";
+  return "K2 feed done  K1 next";
 }
 
 const char* historyHint() {
@@ -298,6 +298,10 @@ void drawHistoryScreen() {
       const char* act = s.activity[0] ? s.activity : "?";
       if (s.stopEpoch == 0) {
         snprintf(line, sizeof(line), "%02d:%02d-...  %s",
+                 tmStart.tm_hour, tmStart.tm_min, act);
+      } else if (s.stopEpoch == s.startEpoch) {
+        // Completed point record: its sole timestamp is the end time.
+        snprintf(line, sizeof(line), "%02d:%02d      %s",
                  tmStart.tm_hour, tmStart.tm_min, act);
       } else {
         struct tm tmStop;

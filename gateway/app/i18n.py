@@ -54,10 +54,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Add-record
         "add_heading": "Add record",
         "add_btn": "Add",
+        "add_cancel": "Cancel",
+        "add_record_hint": "Log a completed feeding with its milk amount and end time.",
+        "milk_amount": "Milk amount",
         # Table columns
         "col_date": "Date",
         "col_start": "Start",
         "col_stop": "Stop",
+        "col_end_time": "End time",
         "col_duration": "Duration",
         "col_ml": "ml",
         "col_activity": "Activity",
@@ -73,9 +77,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_default_language": "Default language",
         "config_activities": "Activities",
         "config_timed": "timed",
+        "config_end_time": "end time",
         "config_add_activity": "+ Add activity",
         "config_remove_activity": "Remove activity",
-        "config_feeding_locked": "Feeding is always present and timed",
+        "config_feeding_locked": "Feeding is always present and uses an end time",
         # Time units (read by the live-elapsed JS in index.html)
         "unit_hour": "h",
         "unit_minute": "m",
@@ -110,10 +115,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         # Add-record
         "add_heading": "添加记录",
         "add_btn": "添加",
+        "add_cancel": "取消",
+        "add_record_hint": "记录已完成的喂食、奶量和结束时间。",
+        "milk_amount": "奶量",
         # Table columns
         "col_date": "日期",
         "col_start": "开始",
         "col_stop": "结束",
+        "col_end_time": "结束时间",
         "col_duration": "时长",
         "col_ml": "毫升",
         "col_activity": "活动",
@@ -129,9 +138,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_default_language": "默认语言",
         "config_activities": "活动",
         "config_timed": "计时",
+        "config_end_time": "结束时间",
         "config_add_activity": "+ 添加活动",
         "config_remove_activity": "删除活动",
-        "config_feeding_locked": "喂食始终存在且计时",
+        "config_feeding_locked": "喂食始终存在并使用结束时间",
         # Time units
         "unit_hour": "时",
         "unit_minute": "分",

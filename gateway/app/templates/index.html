@@ -7,13 +7,15 @@
          data-feeding-alert-minutes="{{ feeding_alert.threshold_minutes }}"
          data-last-fed-label="{{ t('last_fed') }}"
          data-feeding-alert-label="{{ t('feeding_alert_due') }}"
-         data-activity-start-label="{{ t('activity_start_btn') }}">
+         data-activity-start-label="{{ t('activity_start_btn') }}"
+         data-activity-log-label="{{ t('activity_log_btn') }}">
   {% for a in activities %}
   {% set s = active_map.get(a) %}
   <form method="post" action="/ui/activity" class="activity-form">
     <input type="hidden" name="activity" value="{{ a }}">
-    <button type="submit"
+    <button type="{{ 'button' if a == 'feeding' and not s else 'submit' }}"
             data-activity="{{ a }}"
+            {% if a == 'feeding' and not s %}data-open-record-dialog="feeding"{% endif %}
             class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if a == 'feeding' and feeding_alert.due else '' }}">
       <span class="activity-name">{{ al(a) }}</span>
       {% if s %}
@@ -23,7 +25,7 @@
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_start_btn') if a in timed else t('activity_log_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_log_btn') if a == 'feeding' or a not in timed else t('activity_start_btn') }}</span>
       {% endif %}
     </button>
   </form>
@@ -75,10 +77,14 @@
 
       feeding.replaceChildren(span('activity-name', feedingName));
       if (active) {
+        feeding.type = 'submit';
+        delete feeding.dataset.openRecordDialog;
         feeding.classList.add('running');
         feeding.classList.remove('idle', 'feeding-due');
         feeding.appendChild(timerSpan('', active.start_epoch));
       } else {
+        feeding.type = 'button';
+        feeding.dataset.openRecordDialog = 'feeding';
         feeding.classList.add('idle');
         feeding.classList.remove('running');
         if (last) {
@@ -86,7 +92,7 @@
           feeding.appendChild(span('activity-sub', bar.dataset.lastFedLabel || 'Last fed:'));
           feeding.appendChild(timerSpan('feeding-last-elapsed', last.stop_epoch));
         } else {
-          feeding.appendChild(span('activity-hint', bar.dataset.activityStartLabel || 'Tap to start'));
+          feeding.appendChild(span('activity-hint', bar.dataset.activityLogLabel || 'Tap to log'));
         }
       }
 
@@ -185,30 +191,137 @@
 </script>
 
 <section class="add-record">
-  <form method="post" action="/records">
-    <div class="records-head">
-      <h2>{{ t('add_heading') }}</h2>
-      <div class="bulk-actions">
-        <button type="submit">{{ t('add_btn') }}</button>
-      </div>
+  <div class="records-head">
+    <h2>{{ t('add_heading') }}</h2>
+    <div class="bulk-actions">
+      <button type="button" id="open-add-record">{{ t('add_btn') }}</button>
     </div>
-    <div class="row-form">
-      <label>{{ t('col_date') }} <input type="date" name="date" value="{{ now_date }}" required></label>
+  </div>
+  <p class="add-record-hint">{{ t('add_record_hint') }}</p>
+</section>
+
+<dialog id="add-record-dialog" class="record-dialog" aria-labelledby="add-record-title"
+        data-now-date="{{ now_date }}" data-now-time="{{ now_time }}">
+  <form method="post" action="/records" class="record-dialog-form">
+    <div class="record-dialog-head">
+      <h2 id="add-record-title">{{ t('add_heading') }}</h2>
+      <button type="button" class="dialog-close" data-close-record-dialog
+              aria-label="{{ t('add_cancel') }}">×</button>
+    </div>
+    <div class="record-dialog-body">
       <label>{{ t('col_activity') }}
         <select name="activity" class="add-activity-select">
           {% for a in activities %}
-          <option value="{{ a }}" data-timed="{{ '1' if a in timed else '0' }}">{{ al(a) }}</option>
+          <option value="{{ a }}">{{ al(a) }}</option>
           {% endfor %}
         </select>
       </label>
-      <label>{{ t('col_start') }} <input type="time" name="start_time" value="{{ now_time }}" required></label>
-      <label>{{ t('col_stop') }} <input type="time" name="stop_time" value="{{ now_time }}"></label>
-      <label>{{ t('col_ml') }} <input type="number" name="volume_ml" min="0" step="1"
-                       class="ml-input" value="{{ config.default_volume_ml or '' }}"></label>
-      <label>{{ t('col_notes') }} <input type="text" name="notes"></label>
+      <div class="record-time-fields">
+        <label>{{ t('col_date') }}
+          <input type="date" name="date" value="{{ now_date }}" required>
+        </label>
+        <label>{{ t('col_end_time') }}
+          <input type="time" name="end_time" value="{{ now_time }}" required>
+        </label>
+      </div>
+      <label class="milk-volume-field">
+        <span>{{ t('milk_amount') }}</span>
+        <span class="milk-volume-control">
+          <input type="number" name="volume_ml" min="1" step="1" inputmode="numeric"
+                 autocomplete="off" class="ml-input milk-volume-input"
+                 value="{{ config.default_volume_ml or '' }}" required autofocus>
+          <span>{{ t('col_ml') }}</span>
+        </span>
+      </label>
+      <div class="milk-presets" aria-label="{{ t('milk_amount') }}">
+        {% for ml in (30, 60, 90, 120, 150, 180) %}
+        <button type="button" data-volume-ml="{{ ml }}">{{ ml }}</button>
+        {% endfor %}
+      </div>
+      <label>{{ t('col_notes') }}
+        <input type="text" name="notes" autocomplete="off">
+      </label>
+    </div>
+    <div class="record-dialog-actions">
+      <button type="button" class="ghost" data-close-record-dialog>{{ t('add_cancel') }}</button>
+      <button type="submit">{{ t('add_btn') }}</button>
     </div>
   </form>
-</section>
+</dialog>
+
+<script>
+  (function () {
+    const dialog = document.getElementById('add-record-dialog');
+    const form = dialog?.querySelector('.record-dialog-form');
+    const activity = form?.querySelector('.add-activity-select');
+    const volumeField = form?.querySelector('.milk-volume-field');
+    const presets = form?.querySelector('.milk-presets');
+    const volume = form?.querySelector('input[name="volume_ml"]');
+    const renderedAt = Date.now();
+    const renderedWallTime = new Date(
+      (dialog?.dataset.nowDate || '') + 'T' + (dialog?.dataset.nowTime || '00:00') + ':00'
+    );
+
+    function twoDigits(value) {
+      return String(value).padStart(2, '0');
+    }
+
+    function refreshEndTime() {
+      if (!form || !Number.isFinite(renderedWallTime.getTime())) return;
+      const now = new Date(renderedWallTime.getTime() + (Date.now() - renderedAt));
+      const date = form.querySelector('input[name="date"]');
+      const endTime = form.querySelector('input[name="end_time"]');
+      if (date) {
+        date.value = now.getFullYear() + '-' + twoDigits(now.getMonth() + 1) + '-' + twoDigits(now.getDate());
+      }
+      if (endTime) endTime.value = twoDigits(now.getHours()) + ':' + twoDigits(now.getMinutes());
+    }
+
+    function syncActivity() {
+      const isFeeding = activity?.value === 'feeding';
+      volumeField?.classList.toggle('is-hidden', !isFeeding);
+      presets?.classList.toggle('is-hidden', !isFeeding);
+      if (volume) {
+        volume.disabled = !isFeeding;
+        volume.required = isFeeding;
+      }
+    }
+
+    function openDialog(selectedActivity) {
+      if (!dialog || !form) return;
+      form.reset();
+      if (activity && selectedActivity) activity.value = selectedActivity;
+      refreshEndTime();
+      syncActivity();
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open', '');
+      if (activity?.value === 'feeding') volume?.focus();
+    }
+
+    document.getElementById('open-add-record')?.addEventListener('click', () => openDialog('feeding'));
+    document.querySelector('.activity-form input[value="feeding"]')
+      ?.closest('.activity-form')
+      ?.addEventListener('click', event => {
+        const opener = event.target.closest('[data-open-record-dialog="feeding"]');
+        if (!opener) return;
+        event.preventDefault();
+        openDialog('feeding');
+      });
+    activity?.addEventListener('change', syncActivity);
+    form?.querySelectorAll('[data-volume-ml]').forEach(button => {
+      button.addEventListener('click', () => {
+        volume.value = button.dataset.volumeMl;
+        volume.focus();
+      });
+    });
+    dialog?.querySelectorAll('[data-close-record-dialog]').forEach(button => {
+      button.addEventListener('click', () => dialog.close());
+    });
+    dialog?.addEventListener('click', event => {
+      if (event.target === dialog) dialog.close();
+    });
+  })();
+</script>
 
 <section class="records">
   <form method="post" id="records-form">
@@ -240,7 +353,7 @@
           <tr>
             <th></th>
             <th>{{ t('col_start') }}</th>
-            <th>{{ t('col_stop') }}</th>
+            <th>{{ t('col_end_time') }}</th>
             <th>{{ t('col_duration') }}</th>
             <th>{{ t('col_ml') }}</th>
             <th>{{ t('col_activity') }}</th>
@@ -249,6 +362,7 @@
         </thead>
         <tbody>
           {% for r in g.records %}
+          {% set is_point_record = r.stop_epoch is not none and r.stop_epoch == r.start_epoch %}
           <tr>
             <td>
               <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check">
@@ -256,18 +370,18 @@
                      value="{{ r.start_epoch | localdate_input(tz) }}">
             </td>
             <td data-label="{{ t('col_start') }}">
+              {% if is_point_record %}
+              <span class="instant-dash">—</span>
+              {% else %}
               <input type="time" name="start_time_{{ r.id }}"
                      value="{{ r.start_epoch | localtime_only(tz) }}" required>
-            </td>
-            <td data-label="{{ t('col_stop') }}">
-              {% if r.activity in timed %}
-              <input type="time" name="stop_time_{{ r.id }}"
-                     value="{{ (r.stop_epoch | localtime_only(tz)) if r.stop_epoch else '' }}">
-              {% else %}
-              <span class="instant-dash">—</span>
               {% endif %}
             </td>
-            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if r.activity in timed else '—' }}</td>
+            <td data-label="{{ t('col_end_time') }}">
+              <input type="time" name="stop_time_{{ r.id }}"
+                     value="{{ ((r.stop_epoch or r.start_epoch) | localtime_only(tz)) if (r.stop_epoch or r.activity not in timed) else '' }}">
+            </td>
+            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if r.activity in timed and not is_point_record else '—' }}</td>
             <td data-label="{{ t('col_ml') }}">
               <input type="number" name="volume_ml_{{ r.id }}" min="0" step="1"
                      class="ml-input"
@@ -352,19 +466,6 @@
       clearValidityOnInput(stopInput);
       return false;
     }
-
-    const addForm = document.querySelector('.add-record form');
-    addForm?.addEventListener('submit', event => {
-      const select = addForm.querySelector('.add-activity-select');
-      const timed = select?.selectedOptions?.[0]?.dataset.timed === '1';
-      if (!timed) return;
-      if (!validateDuration(
-        addForm.querySelector('input[name="start_time"]'),
-        addForm.querySelector('input[name="stop_time"]')
-      )) {
-        event.preventDefault();
-      }
-    });
 
     document.querySelectorAll('.date-group').forEach(group => {
       const fold = group.querySelector('.fold-toggle');
@@ -452,7 +553,7 @@
             <input type="checkbox" name="activity_timed_{{ loop.index0 }}"
                    {% if a in timed %}checked{% endif %}
                    {% if a == 'feeding' %}disabled{% endif %}>
-            {{ t('config_timed') }}
+            {{ t('config_end_time') if a == 'feeding' else t('config_timed') }}
           </label>
           {% if a != 'feeding' %}
           <button type="button" class="row-remove ghost" aria-label="{{ t('config_remove_activity') }}">×</button>

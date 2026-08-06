@@ -65,16 +65,20 @@ gateway through the proxy with a token set and check the container logs — the
 
 Device-facing:
 
-- `POST /api/events` — `{type: "start"|"stop", device_id, timestamp_epoch?}`
-  starts a session (no-op if one is already active) or stops the active one.
-  Returns the new state payload.
+- `POST /api/events` — `{type: "log", device_id, timestamp_epoch?}` logs a
+  completed feeding whose end time is `timestamp_epoch` (or now) and applies
+  `default_volume_ml`. If an older device left a feeding open, `log` closes it.
+  Legacy `start` / `stop` events remain accepted during upgrades. Returns the
+  new state payload.
 - `GET /api/state` — returns `{active, last_feeding, today_feeds, today_ml,
   history (last 8), server_epoch, feeding_alert}`.
 
 Agent-facing:
 
 - `GET /api/records` / `POST /api/records` — list (newest-first) and create.
-  A supplied stop time must be within 30 minutes of the start time.
+  For feeding, `start` is interpreted as the end time (or an explicit `stop`
+  wins) and both stored epochs are equal. Other timed activities keep their
+  start/stop bounds; a supplied stop must be within 30 minutes of start.
 - `PATCH /api/records/{id}` / `DELETE /api/records/{id}` — edit / remove.
   Edits that leave a record longer than 30 minutes are rejected.
 - `GET /api/day_notes` — `{date: note}` map of all per-day notes.
@@ -84,8 +88,9 @@ Agent-facing:
 
 UI/admin:
 
-- `GET /` — web UI: records table with inline edit, add-record form, per-date
-  day-note field, configuration form.
+- `GET /` — web UI: records table with inline edit, a phone-sized Add-record
+  dialog with a large milk input and preset amounts, per-date day-note field,
+  and configuration form. The dialog's single time is always the end time.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
   actions. Timed records must stop within 30 minutes of their start.
   `POST /records/save` persists both record edits and day notes.
@@ -110,10 +115,10 @@ the network without sending `stop`.
 | Key | Default | Notes |
 | --- | --- | --- |
 | `activity_types` | `feeding,sleep,poopoo` | comma-separated; `feeding` always first |
-| `timed_activities` | `feeding,sleep` | comma-separated subset of `activity_types` that record as start→stop sessions with a timer; the rest log a single instant timestamp. `feeding` is always timed |
+| `timed_activities` | `sleep` | comma-separated subset of `activity_types` that record as start→stop sessions with a timer; the rest log a completed point-in-time record. `feeding` always uses one end time and is ignored if listed here by an older config |
 | `auto_stop_minutes` | `15` | auto-stop an active session after this many minutes (0 disables) |
 | `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web Feeding button blinks blue/red, and the device display blinks a red background. `0` disables |
-| `default_volume_ml` | `` | pre-fills the ml field of the Add-record form |
+| `default_volume_ml` | `` | pre-fills the web milk dialog and is attached to a feeding logged from an ESP32 button |
 | `default_language` | `en` | UI language (`en`/`zh`) for browsers without a `lang` cookie; the per-browser switch still overrides it |
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |
 | `ui_show_count` | `10` | dates per page on the web UI (records grouped by date; rows from the last 24h are pre-checked) |

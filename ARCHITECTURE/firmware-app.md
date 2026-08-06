@@ -6,7 +6,7 @@ Board-agnostic firmware logic: app state (activity history ring, active
 counter, pending-event queue), the gateway HTTP client (POST events,
 poll `/api/state`) running on Core 0, NTP setup, view orchestration and
 500 ms tickers, and the two semantic-action handlers (`cycleView`,
-`toggleFeeding`) wired to the HAL's `InputSource`.
+`logFeedingEnd`) wired to the HAL's `InputSource`.
 
 Infrastructure under every feature; no milestone gate.
 
@@ -45,7 +45,7 @@ not what app state exists.
 - `firmware/src/main.cpp:259` — `drainPendingQueue` — POST + pop loop.
 - `firmware/src/main.cpp:280` — `gatewayTask` — Core 0 RTOS body; cadence = `GATEWAY_POLL_MS` (30 s).
 - `firmware/src/main.cpp:292` — `cycleView` (PrimaryAction handler).
-- `firmware/src/main.cpp:302` — `toggleFeeding` (SecondaryAction handler).
+- `firmware/src/main.cpp:302` — `logFeedingEnd` (SecondaryAction handler): one press records a completed feeding at that end time and queues a `log` event; it never starts a session.
 - `firmware/src/main.cpp:325` — `updateCounter` / `updateClockScreen` / `updateAlertBlink` — 500 ms tickers driving live redraws and the history-screen alert blink.
 - `firmware/src/main.cpp:348` — `updateIdleViewSwitch` — when feeding is idle and a completed feeding exists, automatically alternates Clock and Last fed counter views every 5 seconds; History and active-feeding counters are left under explicit user/action control.
 - `firmware/src/main.cpp:394` — `connectWiFi` + NTP server lists.
@@ -55,7 +55,7 @@ not what app state exists.
 - `firmware/src/views.cpp:147` — `drawStatus`.
 - `firmware/src/views.cpp:156` — `drawClockScreen` — time + date + IP + gateway online indicator (`CLOCK_DIGITS`); when `feedingAlertDue`, the header reads "Time to feed?" and the background alternates dark red/black.
 - `firmware/src/views.cpp:195` — `drawCounter` — centered ASCII title + CJK subtitle + size-2 today's-feeding tally (`todayFeeds`/`todayMl`) + smaller `COUNTER_DIGITS` big digits + timestamp.
-- `firmware/src/views.cpp:246` — `drawHistoryScreen` ("Activity") — date-grouped; each row is `start-stop activity`, and the date header carries the day's feeding-volume total (right-aligned ml).
+- `firmware/src/views.cpp:246` — `drawHistoryScreen` ("Activity") — date-grouped; point records show their single end time while legacy/timed sessions show `start-stop`; the date header carries the day's feeding-volume total (right-aligned ml).
 - `firmware/src/views.cpp:320` — `redrawCurrentView` — view-state machine.
 
 ## Interactions
@@ -66,7 +66,7 @@ not what app state exists.
   callbacks.
 - Talks to [gateway-api.md](gateway-api.md) over HTTP: POSTs
   `/api/events`, GETs `/api/state`.
-- Optimistic local state (set immediately in `toggleFeeding`)
+- Optimistic local state (set immediately in `logFeedingEnd`)
   reconciles when `applyGatewayState` next runs and the pending
   queue is empty.
 - Concurrency: writes from `gatewayTask` (Core 0) take `stateMutex`;
@@ -80,9 +80,9 @@ not what app state exists.
 - `make flash-monitor` — pass = serial shows, in order, `LCD init...`,
   `DHCP ok, IP=`, `NTP ok via <server>`, then `Gateway mode -> ...`
   (or `Standalone mode` when `GATEWAY_URL` is empty).
-- On hardware: K1 cycles view; K2 toggles feeding and the counter
-  view appears with a live 500 ms tick. After feeding is stopped,
-  Clock and Last fed alternate every 5 seconds while idle.
+- On hardware: K1 cycles view; one K2 press logs the feeding end and
+  the Last fed counter appears with a live 500 ms tick. Clock and Last
+  fed then alternate every 5 seconds while idle.
 
 ## Open Gaps / Roadmap
 
