@@ -42,8 +42,19 @@ default `10.0.0.0/8`. Everyone else must present the token:
 
 - **Machines** (firmware, the `skill/` client) send `Authorization: Bearer
   <token>` — put the same token in firmware `config.local.h`.
-- **Browsers** outside the trusted range get an HTTP Basic prompt; enter the
-  token as the password (the username is ignored).
+- **Browsers** can use a one-click API-key link:
+  `https://baby.example.com/?api=<token>`. A valid link sets a one-year,
+  HttpOnly browser cookie and immediately redirects to `/`, removing the key
+  from the visible address. The cookie contains a derived credential rather
+  than the raw token; changing `GATEWAY_TOKEN` invalidates it. The cookie is
+  Secure, so the public link must use HTTPS.
+- HTTP Basic remains available as a fallback: enter the token as the password
+  (the username is ignored).
+
+Treat the complete API-key link like a password and share it only with people
+who should be able to view and edit the baby log. The initial URL may still be
+recorded in browser, reverse-proxy, or hosting access logs. Use a long random
+token (for example, `openssl rand -hex 32`) and HTTPS.
 
 ### Behind a reverse proxy
 
@@ -89,9 +100,9 @@ Agent-facing:
 UI/admin:
 
 - `GET /` — web UI: records table with inline edit, a phone-sized Add-record
-  dialog with large −/milk/+ controls and side-by-side Start/End fields,
-  per-date day-note field, and configuration form. End refreshes to the
-  current gateway time whenever the dialog opens.
+  dialog with compact −/milk/+ controls and one End field, per-date day-note
+  field, and configuration form. End refreshes to the current gateway time
+  whenever the dialog opens.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
   actions. Timed records must stop within 30 minutes of their start.
   `POST /records/save` persists both record edits and day notes.
@@ -116,7 +127,7 @@ the network without sending `stop`.
 | Key | Default | Notes |
 | --- | --- | --- |
 | `activity_types` | `feeding,sleep,poopoo` | comma-separated; `feeding` always first |
-| `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Feeding is handled separately by its Start/End milk dialog (and by one end-time press on ESP32), so legacy `feeding` entries here are ignored |
+| `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Feeding is handled separately by its end-time milk dialog (and by one end-time press on ESP32), so legacy `feeding` entries here are ignored |
 | `auto_stop_minutes` | `15` | auto-stop an active session after this many minutes (0 disables) |
 | `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web Feeding button blinks blue/red, and the device display blinks a red background. `0` disables |
 | `default_volume_ml` | `` | pre-fills the web milk dialog and is attached to a feeding logged from an ESP32 button |

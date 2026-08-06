@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlencode
 
 from fastapi import (
     Depends,
@@ -26,6 +27,9 @@ from .util import zoneinfo
 
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "").strip()
 MAX_RECORD_DURATION_SECONDS = 30 * 60
+_BROWSER_AUTH_COOKIE = "babytime_access"
+_BROWSER_AUTH_MAX_AGE = 365 * 24 * 60 * 60
+_BROWSER_AUTH_CONTEXT = b"babytime-browser-access-v1"
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -193,16 +197,51 @@ def _presented_token(request: Request) -> Optional[str]:
     return None
 
 
+def _browser_cookie_value() -> str:
+    """Derive a browser credential without storing the raw API key.
+
+    Changing GATEWAY_TOKEN automatically invalidates every existing browser
+    session because it changes this value.
+    """
+    return hmac.new(
+        GATEWAY_TOKEN.encode("utf-8"),
+        _BROWSER_AUTH_CONTEXT,
+        "sha256",
+    ).hexdigest()
+
+
+def _browser_cookie_is_valid(request: Request) -> bool:
+    presented = request.cookies.get(_BROWSER_AUTH_COOKIE, "")
+    return bool(
+        GATEWAY_TOKEN
+        and presented
+        and hmac.compare_digest(presented, _browser_cookie_value())
+    )
+
+
+def _gateway_token_matches(presented: str) -> bool:
+    """Constant-time token comparison that also handles non-ASCII input."""
+    return bool(
+        GATEWAY_TOKEN
+        and hmac.compare_digest(
+            presented.encode("utf-8"),
+            GATEWAY_TOKEN.encode("utf-8"),
+        )
+    )
+
+
 def require_auth(request: Request) -> None:
     """Gate every route: trusted-network clients pass freely, everyone else
-    must present the gateway token (Bearer for machines, Basic password for
-    browsers). A missing token set on the server leaves the gateway open."""
+    must present the gateway token (Bearer/Basic) or a browser cookie issued
+    by the API-key link. An unset server token leaves the gateway open."""
     if not GATEWAY_TOKEN:
         return
     if _client_is_trusted(request, config.load()):
         return
     presented = _presented_token(request)
-    if presented and hmac.compare_digest(presented, GATEWAY_TOKEN):
+    if presented and _gateway_token_matches(presented):
+        return
+    if _browser_cookie_is_valid(request):
         return
     raise HTTPException(status_code=401, detail="authentication required", headers=_AUTH_CHALLENGE)
 
@@ -214,6 +253,43 @@ app = FastAPI(
     lifespan=lifespan,
     dependencies=[Depends(require_auth)],
 )
+
+
+@app.middleware("http")
+async def browser_api_key_link(request: Request, call_next):
+    """Turn `/?api=<GATEWAY_TOKEN>` into a persistent browser login.
+
+    The redirect removes the secret from the visible URL before any page is
+    rendered. The cookie contains only an HMAC-derived credential, is hidden
+    from JavaScript, and is sent only over HTTPS.
+    """
+    if request.method == "GET" and request.url.path == "/" and GATEWAY_TOKEN:
+        api_key = request.query_params.get("api")
+        if api_key is not None and _gateway_token_matches(api_key):
+            clean_query = [
+                (key, value)
+                for key, value in request.query_params.multi_items()
+                if key != "api"
+            ]
+            target = request.url.path
+            if clean_query:
+                target += "?" + urlencode(clean_query)
+            response = RedirectResponse(target, status_code=303)
+            response.set_cookie(
+                _BROWSER_AUTH_COOKIE,
+                _browser_cookie_value(),
+                max_age=_BROWSER_AUTH_MAX_AGE,
+                path="/",
+                secure=True,
+                httponly=True,
+                samesite="lax",
+            )
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Referrer-Policy"] = "no-referrer"
+            return response
+    return await call_next(request)
+
+
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 

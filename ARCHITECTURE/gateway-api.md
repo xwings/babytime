@@ -28,7 +28,8 @@ store through the web UI.
 - `gateway/app/main.py:48` — `filter_localtime_only` — epoch → `HH:MM` for time input.
 - `gateway/app/main.py:54` — `filter_duration` — `(start, stop)` → `"Xh Ym"` (≥1 h) or `"Xm"` (sub-hour, minutes only — no seconds).
 - `gateway/app/main.py:120` — `lifespan` — startup: `db.init()`, `config.migrate_from(...)`, spawn `scheduler.scheduler_loop` as a background task.
-- `gateway/app/main.py:196` — `require_auth` — one global dependency (`FastAPI(dependencies=[...])`) gating every route, API and browser UI alike. Order: no-op when `GATEWAY_TOKEN` is unset → pass when the effective client IP is in a `trusted_networks` CIDR (default `10.0.0.0/8`) → otherwise the request must carry the token, as `Authorization: Bearer <token>` (machines) or HTTP Basic where the password is the token (browsers; username ignored). On failure it returns `401` with `WWW-Authenticate: Basic realm="babytime"` so browsers pop the native login; the token compare uses `hmac.compare_digest`. The `/static` mount is a sub-app and stays open (CSS only).
+- `gateway/app/main.py` — `require_auth` — one global dependency (`FastAPI(dependencies=[...])`) gating every route, API and browser UI alike. Order: no-op when `GATEWAY_TOKEN` is unset → pass when the effective client IP is in a `trusted_networks` CIDR (default `10.0.0.0/8`) → otherwise accept `Authorization: Bearer <token>` (machines), HTTP Basic where the password is the token (browser fallback), or the derived browser-access cookie. On failure it returns `401` with `WWW-Authenticate: Basic realm="babytime"`; secret comparisons use `hmac.compare_digest`. The `/static` mount is a sub-app and stays open (CSS only).
+- `gateway/app/main.py` — `browser_api_key_link` middleware — a GET to `/?api=<GATEWAY_TOKEN>` issues an HttpOnly, SameSite=Lax, Secure browser cookie valid for one year, then returns a no-store/no-referrer 303 to the same path with `api` removed while preserving other query parameters. The cookie is an HMAC-derived credential, not the raw key; rotating `GATEWAY_TOKEN` invalidates all sessions. Because it is Secure, this convenience link requires HTTPS.
 - `gateway/app/main.py:139` — `_effective_client_ip` — the IP the trust check keys on. Normally `request.client.host` (the TCP peer). When that peer is in `trusted_proxies` (CIDR list, empty by default) it walks the `X-Forwarded-For` chain from the connection side inward, skipping further trusted-proxy hops, to the real client behind the reverse proxy. `X-Forwarded-For` is ignored when the peer isn't a configured proxy, so a direct client can't spoof a LAN IP. uvicorn is launched with `--no-proxy-headers` (see `Dockerfile`) so it leaves `request.client` as the real peer instead of rewriting it from forwarded headers — this module is the single authority on proxy headers.
 - `gateway/app/main.py:242` — `state_payload` — assembles `{active, last_feeding, today_feeds, today_ml, history, server_epoch, feeding_alert}` for `/api/state`. `history` is the newest eight records of every activity; `last_feeding` is the newest **completed** feeding, so a legacy open session or a newer sleep/poopoo cannot replace the Last fed time. `today_feeds`/`today_ml` come from `db.feeding_totals` over the gateway-local day. `feeding_alert` becomes due after the configured interval from that completed feeding.
 - `gateway/app/main.py:275` — `POST /api/events` — current firmware sends `type="log"`; `timestamp_epoch` is the feeding end, stored as a closed point record (`start_epoch == stop_epoch`) with configured `default_volume_ml`. A `log` closes an open legacy session instead of duplicating it. Legacy `start`/`stop` remain accepted during device upgrades.
@@ -46,7 +47,7 @@ store through the web UI.
 - `_normalize_stop_epoch(start_epoch, stop_epoch)` — shared record-duration guard. `None` remains open, a stop before start is treated as crossing midnight, and a duration over 30 minutes raises HTTP 400.
 - `gateway/app/main.py:447` — `ui_home` (`GET /`) — groups records by local date, paginates by date count (`ui_show_count`).
 - `POST /ui/activity` — feeding normally opens the browser dialog; a direct feeding post remains an end-time fallback using the configured default volume. Other timed activities still toggle and other point activities log immediately.
-- `gateway/app/main.py:604` — `POST /records` (`ui_create`) — the feeding dialog submits start plus an end that defaults to now; the route stores that session and stamps `device_id="web"`. End-only callers still produce a closed point record.
+- `gateway/app/main.py` — `POST /records` (`ui_create`) — the feeding dialog submits one end time that defaults to now; the route stores it as a closed point record (`start_epoch == stop_epoch`) and stamps `device_id="web"`. Older start/end callers remain accepted.
 - `POST /records/save` — inline edit of checked rows plus day notes. Completed point records expose only their end input and keep both epochs equal when it changes; legacy/timed sessions retain start/end duration validation.
 - `POST /records/delete` — deletes the checked rows.
 - `POST /config` — saves the config form. The handler rebuilds `activity_types` and `timed_activities` from the per-row controls. Feeding is read-only and its timed control is disabled because it always uses an end time.
@@ -75,6 +76,11 @@ curl -s http://localhost:8080/ | grep -F 'activity-bar'
   keys.
 - Pass = second `curl` prints at least one line containing
   `activity-bar` (HTML rendered with the activity-button bar).
+- With a non-empty `GATEWAY_TOKEN` and an untrusted client, `GET /` returns
+  401. `GET /?api=<token>` over HTTPS returns a 303 with an HttpOnly/Secure
+  cookie and a clean `Location: /`; following that redirect with the cookie
+  renders the UI. A wrong key still returns 401, while Bearer auth continues
+  to work for API clients.
 
 ## Open Gaps / Roadmap
 

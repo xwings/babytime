@@ -58,15 +58,17 @@ docker compose up -d --build
 
 Open <http://localhost:8080/>. One page: records table with inline edit, a
 phone-friendly Add-record screen, per-date day-note fields, and the
-configuration form. A feeding asks for a large milk amount plus start and
-end times; end defaults to the current time. Set
+configuration form. A feeding asks for the milk amount and an end time that
+defaults to the current time. Set
 `feeding_alert_minutes` there to blink the top Feeding button and device
 display after the last feeding is that many minutes old (`120` by default).
 Set
 `GATEWAY_TOKEN` in `docker-compose.yml` to require the token on every route
-(Bearer for machines, HTTP Basic password for browsers); clients in
-`trusted_networks` (default `10.0.0.0/8`) skip auth. Leave the token empty to
-trust everyone.
+(Bearer for machines); clients in `trusted_networks` (default `10.0.0.0/8`)
+skip auth. For simple remote browser access, share the HTTPS link
+`https://baby.example.com/?api=<token>` once. It signs that browser in for one
+year and redirects to a clean URL; changing the token signs those browsers
+out. Leave the token empty to trust everyone.
 
 ## Buttons
 
