@@ -7,7 +7,8 @@ Configuration tabs, language switching, and one activity button per
 configured activity. Feeding is special: tapping it opens the same
 Add-record dialog as the Add button, with compact phone-friendly −/milk/+
 controls and one End field that defaults to now. It never starts
-a new timer. Other activity types still follow `timed_activities`:
+a new timer; saving derives Start by subtracting `auto_stop_minutes`.
+Other activity types still follow `timed_activities`:
 timed types such as sleep toggle start→stop, while point types log once.
 The idle Feeding button carries an integrated `Last fed:` live counter;
 after `feeding_alert_minutes` it shows "Time to feed?" and blinks. Below
@@ -43,8 +44,8 @@ note" otherwise), and per-date headers also show the day's `total_ml`
 - `gateway/app/i18n.py:153` — `read_lang(request)` returns the cookie-backed lang.
 - `gateway/app/i18n.py:166` — `t(key, lang, **kwargs)` looks up the entry and substitutes `{name}` placeholders with `str.replace` (no `str.format`, so any literal braces in a translated string pass through untouched).
 - `gateway/app/templates/index.html` — the activity bar keeps live Last fed / alert polling. Idle Feeding is a dialog opener; timed non-feeding buttons still submit guarded toggles. An open feeding left by old software is surfaced as running so one post can close it during upgrade.
-- `gateway/app/templates/index.html` — `#add-record-dialog` is shared by the Feeding and Add buttons. Its compact body is exactly two rows: −/milk/+ controls, then one End time. The rendered gateway time advances while the page is open so each launch defaults End to the current gateway wall time.
-- `gateway/app/templates/index.html` — completed point rows show `—` for Start, expose an editable End time, and show no duration. Legacy/timed sessions retain Start, End, and duration. Editing a point end keeps both stored epochs equal.
+- `gateway/app/templates/index.html` — `#add-record-dialog` is shared by the Feeding and Add buttons. Its compact body is exactly two rows: −/milk/+ controls, then one End time. The rendered gateway time advances while the page is open so each launch defaults End to the current gateway wall time; the server derives Start.
+- `gateway/app/templates/index.html` — feeding rows show the derived Start as read-only and End as editable; saving End recalculates Start. Non-feeding point rows show `—` for Start and keep equal epochs when edited. Other timed sessions retain editable Start, End, and duration.
 - `gateway/app/templates/index.html` — the Configuration activity list locks Feeding as an end-time type; only other activities can be marked timed.
 - `gateway/app/static/style.css` — a shared light-mode palette drives the page, dialog, controls, tables, configuration, banners, and mobile cards. The `max-width: 640px` layout keeps the dialog as a compact inset window and uses 16 px controls to avoid iOS zoom. The centered milk stepper uses compact touch targets and explicitly remains white with dark text on mobile WebKit.
 
@@ -86,13 +87,15 @@ Pass means all of:
 - The idle Feeding button shows a `Last fed:` counter ticking once per
   second since the most recent finished feeding ("tap to log" until the
   first record). Clicking it opens a dialog requiring milk amount and
-  showing only End, set to the current time.
+  showing only End, set to the current time. Saving creates Start exactly
+  `auto_stop_minutes` earlier (15 minutes by default).
 - Date headers collapse/expand on chevron click; only today's group is
   expanded on load, every other date starts collapsed. Each header shows
   `YYYY-MM-DD (N times[, M ml])` — the count reads "1 time" / "6 times"
   and counts only that day's records with a volume (feedings), so it
   pairs with the millilitre total; the total is appended only when at
-  least one record that day has a volume.
+  least one record that day has a volume. Feedings spanning midnight are
+  assigned to the date of End, matching the button/dialog timestamp.
 - There is no per-date select-all; selection and deletion are per-record
   (each row's checkbox, plus the page-wide "select all on page" button).
   Rows render unchecked — nothing is selected by default.
@@ -102,15 +105,16 @@ Pass means all of:
   (round-trips on reload).
 - Each row has an activity dropdown and a free-text Note field that
   round-trips on Save. The compact Add dialog logs feeding with required
-  ml plus one End time. Completed point rows show `—` for Start/Duration
-  and an editable End input; legacy/timed sessions retain duration.
+  ml plus one End time. Feeding rows show a read-only calculated Start,
+  editable End, and duration; point rows retain their single End.
 - Tabs (Records / Configuration) sit on the right of the header and
   switch sections without a full reload.
 - The Configuration tab lists each activity as a row with a name field
   and a "timed" checkbox; `+ Add activity` adds a row, `×` removes one,
   the feeding row is locked as an end-time record. Saving rebuilds
   `activity_types` + `timed_activities`, ignoring any legacy Feeding
-  entry in the timed set. It also has a Default-language `<select>`
+  entry in the timed set. `auto_stop_minutes` controls both the calculated
+  feeding duration and the active-session cap. It also has a Default-language `<select>`
   (`name="default_language"`) that seeds the UI language for browsers
   without a `lang` cookie.
 - Language switch chip (EN / 中文) sits left of the tabs; clicking

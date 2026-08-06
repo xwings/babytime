@@ -19,6 +19,10 @@
 #include "state.h"
 #include "views.h"
 
+#ifndef FEEDING_DURATION_MINUTES
+#define FEEDING_DURATION_MINUTES 15
+#endif
+
 // ---------------------------------------------------------------------------
 // Shared state (declared extern in state.h, defined here)
 // ---------------------------------------------------------------------------
@@ -45,6 +49,7 @@ uint32_t      lastAlertDrawMs      = 0;
 uint32_t      lastIdleViewSwitchMs = 0;
 bool          feedingActive        = false;
 volatile bool gatewayStateDirty    = false;
+uint16_t      feedingDurationMinutes = FEEDING_DURATION_MINUTES;
 
 constexpr uint32_t K1_LONG_PRESS_MS = 1500;  // referenced by docs; HAL owns timing
 constexpr uint32_t IDLE_VIEW_SWITCH_MS = 5000;
@@ -60,13 +65,16 @@ PendingEvent pendingQueue[PENDING_QUEUE_SIZE];
 size_t       pendingCount = 0;
 
 void recordFeedEnd(time_t now) {
-  // A current button press means "the feeding ended now". Close an open
-  // legacy session if one is present; normally add a completed point record
-  // with start == stop so the existing wire/storage shape stays compatible.
+  // A current button press means "the feeding ended now". The start is the
+  // configured duration before the press, even when normalizing a legacy
+  // open session.
+  time_t durationSeconds = (time_t)feedingDurationMinutes * 60;
+  time_t start = now > durationSeconds ? now - durationSeconds : now;
   if (feedingActive && feedHistoryCount > 0) {
     size_t lastIdx = (feedHistoryHead + HISTORY_SIZE - 1) % HISTORY_SIZE;
     if (feedHistory[lastIdx].stopEpoch == 0 &&
         strcmp(feedHistory[lastIdx].activity, "feeding") == 0) {
+      feedHistory[lastIdx].startEpoch = start;
       feedHistory[lastIdx].stopEpoch = now;
       lastFeedingStop = now;
       return;
@@ -74,7 +82,7 @@ void recordFeedEnd(time_t now) {
   }
 
   FeedSession s;
-  s.startEpoch = now;
+  s.startEpoch = start;
   s.stopEpoch  = now;
   strncpy(s.activity, "feeding", sizeof(s.activity) - 1);
   feedHistory[feedHistoryHead] = s;
@@ -208,6 +216,11 @@ void applyGatewayState(JsonDocument& doc) {
 
   todayFeeds = doc["today_feeds"] | 0;
   todayMl    = doc["today_ml"] | 0;
+
+  int configuredDuration = doc["feeding_duration_minutes"] | (int)feedingDurationMinutes;
+  if (configuredDuration >= 0 && configuredDuration <= 0xFFFF) {
+    feedingDurationMinutes = (uint16_t)configuredDuration;
+  }
 
   JsonVariant alert = doc["feeding_alert"];
   if (!alert.isNull()) {

@@ -59,11 +59,12 @@ Persistence for the gateway. Three stores:
 - `create_record(..., activity='feeding')` — insert. "At most one active per activity" is enforced by the caller (`api_post_event` / `ui_activity_toggle`) checking `get_active(activity)` first, not by this function.
 - `update_record(id, **fields)` — inline UI edit path; `activity` is an allowed field.
 - `delete_record(id)`.
-- `list_records(limit=..., ids=..., offset=..., activity=...)` — newest-first pagination; `activity` filters to one type (e.g. `"feeding"` for the device-facing `/api/state` history).
+- `list_records(limit=..., ids=..., offset=..., activity=...)` — newest-first by `COALESCE(stop_epoch, start_epoch)`; `activity` filters to one type (e.g. `"feeding"` for device state).
 - `count_records()`.
-- `feeding_totals(start_epoch, stop_epoch)` — `{feeds, ml}` for feedings (with a volume) in a half-open start-epoch window; drives `/api/state`'s `today_feeds`/`today_ml` (caller passes local-midnight bounds).
+- `feeding_totals(start_epoch, stop_epoch)` — `{feeds, ml}` for feedings (with a volume) in a half-open End-time window; drives `/api/state`'s `today_feeds`/`today_ml` and keeps midnight-spanning feedings on their End date.
 - `gateway/app/config.py` — `DEFAULTS` — the 10 config keys with seed values: `activity_types`, `timed_activities`, `auto_stop_minutes`, `feeding_alert_minutes`, `default_volume_ml`, `default_language`, `timezone`, `ui_show_count`, `trusted_networks`, `trusted_proxies`.
 - `activity_list(cfg)` — split/dedupe `activity_types`, always with `feeding` first; reused by the app + UI for dropdowns.
+- `feeding_duration_minutes(cfg)` — non-negative `auto_stop_minutes` value used for `feeding Start = End - duration`; default 15.
 - `timed_activities(cfg)` — activity types whose bar button opens/closes a running session. Feeding is excluded because it has its own end-time milk dialog and one-press device flow; legacy config entries naming it are ignored.
 - `load()` — returns merged-with-defaults dict from cache (lazy init from disk).
 - `update(items)` — merges into the on-disk JSON via atomic `os.replace`, refreshes cache.

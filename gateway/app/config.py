@@ -155,12 +155,22 @@ def feeding_alert_minutes(cfg: dict) -> int:
     return int_value(cfg, "feeding_alert_minutes", default=120, minimum=0)
 
 
+def feeding_duration_minutes(cfg: dict) -> int:
+    """Duration assigned to a completed feeding logged by end time.
+
+    The existing ``auto_stop_minutes`` setting is the gateway's configured
+    session duration/cap. Reuse it so web and device records have one shared
+    value; ``0`` keeps the historical point-record behavior.
+    """
+    return int_value(cfg, "auto_stop_minutes", default=15, minimum=0)
+
+
 def timed_activities(cfg: dict) -> set:
     """Activities recorded as start->stop sessions (running timer); the rest
     are completed point-in-time records.
 
     Feeding is deliberately never an activity-bar timer: the web uses its
-    dedicated Start/End milk dialog and the device uses one end-time press.
+    dedicated end-time milk dialog and the device uses one end-time press.
     Ignore a legacy ``feeding`` entry that may still exist in config.json.
     """
     raw = (cfg.get("timed_activities") or "").replace("\n", ",")

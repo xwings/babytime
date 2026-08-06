@@ -120,6 +120,12 @@ def _normalize_stop_epoch(start_epoch: int, stop_epoch: Optional[int]) -> Option
     return stop_epoch
 
 
+def _feeding_bounds(end_epoch: int, cfg: dict) -> tuple[int, int]:
+    """Return the configured fixed-duration feeding ending at ``end_epoch``."""
+    duration_seconds = config.feeding_duration_minutes(cfg) * 60
+    return max(0, end_epoch - duration_seconds), end_epoch
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init()
@@ -230,6 +236,14 @@ def _gateway_token_matches(presented: str) -> bool:
     )
 
 
+def _browser_link_key_is_valid(request: Request) -> bool:
+    """Whether this is a valid browser landing link on the UI root."""
+    if request.method != "GET" or request.url.path != "/":
+        return False
+    api_key = request.query_params.get("api")
+    return api_key is not None and _gateway_token_matches(api_key)
+
+
 def require_auth(request: Request) -> None:
     """Gate every route: trusted-network clients pass freely, everyone else
     must present the gateway token (Bearer/Basic) or a browser cookie issued
@@ -242,6 +256,8 @@ def require_auth(request: Request) -> None:
     if presented and _gateway_token_matches(presented):
         return
     if _browser_cookie_is_valid(request):
+        return
+    if _browser_link_key_is_valid(request):
         return
     raise HTTPException(status_code=401, detail="authentication required", headers=_AUTH_CHALLENGE)
 
@@ -259,34 +275,43 @@ app = FastAPI(
 async def browser_api_key_link(request: Request, call_next):
     """Turn `/?api=<GATEWAY_TOKEN>` into a persistent browser login.
 
-    The redirect removes the secret from the visible URL before any page is
-    rendered. The cookie contains only an HMAC-derived credential, is hidden
-    from JavaScript, and is sent only over HTTPS.
+    Normal mode redirects to remove the secret. ``shortcut=1`` intentionally
+    keeps it in the rendered URL for iOS Home Screen launchers with a separate
+    cookie context. Both modes issue an HTTPS-only HMAC-derived cookie.
     """
-    if request.method == "GET" and request.url.path == "/" and GATEWAY_TOKEN:
-        api_key = request.query_params.get("api")
-        if api_key is not None and _gateway_token_matches(api_key):
+    if _browser_link_key_is_valid(request):
+        shortcut_mode = request.query_params.get("shortcut", "").lower() in {
+            "1",
+            "true",
+            "yes",
+        }
+        if shortcut_mode:
+            # iOS Home Screen can use a separate cookie context. Keep the API
+            # key in this opt-in shortcut URL so every launch can authenticate
+            # and refresh its own browser cookie.
+            response = await call_next(request)
+        else:
             clean_query = [
                 (key, value)
                 for key, value in request.query_params.multi_items()
-                if key != "api"
+                if key not in {"api", "shortcut"}
             ]
             target = request.url.path
             if clean_query:
                 target += "?" + urlencode(clean_query)
             response = RedirectResponse(target, status_code=303)
-            response.set_cookie(
-                _BROWSER_AUTH_COOKIE,
-                _browser_cookie_value(),
-                max_age=_BROWSER_AUTH_MAX_AGE,
-                path="/",
-                secure=True,
-                httponly=True,
-                samesite="lax",
-            )
-            response.headers["Cache-Control"] = "no-store"
-            response.headers["Referrer-Policy"] = "no-referrer"
-            return response
+        response.set_cookie(
+            _BROWSER_AUTH_COOKIE,
+            _browser_cookie_value(),
+            max_age=_BROWSER_AUTH_MAX_AGE,
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="lax",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        return response
     return await call_next(request)
 
 
@@ -332,6 +357,7 @@ def state_payload() -> dict:
         "today_ml": today["ml"],
         "history": db.list_records(limit=8),
         "server_epoch": server_epoch,
+        "feeding_duration_minutes": config.feeding_duration_minutes(cfg),
         "feeding_alert": _feeding_alert_payload(cfg, active, last, server_epoch),
     }
 
@@ -353,9 +379,9 @@ async def api_post_event(event: EventIn):
     if event.type not in ("start", "stop", "log"):
         raise HTTPException(400, "type must be 'start', 'stop', or 'log'")
     ts = event.timestamp_epoch or int(time.time())
+    cfg = config.load()
     if event.type == "start":
         if db.get_active(event.activity) is None:
-            cfg = config.load()
             db.create_record(
                 start_epoch=ts,
                 activity=event.activity,
@@ -363,14 +389,41 @@ async def api_post_event(event: EventIn):
                 volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
             )
     elif event.type == "stop":
-        db.stop_active(stop_epoch=ts, activity=event.activity)
+        if event.activity == "feeding":
+            active = db.get_active(event.activity)
+            if active:
+                start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
+                db.update_record(
+                    active["id"],
+                    start_epoch=start_epoch,
+                    stop_epoch=stop_epoch,
+                )
+        else:
+            db.stop_active(stop_epoch=ts, activity=event.activity)
     else:
         # Current devices send one `log` event when a feed has finished. If
-        # an older client left a session open, this press closes that session;
-        # otherwise store a completed point-in-time record whose one timestamp
-        # is both the persisted start (for schema compatibility) and end.
-        if not db.stop_active(stop_epoch=ts, activity=event.activity):
-            cfg = config.load()
+        # an older client left a session open, normalize it to the configured
+        # duration too. For feeding, the press is always the end timestamp.
+        active = db.get_active(event.activity)
+        if event.activity == "feeding":
+            start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
+            if active:
+                db.update_record(
+                    active["id"],
+                    start_epoch=start_epoch,
+                    stop_epoch=stop_epoch,
+                )
+            else:
+                db.create_record(
+                    start_epoch=start_epoch,
+                    stop_epoch=stop_epoch,
+                    activity=event.activity,
+                    device_id=event.device_id,
+                    volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
+                )
+        elif active:
+            db.stop_active(stop_epoch=ts, activity=event.activity)
+        else:
             db.create_record(
                 start_epoch=ts,
                 stop_epoch=ts,
@@ -393,6 +446,17 @@ async def api_list_records(limit: int = 100, date: Optional[str] = None):
     return _day_payload(_valid_date(date))
 
 
+def _record_date_epoch(record: dict) -> int:
+    """Timestamp used to place a record on a calendar day.
+
+    Feeding is logged by its end time; other session types retain their
+    historical start-time grouping.
+    """
+    if record.get("activity") == "feeding" and record.get("stop_epoch") is not None:
+        return int(record["stop_epoch"])
+    return int(record["start_epoch"])
+
+
 def _day_payload(date: str) -> dict:
     """All records on `date` (gateway-local), its day note, and a feeding
     summary. The date bucketing matches the web UI's date grouping, and
@@ -401,7 +465,7 @@ def _day_payload(date: str) -> dict:
     tz = zoneinfo(config.load().get("timezone") or "UTC")
     rows = [
         r for r in db.list_records()
-        if datetime.fromtimestamp(int(r["start_epoch"]), tz=tz).strftime("%Y-%m-%d") == date
+        if datetime.fromtimestamp(_record_date_epoch(r), tz=tz).strftime("%Y-%m-%d") == date
     ]
     rows.reverse()  # oldest-first reads like a daily log
     return {
@@ -433,7 +497,8 @@ def _require_record(rid: int) -> dict:
 
 @app.post("/api/records")
 async def api_create_record(body: RecordIn):
-    tz = config.load().get("timezone") or "UTC"
+    cfg = config.load()
+    tz = cfg.get("timezone") or "UTC"
     activity = body.activity or "feeding"
     start = _to_epoch(body.start, tz)
     if start is None:
@@ -441,10 +506,9 @@ async def api_create_record(body: RecordIn):
     if activity == "feeding":
         # For feeding, a supplied stop is the explicit end; otherwise the
         # single `start` field used by older clients is interpreted as that
-        # same end time. Persist a completed point record either way.
+        # same end time. Start is always derived from configured duration.
         end = _to_epoch(body.stop, tz) or start
-        start = end
-        stop = end
+        start, stop = _feeding_bounds(end, cfg)
     else:
         stop = _normalize_stop_epoch(start, _to_epoch(body.stop, tz))
     rid = db.create_record(
@@ -461,7 +525,8 @@ async def api_create_record(body: RecordIn):
 @app.patch("/api/records/{rid}")
 async def api_update_record(rid: int, body: RecordIn):
     existing = _require_record(rid)
-    tz = config.load().get("timezone") or "UTC"
+    cfg = config.load()
+    tz = cfg.get("timezone") or "UTC"
     provided = body.model_dump(exclude_unset=True)
 
     fields: dict = {}
@@ -492,8 +557,7 @@ async def api_update_record(rid: int, body: RecordIn):
             or existing.get("stop_epoch")
             or existing["start_epoch"]
         )
-        fields["start_epoch"] = end_epoch
-        fields["stop_epoch"] = end_epoch
+        fields["start_epoch"], fields["stop_epoch"] = _feeding_bounds(end_epoch, cfg)
     elif "start_epoch" in fields or "stop_epoch" in fields:
         start_epoch = fields.get("start_epoch", existing["start_epoch"])
         stop_epoch = fields.get("stop_epoch", existing["stop_epoch"])
@@ -572,7 +636,7 @@ async def ui_home(
     by_date: dict[str, list] = {}
     date_order: list[str] = []
     for r in all_records:
-        d = datetime.fromtimestamp(int(r["start_epoch"]), tz=tz).strftime("%Y-%m-%d")
+        d = datetime.fromtimestamp(_record_date_epoch(r), tz=tz).strftime("%Y-%m-%d")
         if d not in by_date:
             by_date[d] = []
             date_order.append(d)
@@ -673,11 +737,19 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
     cfg = config.load()
     if activity == "feeding":
         # The normal browser path opens the milk-entry dialog and posts to
-        # /records. Keep direct/form-only callers safe and end-time based too.
-        if not db.stop_active(stop_epoch=ts, activity=activity):
+        # /records. Keep direct/form-only callers fixed-duration too.
+        start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
+        active = db.get_active(activity)
+        if active:
+            db.update_record(
+                active["id"],
+                start_epoch=start_epoch,
+                stop_epoch=stop_epoch,
+            )
+        else:
             db.create_record(
-                start_epoch=ts,
-                stop_epoch=ts,
+                start_epoch=start_epoch,
+                stop_epoch=stop_epoch,
                 activity=activity,
                 device_id="web",
                 volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
@@ -711,14 +783,16 @@ async def ui_create(
     tz = cfg.get("timezone") or "UTC"
     activity = activity or "feeding"
 
-    # The current feeding dialog submits only an end time, defaulting to now,
-    # and stores it as a completed point record. Keep accepting start_time for
-    # older callers that still submit a timed record.
+    # The current feeding dialog submits only an end time, defaulting to now.
+    # Its start is always derived from the configured feeding duration. Keep
+    # accepting start_time for older/non-feeding callers.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
             raise HTTPException(400, "date and end_time required")
-        if start_time.strip():
+        if activity == "feeding":
+            start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
+        elif start_time.strip():
             start_epoch = combine_date_time(date, start_time, tz)
             if start_epoch is None:
                 raise HTTPException(400, "date and start_time required")
@@ -762,7 +836,12 @@ async def ui_bulk_save(request: Request):
             continue
         activity = (form.get(f"activity_{rid}") or "feeding").strip() or "feeding"
         existing = existing_by_id.get(rid)
-        if not start_time:
+        if activity == "feeding":
+            end_epoch = combine_date_time(date, stop_time or start_time, tz)
+            if end_epoch is None:
+                continue
+            start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
+        elif not start_time:
             # Completed point-in-time rows expose only their end time. Keep
             # the schema's two columns equal when that end is edited.
             end_epoch = combine_date_time(date, stop_time, tz)
@@ -770,10 +849,7 @@ async def ui_bulk_save(request: Request):
             stop_epoch = end_epoch
         else:
             start_epoch = combine_date_time(date, start_time, tz)
-            if activity == "feeding":
-                stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else start_epoch
-                stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
-            elif activity not in timed:
+            if activity not in timed:
                 stop_epoch = start_epoch
             else:
                 stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None

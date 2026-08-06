@@ -160,7 +160,8 @@ def list_records(
         if ids:
             qmarks = ",".join("?" * len(ids))
             rows = conn.execute(
-                f"SELECT * FROM records WHERE id IN ({qmarks}) ORDER BY start_epoch DESC",
+                f"SELECT * FROM records WHERE id IN ({qmarks}) "
+                "ORDER BY COALESCE(stop_epoch, start_epoch) DESC",
                 ids,
             ).fetchall()
         else:
@@ -169,7 +170,7 @@ def list_records(
             if activity is not None:
                 sql += " WHERE activity = ?"
                 params.append(activity)
-            sql += " ORDER BY start_epoch DESC"
+            sql += " ORDER BY COALESCE(stop_epoch, start_epoch) DESC"
             if limit is not None:
                 sql += " LIMIT ? OFFSET ?"
                 params.extend([limit, offset])
@@ -185,8 +186,10 @@ def count_records() -> int:
 
 
 def feeding_totals(start_epoch: int, stop_epoch: int) -> dict:
-    """Feeding tally over a half-open `start_epoch <= start < stop_epoch`
-    window (caller derives the bounds, e.g. local midnight to midnight).
+    """Feeding tally over a half-open end-time window.
+
+    Completed feeding records use ``stop_epoch`` because the button/dialog
+    time is their end; legacy point records fall back to ``start_epoch``.
     `feeds` counts only feedings that carry a volume, so it pairs with
     `ml` — mirrors the "N times / total ml" coupling shown in the web UI."""
     conn = get_conn()
@@ -194,7 +197,8 @@ def feeding_totals(start_epoch: int, stop_epoch: int) -> dict:
         row = conn.execute(
             "SELECT COUNT(*) AS feeds, COALESCE(SUM(volume_ml), 0) AS ml "
             "FROM records WHERE activity='feeding' AND volume_ml IS NOT NULL "
-            "AND start_epoch >= ? AND start_epoch < ?",
+            "AND COALESCE(stop_epoch, start_epoch) >= ? "
+            "AND COALESCE(stop_epoch, start_epoch) < ?",
             (start_epoch, stop_epoch),
         ).fetchone()
     return {"feeds": int(row["feeds"]), "ml": int(row["ml"])}
@@ -231,5 +235,4 @@ def set_day_note(date: str, note: str) -> None:
                 (date, text),
             )
         conn.commit()
-
 

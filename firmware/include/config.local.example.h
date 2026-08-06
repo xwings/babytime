@@ -13,6 +13,7 @@
 #define GATEWAY_TOKEN ""              // matches gateway's GATEWAY_TOKEN env, if set
 #define DEVICE_ID "bedroom"           // identifies this unit in the records
 #define GATEWAY_POLL_MS 30000         // how often to refresh state (ms)
+#define FEEDING_DURATION_MINUTES 15   // standalone/default feed duration
 
 // Optional: pin a CA root cert (PEM) when GATEWAY_URL is https. Leave it
 // undefined to use setInsecure() (TLS without verification).

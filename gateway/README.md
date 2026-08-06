@@ -48,6 +48,12 @@ default `10.0.0.0/8`. Everyone else must present the token:
   from the visible address. The cookie contains a derived credential rather
   than the raw token; changing `GATEWAY_TOKEN` invalidates it. The cookie is
   Secure, so the public link must use HTTPS.
+- **iOS Home Screen shortcuts** should use
+  `https://baby.example.com/?api=<token>&shortcut=1`. Shortcut mode keeps the
+  key in the URL instead of redirecting, so Add to Home Screen saves it and
+  each standalone launch can recreate its cookie. The page applies
+  `Referrer-Policy: no-referrer` and `Cache-Control: no-store`, but the key is
+  still visible in the shortcut and server/proxy access logs.
 - HTTP Basic remains available as a fallback: enter the token as the password
   (the username is ignored).
 
@@ -78,18 +84,19 @@ Device-facing:
 
 - `POST /api/events` — `{type: "log", device_id, timestamp_epoch?}` logs a
   completed feeding whose end time is `timestamp_epoch` (or now) and applies
-  `default_volume_ml`. If an older device left a feeding open, `log` closes it.
-  Legacy `start` / `stop` events remain accepted during upgrades. Returns the
-  new state payload.
+  `default_volume_ml`. Start is End minus `auto_stop_minutes`; an older open
+  feeding is normalized to the same duration by `log` or `stop`. Legacy events
+  remain accepted during upgrades. Returns the new state payload.
 - `GET /api/state` — returns `{active, last_feeding, today_feeds, today_ml,
-  history (last 8), server_epoch, feeding_alert}`.
+  history (last 8), server_epoch, feeding_duration_minutes, feeding_alert}`.
 
 Agent-facing:
 
 - `GET /api/records` / `POST /api/records` — list (newest-first) and create.
   For feeding, `start` is interpreted as the end time (or an explicit `stop`
-  wins) and both stored epochs are equal. Other timed activities keep their
-  start/stop bounds; a supplied stop must be within 30 minutes of start.
+  wins); the stored Start is recalculated from the configured duration. Other
+  timed activities keep their start/stop bounds; a supplied stop must be
+  within 30 minutes of start.
 - `PATCH /api/records/{id}` / `DELETE /api/records/{id}` — edit / remove.
   Edits that leave a record longer than 30 minutes are rejected.
 - `GET /api/day_notes` — `{date: note}` map of all per-day notes.
@@ -102,7 +109,8 @@ UI/admin:
 - `GET /` — web UI: records table with inline edit, a phone-sized Add-record
   dialog with compact −/milk/+ controls and one End field, per-date day-note
   field, and configuration form. End refreshes to the current gateway time
-  whenever the dialog opens.
+  whenever the dialog opens; Start is calculated on save. Feeding rows are
+  grouped by End date and expose Start as read-only.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
   actions. Timed records must stop within 30 minutes of their start.
   `POST /records/save` persists both record edits and day notes.
@@ -117,10 +125,10 @@ a daily summary.
 
 ## Auto-stop
 
-`auto_stop_minutes` caps any active session: a background loop checks once a
-minute and stops a session that has run longer than the cap (default 15;
-`0` disables). Guards against a device that started a session and dropped off
-the network without sending `stop`.
+`auto_stop_minutes` is the shared feeding duration and active-session cap. A
+web or ESP32 feeding gets `Start = End - auto_stop_minutes`. The background
+loop also checks once a minute and stops an active session that has run longer
+than that cap (default 15; `0` disables the cap and produces point feedings).
 
 ## Config keys
 
@@ -128,7 +136,7 @@ the network without sending `stop`.
 | --- | --- | --- |
 | `activity_types` | `feeding,sleep,poopoo` | comma-separated; `feeding` always first |
 | `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Feeding is handled separately by its end-time milk dialog (and by one end-time press on ESP32), so legacy `feeding` entries here are ignored |
-| `auto_stop_minutes` | `15` | auto-stop an active session after this many minutes (0 disables) |
+| `auto_stop_minutes` | `15` | feeding duration (`Start = End - minutes`) and auto-stop cap for active sessions; `0` produces point feedings and disables auto-stop |
 | `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web Feeding button blinks blue/red, and the device display blinks a red background. `0` disables |
 | `default_volume_ml` | `` | pre-fills the web milk dialog and is attached to a feeding logged from an ESP32 button |
 | `default_language` | `en` | UI language (`en`/`zh`) for browsers without a `lang` cookie; the per-browser switch still overrides it |

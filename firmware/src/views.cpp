@@ -140,6 +140,13 @@ const char* historyHint() {
   return "K1 next";
 }
 
+time_t recordDayEpoch(const FeedSession& session) {
+  if (session.stopEpoch != 0 && strcmp(session.activity, "feeding") == 0) {
+    return session.stopEpoch;
+  }
+  return session.startEpoch;
+}
+
 }  // namespace
 
 // ---- Public ----------------------------------------------------------------
@@ -262,10 +269,13 @@ void drawHistoryScreen() {
       const FeedSession& s = feedHistory[idx];
       struct tm tmStart;
       localtime_r(&s.startEpoch, &tmStart);
+      time_t dayEpoch = recordDayEpoch(s);
+      struct tm tmDay;
+      localtime_r(&dayEpoch, &tmDay);
 
       char dateStr[16];
       snprintf(dateStr, sizeof(dateStr), "%04d-%02d-%02d",
-               tmStart.tm_year + 1900, tmStart.tm_mon + 1, tmStart.tm_mday);
+               tmDay.tm_year + 1900, tmDay.tm_mon + 1, tmDay.tm_mday);
       if (strcmp(dateStr, prevDate) != 0) {
         if (y + lineH > maxY) break;
         d.drawText(14, y, dateStr, {hal::COLOR_YELLOW, FontFamily::Ascii, 2});
@@ -275,7 +285,8 @@ void drawHistoryScreen() {
         for (size_t j = i; j < feedHistoryCount; j++) {
           size_t jdx = (feedHistoryHead + HISTORY_SIZE - 1 - j) % HISTORY_SIZE;
           struct tm tmJ;
-          localtime_r(&feedHistory[jdx].startEpoch, &tmJ);
+          time_t jDayEpoch = recordDayEpoch(feedHistory[jdx]);
+          localtime_r(&jDayEpoch, &tmJ);
           char ds[16];
           snprintf(ds, sizeof(ds), "%04d-%02d-%02d",
                    tmJ.tm_year + 1900, tmJ.tm_mon + 1, tmJ.tm_mday);

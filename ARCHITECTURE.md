@@ -15,7 +15,8 @@ headers are fixed (verification is grep-based).
 
 A baby-feeding tracker firmware that runs on one of two ESP32 boards
 today. One button/touch logs a completed feeding, using the press as
-its end time; the device shows a live clock + last-fed counter + recent
+its end time and the configured duration to derive Start; the device shows a
+live clock + last-fed counter + recent
 history on its LCD and runs untethered.
 
 An optional Docker gateway turns the device into a multi-room

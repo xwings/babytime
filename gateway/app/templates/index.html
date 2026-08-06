@@ -343,14 +343,15 @@
             <td>
               <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check">
               <input type="hidden" name="date_{{ r.id }}"
-                     value="{{ r.start_epoch | localdate_input(tz) }}">
+                     value="{{ ((r.stop_epoch or r.start_epoch) if r.activity == 'feeding' else r.start_epoch) | localdate_input(tz) }}">
             </td>
             <td data-label="{{ t('col_start') }}">
               {% if is_point_record %}
               <span class="instant-dash">—</span>
               {% else %}
               <input type="time" name="start_time_{{ r.id }}"
-                     value="{{ r.start_epoch | localtime_only(tz) }}" required>
+                     value="{{ r.start_epoch | localtime_only(tz) }}" required
+                     {% if r.activity == 'feeding' %}readonly{% endif %}>
               {% endif %}
             </td>
             <td data-label="{{ t('col_end_time') }}">
@@ -450,13 +451,16 @@
       });
     });
 
-    // ml is only meaningful for feeding: disable + show "--" otherwise.
+    // Feeding owns ml and has a server-derived, read-only Start.
     document.querySelectorAll('.activity-select').forEach(sel => {
-      const ml = sel.closest('tr')?.querySelector('.ml-input');
+      const row = sel.closest('tr');
+      const ml = row?.querySelector('.ml-input');
+      const start = row?.querySelector('input[name^="start_time_"]');
       if (!ml) return;
       function sync() {
         const feeding = sel.value === 'feeding';
         ml.disabled = !feeding;
+        if (start) start.readOnly = feeding;
         if (feeding) {
           ml.placeholder = '';
         } else {
@@ -480,7 +484,7 @@
       for (const row of document.querySelectorAll('.records-table tbody tr')) {
         const checked = row.querySelector('.row-check')?.checked;
         const select = row.querySelector('.activity-select');
-        const timed = select?.value === 'feeding' || select?.selectedOptions?.[0]?.dataset.timed === '1';
+        const timed = select?.value !== 'feeding' && select?.selectedOptions?.[0]?.dataset.timed === '1';
         if (!checked || !timed) continue;
         if (!validateDuration(
           row.querySelector('input[name^="start_time_"]'),

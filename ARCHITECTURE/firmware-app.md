@@ -12,9 +12,9 @@ Infrastructure under every feature; no milestone gate.
 
 ## Status
 
-`done`. Behaviour identical to the pre-HAL firmware on DNESP32S3B —
-this file describes the post-refactor split, not a feature change.
-ESP32-P4-7B inherits this layer unchanged; the touch redesign in
+`done`. The post-HAL app keeps the same board-independent behavior, with
+completed feedings now represented as configured-duration sessions ending at
+the button time. ESP32-P4-7B inherits this layer unchanged; the touch redesign in
 Phase B will swap which screen layouts the view orchestrator picks,
 not what app state exists.
 
@@ -26,7 +26,7 @@ not what app state exists.
 | `firmware/src/state.h` | Shared types + extern globals (history ring, active counter, mutex) and time/string helpers |
 | `firmware/src/views.h` | View functions: `drawStatus`, `drawClockScreen`, `drawCounter`, `drawHistoryScreen`, `redrawCurrentView` |
 | `firmware/src/views.cpp` | View implementations against `hal::Display`; seven-segment renderer; layout derived from `display.width()/height()` |
-| `firmware/include/config.h` | Wi-Fi SSID/pass, `GATEWAY_URL`, `GATEWAY_TOKEN`, `DEVICE_ID`, NTP offsets (overridden by `config.local.h`) |
+| `firmware/include/config.h` | Wi-Fi SSID/pass, `GATEWAY_URL`, `GATEWAY_TOKEN`, `DEVICE_ID`, standalone `FEEDING_DURATION_MINUTES`, NTP offsets (overridden by `config.local.h`) |
 
 ## Key Types and Entry Points
 
@@ -40,12 +40,12 @@ not what app state exists.
 - `firmware/src/main.cpp:99` — `setCounter` — flips view to `VIEW_COUNTER` and paints.
 - `firmware/src/main.cpp:122` — `HttpSession` + `beginHttp` — TLS-aware `HTTPClient` factory.
 - `firmware/src/main.cpp:145` — `gatewayPostEvent` — POST `/api/events`.
-- `firmware/src/main.cpp:161` — `applyGatewayState` — reconciles local state from `/api/state`; **skips reconciliation while `pendingCount > 0`** so optimistic local edits aren't clobbered by stale server truth. Fills the history ring from `history` (all activities, incl. `activity`/`volume_ml`), caches `today_feeds`/`today_ml` and `feeding_alert`, then drives the live counter: open feeding (`active`) → "Feeding now"; else `last_feeding.stop_epoch` (→ `lastFeedingStop`) → "Last fed" or "Time to feed?" when the alert is due.
+- `firmware/src/main.cpp` — `applyGatewayState` — reconciles local state from `/api/state`; **skips reconciliation while `pendingCount > 0`** so optimistic local edits aren't clobbered by stale server truth. Fills the history ring, caches `today_feeds`/`today_ml`, `feeding_alert`, and `feeding_duration_minutes`, then drives the live counter. Gateway duration overrides the build-time 15-minute default for later button presses.
 - `firmware/src/main.cpp:242` — `gatewayFetchState`.
 - `firmware/src/main.cpp:259` — `drainPendingQueue` — POST + pop loop.
 - `firmware/src/main.cpp:280` — `gatewayTask` — Core 0 RTOS body; cadence = `GATEWAY_POLL_MS` (30 s).
 - `firmware/src/main.cpp:292` — `cycleView` (PrimaryAction handler).
-- `firmware/src/main.cpp:302` — `logFeedingEnd` (SecondaryAction handler): one press records a completed feeding at that end time and queues a `log` event; it never starts a session.
+- `firmware/src/main.cpp` — `logFeedingEnd` (SecondaryAction handler): one press records End at the current device time, derives Start from the latest gateway duration (or standalone default), and queues a `log` event; it never starts a session.
 - `firmware/src/main.cpp:325` — `updateCounter` / `updateClockScreen` / `updateAlertBlink` — 500 ms tickers driving live redraws and the history-screen alert blink.
 - `firmware/src/main.cpp:348` — `updateIdleViewSwitch` — when feeding is idle and a completed feeding exists, automatically alternates Clock and Last fed counter views every 5 seconds; History and active-feeding counters are left under explicit user/action control.
 - `firmware/src/main.cpp:394` — `connectWiFi` + NTP server lists.
@@ -55,7 +55,7 @@ not what app state exists.
 - `firmware/src/views.cpp:147` — `drawStatus`.
 - `firmware/src/views.cpp:156` — `drawClockScreen` — time + date + IP + gateway online indicator (`CLOCK_DIGITS`); when `feedingAlertDue`, the header reads "Time to feed?" and the background alternates dark red/black.
 - `firmware/src/views.cpp:195` — `drawCounter` — centered ASCII title + CJK subtitle + size-2 today's-feeding tally (`todayFeeds`/`todayMl`) + smaller `COUNTER_DIGITS` big digits + timestamp.
-- `firmware/src/views.cpp:246` — `drawHistoryScreen` ("Activity") — date-grouped; point records show their single end time while legacy/timed sessions show `start-stop`; the date header carries the day's feeding-volume total (right-aligned ml).
+- `firmware/src/views.cpp` — `drawHistoryScreen` ("Activity") — date-grouped by feeding End and other-record Start; fixed-duration feedings and timed sessions show `start-stop`, while legacy point records show one time. The date header carries the day's feeding-volume total.
 - `firmware/src/views.cpp:320` — `redrawCurrentView` — view-state machine.
 
 ## Interactions
@@ -81,8 +81,9 @@ not what app state exists.
   `DHCP ok, IP=`, `NTP ok via <server>`, then `Gateway mode -> ...`
   (or `Standalone mode` when `GATEWAY_URL` is empty).
 - On hardware: K1 cycles view; one K2 press logs the feeding end and
-  the Last fed counter appears with a live 500 ms tick. Clock and Last
-  fed then alternate every 5 seconds while idle.
+  stores Start 15 minutes earlier by default; the Last fed counter appears
+  with a live 500 ms tick. Clock and Last fed then alternate every 5 seconds
+  while idle.
 
 ## Open Gaps / Roadmap
 

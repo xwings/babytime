@@ -59,7 +59,8 @@ docker compose up -d --build
 Open <http://localhost:8080/>. One page: records table with inline edit, a
 phone-friendly Add-record screen, per-date day-note fields, and the
 configuration form. A feeding asks for the milk amount and an end time that
-defaults to the current time. Set
+defaults to the current time; Start is calculated as End minus
+`auto_stop_minutes` (15 minutes by default). Set
 `feeding_alert_minutes` there to blink the top Feeding button and device
 display after the last feeding is that many minutes old (`120` by default).
 Set
@@ -68,12 +69,16 @@ Set
 skip auth. For simple remote browser access, share the HTTPS link
 `https://baby.example.com/?api=<token>` once. It signs that browser in for one
 year and redirects to a clean URL; changing the token signs those browsers
-out. Leave the token empty to trust everyone.
+out. For an iOS Home Screen icon, open
+`https://baby.example.com/?api=<token>&shortcut=1` before choosing Add to Home
+Screen; this intentionally preserves the key in the saved address. Leave the
+token empty to trust everyone.
 
 ## Buttons
 
-- **K2** — log a completed feeding. The press time is its end time; in gateway
-  mode the configured `default_volume_ml` is attached automatically.
+- **K2** — log a completed feeding. The press time is its end time and Start
+  is the configured duration earlier; in gateway mode the configured
+  `default_volume_ml` is attached automatically.
 - **K1** — cycle Clock → History → Counter views.
 
 After a feeding is logged, the firmware alternates the Clock and Last fed
