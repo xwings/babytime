@@ -11,7 +11,7 @@
          data-activity-log-label="{{ t('activity_log_btn') }}">
   {% for a in activities %}
   {% set s = active_map.get(a) %}
-  {% set opens_record_dialog = a in ['feeding', 'sleep', 'poopoo'] and not s %}
+  {% set opens_record_dialog = a == 'poopoo' or (a in ['feeding', 'sleep'] and not s) %}
   <form method="post" action="/ui/activity" class="activity-form">
     <input type="hidden" name="activity" value="{{ a }}">
     <button type="{{ 'button' if opens_record_dialog else 'submit' }}"
@@ -430,19 +430,19 @@
                      value="{{ ((r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'poopoo'] else r.start_epoch) | localdate_input(tz) }}">
             </td>
             <td data-label="{{ t('col_start') }}">
-              {% if is_point_record %}
+              {% if is_point_record or r.activity == 'poopoo' %}
               <span class="instant-dash">—</span>
               {% else %}
               <input type="time" name="start_time_{{ r.id }}"
                      value="{{ r.start_epoch | localtime_only(tz) }}" required
-                     {% if r.activity in ['feeding', 'poopoo'] %}readonly{% endif %}>
+                     {% if r.activity == 'feeding' %}readonly{% endif %}>
               {% endif %}
             </td>
             <td data-label="{{ t('col_end_time') }}">
               <input type="time" name="stop_time_{{ r.id }}"
                      value="{{ ((r.stop_epoch or r.start_epoch) | localtime_only(tz)) if (r.stop_epoch or r.activity not in timed) else '' }}">
             </td>
-            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity in ['feeding', 'sleep', 'poopoo']) and not is_point_record else '—' }}</td>
+            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity in ['feeding', 'sleep']) and not is_point_record else '—' }}</td>
             <td data-label="{{ t('col_ml') }}">
               <input type="number" name="volume_ml_{{ r.id }}" min="0" step="1"
                      class="ml-input"
@@ -535,7 +535,7 @@
       });
     });
 
-    // Feeding owns ml; Feeding and Poopoo have server-derived Starts.
+    // Feeding owns ml and has a server-derived, read-only Start.
     document.querySelectorAll('.activity-select').forEach(sel => {
       const row = sel.closest('tr');
       const ml = row?.querySelector('.ml-input');
@@ -543,9 +543,8 @@
       if (!ml) return;
       function sync() {
         const feeding = sel.value === 'feeding';
-        const derivedStart = ['feeding', 'poopoo'].includes(sel.value);
         ml.disabled = !feeding;
-        if (start) start.readOnly = derivedStart;
+        if (start) start.readOnly = feeding;
         if (feeding) {
           ml.placeholder = '';
         } else {

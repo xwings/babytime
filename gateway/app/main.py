@@ -29,7 +29,6 @@ from .util import zoneinfo
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "").strip()
 MAX_RECORD_DURATION_SECONDS = 30 * 60
 MAX_SLEEP_DURATION_SECONDS = 24 * 60 * 60
-POOPOO_DURATION_SECONDS = 5 * 60
 _BROWSER_AUTH_COOKIE = "babytime_access"
 _BROWSER_AUTH_MAX_AGE = 365 * 24 * 60 * 60
 _BROWSER_AUTH_CONTEXT = b"babytime-browser-access-v1"
@@ -152,11 +151,6 @@ def _feeding_bounds(end_epoch: int, cfg: dict) -> tuple[int, int]:
     """Return the configured fixed-duration feeding ending at ``end_epoch``."""
     duration_seconds = config.feeding_duration_minutes(cfg) * 60
     return max(0, end_epoch - duration_seconds), end_epoch
-
-
-def _poopoo_bounds(end_epoch: int) -> tuple[int, int]:
-    """Return the fixed five-minute Poopoo interval ending at ``end_epoch``."""
-    return max(0, end_epoch - POOPOO_DURATION_SECONDS), end_epoch
 
 
 def _poopoo_notes(
@@ -449,13 +443,10 @@ async def api_post_event(event: EventIn):
                 volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
             )
     elif event.type == "stop":
-        if event.activity in {"feeding", "poopoo"}:
+        if event.activity == "feeding":
             active = db.get_active(event.activity)
             if active:
-                if event.activity == "feeding":
-                    start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
-                else:
-                    start_epoch, stop_epoch = _poopoo_bounds(ts)
+                start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
                 db.update_record(
                     active["id"],
                     start_epoch=start_epoch,
@@ -466,13 +457,10 @@ async def api_post_event(event: EventIn):
     else:
         # Current devices send one `log` event when a feed has finished. If
         # an older client left a session open, normalize it to the configured
-        # duration too. For end-time activities, the press is always End.
+        # duration too. For Feeding, the press is always End.
         active = db.get_active(event.activity)
-        if event.activity in {"feeding", "poopoo"}:
-            if event.activity == "feeding":
-                start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
-            else:
-                start_epoch, stop_epoch = _poopoo_bounds(ts)
+        if event.activity == "feeding":
+            start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
             if active:
                 db.update_record(
                     active["id"],
@@ -487,6 +475,15 @@ async def api_post_event(event: EventIn):
                     device_id=event.device_id,
                     volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
                 )
+        elif event.activity == "poopoo":
+            # Every Poopoo log is independent; do not close or reuse an older
+            # open record.
+            db.create_record(
+                start_epoch=ts,
+                stop_epoch=ts,
+                activity=event.activity,
+                device_id=event.device_id,
+            )
         elif active:
             db.stop_active(stop_epoch=ts, activity=event.activity)
         else:
@@ -572,14 +569,14 @@ async def api_create_record(body: RecordIn):
     start = _to_epoch(body.start, tz)
     if start is None:
         raise HTTPException(400, "start is required")
-    if activity in {"feeding", "poopoo"}:
+    if activity == "feeding":
         # A supplied stop is explicit End; otherwise the older single `start`
-        # field is interpreted as End. Start is always derived.
+        # field is interpreted as End. Start is derived from configured duration.
         end = _to_epoch(body.stop, tz) or start
-        if activity == "feeding":
-            start, stop = _feeding_bounds(end, cfg)
-        else:
-            start, stop = _poopoo_bounds(end)
+        start, stop = _feeding_bounds(end, cfg)
+    elif activity == "poopoo":
+        end = _to_epoch(body.stop, tz) or start
+        start = stop = end
     else:
         stop = _normalize_stop_epoch(start, _to_epoch(body.stop, tz), activity)
     rid = db.create_record(
@@ -631,7 +628,7 @@ async def api_update_record(rid: int, body: RecordIn):
         if effective_activity == "feeding":
             fields["start_epoch"], fields["stop_epoch"] = _feeding_bounds(end_epoch, cfg)
         else:
-            fields["start_epoch"], fields["stop_epoch"] = _poopoo_bounds(end_epoch)
+            fields["start_epoch"] = fields["stop_epoch"] = end_epoch
     elif "start_epoch" in fields or "stop_epoch" in fields:
         start_epoch = fields.get("start_epoch", existing["start_epoch"])
         stop_epoch = fields.get("stop_epoch", existing["stop_epoch"])
@@ -741,11 +738,11 @@ async def ui_home(
 
     activities = config.activity_list(cfg)
     timed = config.timed_activities(cfg)
-    # End-time activities are point-in-time now, but surface and close any
-    # session left open by an older browser/device during an upgrade.
+    # Surface legacy open Feeding/Sleep sessions so they can be closed.
+    # Poopoo deliberately ignores old sessions and always opens its popup.
     active_map = {
         a: s for a in activities
-        if (a in timed or a in {"feeding", "sleep", "poopoo"})
+        if (a in timed or a in {"feeding", "sleep"})
         and (s := db.get_active(a))
     }
     last_fed = next(
@@ -836,23 +833,14 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
                 volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
             )
     elif activity == "poopoo":
-        # The browser normally uses the popup. Keep direct/form-only callers
-        # fixed-duration and normalize any legacy active session as well.
-        start_epoch, stop_epoch = _poopoo_bounds(ts)
-        active = db.get_active(activity)
-        if active:
-            db.update_record(
-                active["id"],
-                start_epoch=start_epoch,
-                stop_epoch=stop_epoch,
-            )
-        else:
-            db.create_record(
-                start_epoch=start_epoch,
-                stop_epoch=stop_epoch,
-                activity=activity,
-                device_id="web",
-            )
+        # The browser normally uses the popup. A direct call still creates a
+        # new independent point record and ignores any older active record.
+        db.create_record(
+            start_epoch=ts,
+            stop_epoch=ts,
+            activity=activity,
+            device_id="web",
+        )
     elif activity not in config.timed_activities(cfg):
         # Instant event: log a single closed timestamp (start == stop) so it
         # never looks like an open session to the device, scheduler, or UI.
@@ -886,9 +874,9 @@ async def ui_create(
     tz = cfg.get("timezone") or "UTC"
     activity = activity or "feeding"
 
-    # Feeding and Poopoo derive Start from fixed durations. Sleep's dialog
-    # accepts an explicit HH:MM duration. All three treat the supplied time as
-    # End; keep accepting start_time for older/non-dialog callers.
+    # Feeding derives Start from a fixed duration. Sleep accepts an explicit
+    # HH:MM duration. Poopoo is an independent point record. All three treat
+    # the supplied time as End; keep accepting start_time for older callers.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
@@ -896,7 +884,7 @@ async def ui_create(
         if activity == "feeding":
             start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
         elif activity == "poopoo":
-            start_epoch, stop_epoch = _poopoo_bounds(end_epoch)
+            start_epoch = stop_epoch = end_epoch
         elif activity == "sleep" and not start_time.strip():
             stop_epoch = end_epoch
             start_epoch = end_epoch - _duration_hhmm_seconds(duration)
@@ -952,14 +940,16 @@ async def ui_bulk_save(request: Request):
             continue
         activity = (form.get(f"activity_{rid}") or "feeding").strip() or "feeding"
         existing = existing_by_id.get(rid)
-        if activity in {"feeding", "poopoo"}:
+        if activity == "feeding":
             end_epoch = combine_date_time(date, stop_time or start_time, tz)
             if end_epoch is None:
                 continue
-            if activity == "feeding":
-                start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
-            else:
-                start_epoch, stop_epoch = _poopoo_bounds(end_epoch)
+            start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
+        elif activity == "poopoo":
+            end_epoch = combine_date_time(date, stop_time or start_time, tz)
+            if end_epoch is None:
+                continue
+            start_epoch = stop_epoch = end_epoch
         elif not start_time:
             # Completed point-in-time rows expose only their end time. Keep
             # the schema's two columns equal when that end is edited.
