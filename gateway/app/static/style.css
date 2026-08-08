@@ -225,7 +225,7 @@ section h2 {
 }
 
 .records-table .notes-input {
-  min-width: 7rem;
+  min-width: 10rem;
 }
 
 /* Drop the number-input spinner on compact amount fields. */
@@ -239,17 +239,26 @@ section h2 {
   margin: 0;
 }
 
-/* Desktop column sizing (mobile uses the two-row grid below). Reserve enough
-   room for a 4-5 digit amount plus its ml/g unit, while keeping Notes compact.
-   `nth-child(5)`/`(7)` match the fixed amount/activity/notes column order. */
+/* Desktop column sizing (mobile uses the two-row grid below). Keep Start/End
+   compact, reserve room for a 4-5 digit amount plus ml/g, and give Notes the
+   remaining editing space. */
 @media (min-width: 641px) {
+  .records-table th:nth-child(2),
+  .records-table td:nth-child(2),
+  .records-table th:nth-child(3),
+  .records-table td:nth-child(3) { width: 6.25rem; }
+  .records-table td:nth-child(2) input[type=time],
+  .records-table td:nth-child(3) input[type=time] {
+    min-width: 5.5rem;
+    max-width: 5.75rem;
+  }
   .records-table th:nth-child(5),
   .records-table td:nth-child(5) { width: 7.5rem; }
   /* min-width gives amount a firm floor so Notes cannot squeeze
      it; without it `max-width` alone collapses the field to min-content. */
   .records-table input[type=number].ml-input { min-width: 4rem; max-width: 5rem; }
   .records-table th:nth-child(7),
-  .records-table td:nth-child(7) { width: 11rem; }
+  .records-table td:nth-child(7) { width: 16rem; }
 }
 
 .record-amount-field {
@@ -896,7 +905,7 @@ code {
   .records-table tbody { display: block; width: 100%; }
   .records-table tr {
     display: grid;
-    grid-template-columns: auto 1.25fr 1fr 1fr;
+    grid-template-columns: auto 1.2fr 0.9fr 1.3fr;
     align-items: center;
     gap: 0.3rem 0.5rem;
     border: 1px solid var(--border);
@@ -923,6 +932,8 @@ code {
   .records-table td:nth-child(7) { grid-area: 2 / 4; }
   .records-table td input,
   .records-table td select { width: 100%; min-width: 0; flex: 1; }
+  .records-table td:nth-child(2) input[type=time],
+  .records-table td:nth-child(3) input[type=time] { max-width: 5.5rem; }
   .records-table .notes-input { min-width: 0; }
   .row-check { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; }
 
