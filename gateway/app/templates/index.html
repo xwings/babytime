@@ -11,11 +11,12 @@
          data-activity-log-label="{{ t('activity_log_btn') }}">
   {% for a in activities %}
   {% set s = active_map.get(a) %}
+  {% set opens_record_dialog = a in ['feeding', 'sleep'] and not s %}
   <form method="post" action="/ui/activity" class="activity-form">
     <input type="hidden" name="activity" value="{{ a }}">
-    <button type="{{ 'button' if a == 'feeding' and not s else 'submit' }}"
+    <button type="{{ 'button' if opens_record_dialog else 'submit' }}"
             data-activity="{{ a }}"
-            {% if a == 'feeding' and not s %}data-open-record-dialog="feeding"{% endif %}
+            {% if opens_record_dialog %}data-open-record-dialog="{{ a }}"{% endif %}
             class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if a == 'feeding' and feeding_alert.due else '' }}">
       <span class="activity-name">{{ al(a) }}</span>
       {% if s %}
@@ -25,7 +26,7 @@
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_log_btn') if a == 'feeding' or a not in timed else t('activity_start_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_log_btn') if a in ['feeding', 'sleep'] or a not in timed else t('activity_start_btn') }}</span>
       {% endif %}
     </button>
   </form>
@@ -200,7 +201,7 @@
     </div>
     <div class="record-dialog-body">
       <input type="hidden" name="activity" value="feeding">
-      <label class="milk-volume-field">
+      <label class="milk-volume-field" data-feeding-dialog-field>
         <span>{{ t('milk_amount') }}</span>
         <span class="milk-volume-stepper">
           <button type="button" data-volume-step="-10"
@@ -222,6 +223,11 @@
         <label>{{ t('col_end_time') }}
           <input type="time" name="end_time" value="{{ now_time }}" required>
         </label>
+        <label class="is-hidden" data-sleep-dialog-field>{{ t('duration_hhmm') }}
+          <input type="text" name="duration" inputmode="numeric" autocomplete="off"
+                 placeholder="HH:MM" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
+                 data-duration-invalid="{{ t('duration_hhmm_invalid') }}" disabled>
+        </label>
       </div>
     </div>
     <div class="record-dialog-actions">
@@ -235,7 +241,11 @@
   (function () {
     const dialog = document.getElementById('add-record-dialog');
     const form = dialog?.querySelector('.record-dialog-form');
+    const activity = form?.querySelector('input[name="activity"]');
+    const milkField = form?.querySelector('[data-feeding-dialog-field]');
+    const sleepField = form?.querySelector('[data-sleep-dialog-field]');
     const volume = form?.querySelector('input[name="volume_ml"]');
+    const duration = form?.querySelector('input[name="duration"]');
     const renderedAt = Date.now();
     const renderedWallTime = new Date(
       (dialog?.dataset.nowDate || '') + 'T' + (dialog?.dataset.nowTime || '00:00') + ':00'
@@ -256,23 +266,49 @@
       if (endTime) endTime.value = twoDigits(now.getHours()) + ':' + twoDigits(now.getMinutes());
     }
 
-    function openDialog() {
+    function setDialogMode(mode) {
+      const isFeeding = mode === 'feeding';
+      if (activity) activity.value = mode;
+      milkField?.classList.toggle('is-hidden', !isFeeding);
+      sleepField?.classList.toggle('is-hidden', isFeeding);
+      if (volume) {
+        volume.disabled = !isFeeding;
+        volume.required = isFeeding;
+      }
+      if (duration) {
+        duration.disabled = isFeeding;
+        duration.required = !isFeeding;
+        duration.setCustomValidity('');
+      }
+    }
+
+    function openDialog(mode) {
       if (!dialog || !form) return;
       form.reset();
+      setDialogMode(mode);
       refreshDateTime();
       if (typeof dialog.showModal === 'function') dialog.showModal();
       else dialog.setAttribute('open', '');
-      volume?.focus();
+      (mode === 'feeding' ? volume : duration)?.focus();
     }
 
-    document.querySelector('.activity-form input[value="feeding"]')
-      ?.closest('.activity-form')
-      ?.addEventListener('click', event => {
-        const opener = event.target.closest('[data-open-record-dialog="feeding"]');
-        if (!opener) return;
+    document.addEventListener('click', event => {
+      const opener = event.target.closest('[data-open-record-dialog]');
+      if (!opener) return;
+      event.preventDefault();
+      openDialog(opener.dataset.openRecordDialog || 'feeding');
+    });
+    form?.addEventListener('submit', event => {
+      if (activity?.value !== 'sleep' || !duration) return;
+      const valid = /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(duration.value) &&
+        duration.value !== '00:00';
+      duration.setCustomValidity(valid ? '' : (duration.dataset.durationInvalid || 'Use HH:MM'));
+      if (!valid) {
         event.preventDefault();
-        openDialog();
-      });
+        duration.reportValidity();
+      }
+    });
+    duration?.addEventListener('input', () => duration.setCustomValidity(''));
     form?.querySelectorAll('[data-volume-step]').forEach(button => {
       button.addEventListener('click', () => {
         const current = parseInt(volume.value || '0', 10) || 0;
@@ -349,7 +385,7 @@
               <input type="time" name="stop_time_{{ r.id }}"
                      value="{{ ((r.stop_epoch or r.start_epoch) | localtime_only(tz)) if (r.stop_epoch or r.activity not in timed) else '' }}">
             </td>
-            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity == 'feeding') and not is_point_record else '—' }}</td>
+            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity in ['feeding', 'sleep']) and not is_point_record else '—' }}</td>
             <td data-label="{{ t('col_ml') }}">
               <input type="number" name="volume_ml_{{ r.id }}" min="0" step="1"
                      class="ml-input"
@@ -475,8 +511,9 @@
       for (const row of document.querySelectorAll('.records-table tbody tr')) {
         const checked = row.querySelector('.row-check')?.checked;
         const select = row.querySelector('.activity-select');
-        const timed = select?.value !== 'feeding' && select?.selectedOptions?.[0]?.dataset.timed === '1';
-        if (!checked || !timed) continue;
+        const cappedTimed = !['feeding', 'sleep'].includes(select?.value) &&
+          select?.selectedOptions?.[0]?.dataset.timed === '1';
+        if (!checked || !cappedTimed) continue;
         if (!validateDuration(
           row.querySelector('input[name^="start_time_"]'),
           row.querySelector('input[name^="stop_time_"]')

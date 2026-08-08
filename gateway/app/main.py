@@ -3,6 +3,7 @@ import base64
 import hmac
 import ipaddress
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -27,6 +28,7 @@ from .util import zoneinfo
 
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "").strip()
 MAX_RECORD_DURATION_SECONDS = 30 * 60
+MAX_SLEEP_DURATION_SECONDS = 24 * 60 * 60
 _BROWSER_AUTH_COOKIE = "babytime_access"
 _BROWSER_AUTH_MAX_AGE = 365 * 24 * 60 * 60
 _BROWSER_AUTH_CONTEXT = b"babytime-browser-access-v1"
@@ -56,14 +58,13 @@ def filter_localtime_only(epoch: Optional[int], tz_name: str = "UTC") -> str:
 
 
 def filter_duration(start: Optional[int], stop: Optional[int]) -> str:
-    if not start or not stop:
+    if start is None or stop is None:
         return ""
     d = int(stop) - int(start)
     if d < 0:
         d = 0
-    if d >= 3600:
-        return f"{d // 3600}h {(d % 3600) // 60}m"
-    return f"{d // 60}m"
+    total_minutes = d // 60
+    return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
 
 
 templates.env.filters["localtime"] = filter_localtime
@@ -109,15 +110,41 @@ def _to_epoch(value, tz_name: str = "UTC") -> Optional[int]:
     return int(dt.timestamp())
 
 
-def _normalize_stop_epoch(start_epoch: int, stop_epoch: Optional[int]) -> Optional[int]:
+def _normalize_stop_epoch(
+    start_epoch: int,
+    stop_epoch: Optional[int],
+    activity: str = "",
+) -> Optional[int]:
     if stop_epoch is None:
         return None
     if stop_epoch < start_epoch:
         stop_epoch += 86400  # session crossed midnight
     duration = stop_epoch - start_epoch
-    if duration > MAX_RECORD_DURATION_SECONDS:
-        raise HTTPException(400, "stop time must be within 30 minutes of start time")
+    max_seconds = (
+        MAX_SLEEP_DURATION_SECONDS if activity == "sleep" else MAX_RECORD_DURATION_SECONDS
+    )
+    if duration > max_seconds:
+        max_minutes = max_seconds // 60
+        raise HTTPException(
+            400,
+            f"stop time must be within {max_minutes} minutes of start time",
+        )
     return stop_epoch
+
+
+_DURATION_HHMM_RE = re.compile(r"^(?:[01][0-9]|2[0-3]):[0-5][0-9]$")
+
+
+def _duration_hhmm_seconds(value: str) -> int:
+    """Parse a positive sleep duration written as ``HH:MM``."""
+    value = (value or "").strip()
+    if not _DURATION_HHMM_RE.fullmatch(value):
+        raise HTTPException(400, "duration must use HH:MM (for example, 08:30)")
+    hours, minutes = (int(part) for part in value.split(":"))
+    seconds = (hours * 60 + minutes) * 60
+    if seconds <= 0:
+        raise HTTPException(400, "duration must be greater than 00:00")
+    return seconds
 
 
 def _feeding_bounds(end_epoch: int, cfg: dict) -> tuple[int, int]:
@@ -449,10 +476,13 @@ async def api_list_records(limit: int = 100, date: Optional[str] = None):
 def _record_date_epoch(record: dict) -> int:
     """Timestamp used to place a record on a calendar day.
 
-    Feeding is logged by its end time; other session types retain their
-    historical start-time grouping.
+    Feeding and sleep are logged by end time; other session types retain
+    their historical start-time grouping.
     """
-    if record.get("activity") == "feeding" and record.get("stop_epoch") is not None:
+    if (
+        record.get("activity") in {"feeding", "sleep"}
+        and record.get("stop_epoch") is not None
+    ):
         return int(record["stop_epoch"])
     return int(record["start_epoch"])
 
@@ -510,7 +540,7 @@ async def api_create_record(body: RecordIn):
         end = _to_epoch(body.stop, tz) or start
         start, stop = _feeding_bounds(end, cfg)
     else:
-        stop = _normalize_stop_epoch(start, _to_epoch(body.stop, tz))
+        stop = _normalize_stop_epoch(start, _to_epoch(body.stop, tz), activity)
     rid = db.create_record(
         start_epoch=start,
         stop_epoch=stop,
@@ -561,7 +591,11 @@ async def api_update_record(rid: int, body: RecordIn):
     elif "start_epoch" in fields or "stop_epoch" in fields:
         start_epoch = fields.get("start_epoch", existing["start_epoch"])
         stop_epoch = fields.get("stop_epoch", existing["stop_epoch"])
-        fields["stop_epoch"] = _normalize_stop_epoch(start_epoch, stop_epoch)
+        fields["stop_epoch"] = _normalize_stop_epoch(
+            start_epoch,
+            stop_epoch,
+            effective_activity,
+        )
 
     db.update_record(rid, **fields)
     return _require_record(rid)
@@ -667,7 +701,7 @@ async def ui_home(
     # open by an older browser/device during an upgrade.
     active_map = {
         a: s for a in activities
-        if (a in timed or a == "feeding") and (s := db.get_active(a))
+        if (a in timed or a in {"feeding", "sleep"}) and (s := db.get_active(a))
     }
     last_fed = next(
         (r for r in all_records
@@ -773,6 +807,7 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
 async def ui_create(
     date: str = Form(...),
     end_time: str = Form(""),
+    duration: str = Form(""),
     start_time: str = Form(""),
     stop_time: str = Form(""),
     volume_ml: str = Form(""),
@@ -783,20 +818,23 @@ async def ui_create(
     tz = cfg.get("timezone") or "UTC"
     activity = activity or "feeding"
 
-    # The current feeding dialog submits only an end time, defaulting to now.
-    # Its start is always derived from the configured feeding duration. Keep
-    # accepting start_time for older/non-feeding callers.
+    # Feeding derives Start from its configured fixed duration. Sleep's dialog
+    # accepts an explicit HH:MM duration and derives Start from the supplied
+    # End. Keep accepting start_time for older/non-dialog callers.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
             raise HTTPException(400, "date and end_time required")
         if activity == "feeding":
             start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
+        elif activity == "sleep" and not start_time.strip():
+            stop_epoch = end_epoch
+            start_epoch = end_epoch - _duration_hhmm_seconds(duration)
         elif start_time.strip():
             start_epoch = combine_date_time(date, start_time, tz)
             if start_epoch is None:
                 raise HTTPException(400, "date and start_time required")
-            stop_epoch = _normalize_stop_epoch(start_epoch, end_epoch)
+            stop_epoch = _normalize_stop_epoch(start_epoch, end_epoch, activity)
         else:
             start_epoch = end_epoch
             stop_epoch = end_epoch
@@ -808,7 +846,7 @@ async def ui_create(
             stop_epoch = start_epoch  # instant event: a single closed timestamp
         else:
             stop_epoch = combine_date_time(date, stop_time, tz) if stop_time.strip() else None
-            stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
+            stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch, activity)
     db.create_record(
         start_epoch=start_epoch,
         stop_epoch=stop_epoch,
@@ -849,11 +887,11 @@ async def ui_bulk_save(request: Request):
             stop_epoch = end_epoch
         else:
             start_epoch = combine_date_time(date, start_time, tz)
-            if activity not in timed:
+            if activity not in timed and activity != "sleep":
                 stop_epoch = start_epoch
             else:
                 stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
-                stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch)
+                stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch, activity)
         if start_epoch is None or (existing is None):
             continue
         volume_ml = form.get(f"volume_ml_{rid}") or ""

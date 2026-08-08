@@ -58,6 +58,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "milk_amount": "Milk amount",
         "milk_decrease": "Decrease milk amount",
         "milk_increase": "Increase milk amount",
+        "duration_hhmm": "Duration (HH:MM)",
+        "duration_hhmm_invalid": "Enter a duration in HH:MM, for example 08:30.",
         # Table columns
         "col_date": "Date",
         "col_start": "Start",
@@ -120,6 +122,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "milk_amount": "奶量",
         "milk_decrease": "减少奶量",
         "milk_increase": "增加奶量",
+        "duration_hhmm": "时长 (HH:MM)",
+        "duration_hhmm_invalid": "请输入 HH:MM 格式的时长，例如 08:30。",
         # Table columns
         "col_date": "日期",
         "col_start": "开始",

@@ -482,6 +482,7 @@ button.danger:hover { background: var(--danger-hover); }
 }
 
 .record-time-fields label { min-width: 0; }
+.record-time-fields [data-sleep-dialog-field] { grid-column: 1 / -1; }
 
 .milk-volume-stepper {
   display: grid;
