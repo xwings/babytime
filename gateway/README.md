@@ -106,10 +106,11 @@ Agent-facing:
 
 UI/admin:
 
-- `GET /` — web UI: records table with inline edit, a phone-sized Add-record
-  dialog with compact −/milk/+ controls and one End field, per-date day-note
-  field, and configuration form. End refreshes to the current gateway time
-  whenever the dialog opens; Start is calculated on save. Feeding rows are
+- `GET /` — web UI: records table with inline edit, plus a phone-sized feeding
+  dialog opened from the Feeding button with compact −/milk/+ controls and
+  Date and End fields, per-date day-note field, and configuration form. Date
+  and End refresh to the current gateway time whenever the dialog opens;
+  Start is calculated on save. Feeding rows are
   grouped by End date and expose Start as read-only.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
   actions. Timed records must stop within 30 minutes of their start.

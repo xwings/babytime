@@ -190,16 +190,6 @@
   })();
 </script>
 
-<section class="add-record">
-  <div class="records-head">
-    <h2>{{ t('add_heading') }}</h2>
-    <div class="bulk-actions">
-      <button type="button" id="open-add-record">{{ t('add_btn') }}</button>
-    </div>
-  </div>
-  <p class="add-record-hint">{{ t('add_record_hint') }}</p>
-</section>
-
 <dialog id="add-record-dialog" class="record-dialog" aria-labelledby="add-record-title"
         data-now-date="{{ now_date }}" data-now-time="{{ now_time }}">
   <form method="post" action="/records" class="record-dialog-form">
@@ -210,7 +200,6 @@
     </div>
     <div class="record-dialog-body">
       <input type="hidden" name="activity" value="feeding">
-      <input type="hidden" name="date" value="{{ now_date }}">
       <label class="milk-volume-field">
         <span>{{ t('milk_amount') }}</span>
         <span class="milk-volume-stepper">
@@ -227,6 +216,9 @@
         </span>
       </label>
       <div class="record-time-fields">
+        <label>{{ t('col_date') }}
+          <input type="date" name="date" value="{{ now_date }}" required>
+        </label>
         <label>{{ t('col_end_time') }}
           <input type="time" name="end_time" value="{{ now_time }}" required>
         </label>
@@ -253,7 +245,7 @@
       return String(value).padStart(2, '0');
     }
 
-    function refreshEndTime() {
+    function refreshDateTime() {
       if (!form || !Number.isFinite(renderedWallTime.getTime())) return;
       const now = new Date(renderedWallTime.getTime() + (Date.now() - renderedAt));
       const date = form.querySelector('input[name="date"]');
@@ -267,13 +259,12 @@
     function openDialog() {
       if (!dialog || !form) return;
       form.reset();
-      refreshEndTime();
+      refreshDateTime();
       if (typeof dialog.showModal === 'function') dialog.showModal();
       else dialog.setAttribute('open', '');
       volume?.focus();
     }
 
-    document.getElementById('open-add-record')?.addEventListener('click', openDialog);
     document.querySelector('.activity-form input[value="feeding"]')
       ?.closest('.activity-form')
       ?.addEventListener('click', event => {
