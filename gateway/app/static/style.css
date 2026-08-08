@@ -252,13 +252,22 @@ section h2 {
     min-width: 5.5rem;
     max-width: 5.75rem;
   }
+  .records-table th:nth-child(4),
+  .records-table td:nth-child(4) {
+    width: 5.25rem;
+    white-space: nowrap;
+  }
   .records-table th:nth-child(5),
   .records-table td:nth-child(5) { width: 7.5rem; }
   /* min-width gives amount a firm floor so Notes cannot squeeze
      it; without it `max-width` alone collapses the field to min-content. */
   .records-table input[type=number].ml-input { min-width: 4rem; max-width: 5rem; }
+  .records-table th:nth-child(6),
+  .records-table td:nth-child(6) { width: 8rem; }
+  .records-table .activity-select { max-width: 7.5rem; }
   .records-table th:nth-child(7),
-  .records-table td:nth-child(7) { width: 16rem; }
+  .records-table td:nth-child(7) { width: 100%; }
+  .records-table .notes-input { min-width: 16rem; }
 }
 
 .record-amount-field {
