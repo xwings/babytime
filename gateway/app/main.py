@@ -153,6 +153,33 @@ def _feeding_bounds(end_epoch: int, cfg: dict) -> tuple[int, int]:
     return max(0, end_epoch - duration_seconds), end_epoch
 
 
+def _poopoo_notes(
+    cfg: dict,
+    amount: str,
+    color: str,
+    texture: str,
+    extra_notes: str,
+) -> str:
+    """Validate Poopoo selections and serialize them into record notes."""
+    choices = config.poopoo_options(cfg)
+    selected = {
+        "Amount": ("amount", (amount or "").strip()),
+        "Color": ("color", (color or "").strip()),
+        "Texture": ("texture", (texture or "").strip()),
+    }
+    parts: list[str] = []
+    for label, (group, value) in selected.items():
+        allowed = choices[group]
+        if (allowed and not value) or (value and value not in allowed):
+            raise HTTPException(400, f"poopoo {group} selection is required")
+        if value:
+            parts.append(f"{label}: {value}")
+    extra = (extra_notes or "").strip()
+    if extra:
+        parts.append(f"Extra notes: {extra}")
+    return "; ".join(parts)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init()
@@ -697,11 +724,12 @@ async def ui_home(
 
     activities = config.activity_list(cfg)
     timed = config.timed_activities(cfg)
-    # Feeding is point-in-time now, but surface and close any session left
-    # open by an older browser/device during an upgrade.
+    # End-time activities are point-in-time now, but surface and close any
+    # session left open by an older browser/device during an upgrade.
     active_map = {
         a: s for a in activities
-        if (a in timed or a in {"feeding", "sleep"}) and (s := db.get_active(a))
+        if (a in timed or a in {"feeding", "sleep", "poopoo"})
+        and (s := db.get_active(a))
     }
     last_fed = next(
         (r for r in all_records
@@ -724,6 +752,7 @@ async def ui_home(
             "html_lang": i18n.html_lang_attr(lang),
             "t": (lambda key, **kw: i18n.t(key, lang, **kw)),
             "al": (lambda name: i18n.activity_label(name, lang)),
+            "pol": (lambda name: i18n.poopoo_option_label(name, lang)),
             "groups": groups,
             "activities": activities,
             "languages": i18n.language_options(),
@@ -732,6 +761,7 @@ async def ui_home(
             "last_fed": last_fed,
             "feeding_alert": feeding_alert,
             "config": cfg,
+            "poopoo_options": config.poopoo_options(cfg),
             "tz": tz_name,
             "now_date": now.strftime("%Y-%m-%d"),
             "now_time": now.strftime("%H:%M"),
@@ -788,6 +818,9 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
                 device_id="web",
                 volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
             )
+    elif activity == "poopoo" and db.get_active(activity):
+        # Close a legacy timed Poopoo session left by an older configuration.
+        db.stop_active(stop_epoch=ts, activity=activity)
     elif activity not in config.timed_activities(cfg):
         # Instant event: log a single closed timestamp (start == stop) so it
         # never looks like an open session to the device, scheduler, or UI.
@@ -813,6 +846,9 @@ async def ui_create(
     volume_ml: str = Form(""),
     activity: str = Form("feeding"),
     notes: str = Form(""),
+    poopoo_amount: str = Form(""),
+    poopoo_color: str = Form(""),
+    poopoo_texture: str = Form(""),
 ):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
@@ -847,6 +883,14 @@ async def ui_create(
         else:
             stop_epoch = combine_date_time(date, stop_time, tz) if stop_time.strip() else None
             stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch, activity)
+    if activity == "poopoo":
+        notes = _poopoo_notes(
+            cfg,
+            poopoo_amount,
+            poopoo_color,
+            poopoo_texture,
+            notes,
+        )
     db.create_record(
         start_epoch=start_epoch,
         stop_epoch=stop_epoch,
@@ -924,21 +968,47 @@ async def ui_save_config(request: Request):
     items: dict = {}
     rows: list[tuple[str, str]] = []  # (row index, activity name) in form order
     timed_rows: set[str] = set()
+    poopoo_rows: dict[str, list[str]] = {
+        key: [] for key in config.POOPOO_OPTION_KEYS.values()
+    }
+    poopoo_options_present = False
     for key, value in form.multi_items():
         if key.startswith("activity_name_"):
             rows.append((key[len("activity_name_"):], str(value).strip()))
         elif key.startswith("activity_timed_"):
             timed_rows.add(key[len("activity_timed_"):])
+        elif key == "poopoo_options_present":
+            poopoo_options_present = True
         else:
-            items[key] = str(value)
+            option_key = next(
+                (
+                    config_key
+                    for config_key in poopoo_rows
+                    if key.startswith(config_key + "_item_")
+                ),
+                None,
+            )
+            if option_key:
+                option = str(value).strip()
+                if "," in option:
+                    raise HTTPException(400, "poopoo options cannot contain commas")
+                if option:
+                    poopoo_rows[option_key].append(option)
+            else:
+                items[key] = str(value)
     if rows:
         # Rebuild the two activity lists from the per-row name + timed toggle.
-        # config.activity_list re-forces 'feeding'; its disabled timed toggle
-        # need not round-trip because feeding is always an end-time event.
+        # Disabled end-time toggles need not round-trip; config parsing keeps
+        # Feeding and Poopoo out of the timed activity set.
         items["activity_types"] = ",".join(name for _, name in rows if name)
         items["timed_activities"] = ",".join(
-            name for ri, name in rows if name and ri in timed_rows
+            name
+            for ri, name in rows
+            if name and name not in {"feeding", "poopoo"} and ri in timed_rows
         )
+    if poopoo_options_present:
+        for key, values in poopoo_rows.items():
+            items[key] = ",".join(dict.fromkeys(values))
     config.update(items)
     return RedirectResponse("/#config", status_code=303)
 

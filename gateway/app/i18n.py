@@ -60,6 +60,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "milk_increase": "Increase milk amount",
         "duration_hhmm": "Duration (HH:MM)",
         "duration_hhmm_invalid": "Enter a duration in HH:MM, for example 08:30.",
+        "duration_decrease": "Decrease duration by 15 minutes",
+        "duration_increase": "Increase duration by 15 minutes",
+        "poopoo_amount": "Amount",
+        "poopoo_color": "Color",
+        "poopoo_texture": "Texture",
+        "poopoo_extra_notes": "Extra notes",
+        "poopoo_extra_notes_placeholder": "Anything else to record…",
+        "poopoo_option_many": "Many",
+        "poopoo_option_less": "Less",
+        "poopoo_option_yellow": "Yellow",
+        "poopoo_option_green": "Green",
+        "poopoo_option_soft": "Soft",
+        "poopoo_option_hard": "Hard",
         # Table columns
         "col_date": "Date",
         "col_start": "Start",
@@ -84,6 +97,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_add_activity": "+ Add activity",
         "config_remove_activity": "Remove activity",
         "config_feeding_locked": "Feeding is always present and uses an end time",
+        "config_poopoo_options": "Poopoo options",
+        "config_poopoo_options_hint": "Add or remove the choices shown in the Poopoo popup.",
+        "config_add_option": "+ Add item",
+        "config_remove_option": "Remove item",
         # Time units (read by the live-elapsed JS in index.html)
         "unit_hour": "h",
         "unit_minute": "m",
@@ -124,6 +141,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "milk_increase": "增加奶量",
         "duration_hhmm": "时长 (HH:MM)",
         "duration_hhmm_invalid": "请输入 HH:MM 格式的时长，例如 08:30。",
+        "duration_decrease": "减少 15 分钟",
+        "duration_increase": "增加 15 分钟",
+        "poopoo_amount": "数量",
+        "poopoo_color": "颜色",
+        "poopoo_texture": "软硬",
+        "poopoo_extra_notes": "额外备注",
+        "poopoo_extra_notes_placeholder": "记录其他情况…",
+        "poopoo_option_many": "多",
+        "poopoo_option_less": "少",
+        "poopoo_option_yellow": "黄色",
+        "poopoo_option_green": "绿色",
+        "poopoo_option_soft": "软",
+        "poopoo_option_hard": "硬",
         # Table columns
         "col_date": "日期",
         "col_start": "开始",
@@ -148,6 +178,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_add_activity": "+ 添加活动",
         "config_remove_activity": "删除活动",
         "config_feeding_locked": "喂食始终存在并使用结束时间",
+        "config_poopoo_options": "便便选项",
+        "config_poopoo_options_hint": "添加或删除便便弹窗中显示的选项。",
+        "config_add_option": "+ 添加选项",
+        "config_remove_option": "删除选项",
         # Time units
         "unit_hour": "时",
         "unit_minute": "分",
@@ -194,6 +228,15 @@ def activity_label(name: str, lang: str = DEFAULT_LANG) -> str:
         return ""
     table = TRANSLATIONS.get(lang) or TRANSLATIONS[DEFAULT_LANG]
     key = "act_" + name
+    return table.get(key) or TRANSLATIONS[DEFAULT_LANG].get(key) or name
+
+
+def poopoo_option_label(name: str, lang: str = DEFAULT_LANG) -> str:
+    """Translate built-in Poopoo choices; custom choices remain unchanged."""
+    if not name:
+        return ""
+    table = TRANSLATIONS.get(lang) or TRANSLATIONS[DEFAULT_LANG]
+    key = "poopoo_option_" + name.strip().lower()
     return table.get(key) or TRANSLATIONS[DEFAULT_LANG].get(key) or name
 
 

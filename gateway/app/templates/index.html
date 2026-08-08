@@ -11,7 +11,7 @@
          data-activity-log-label="{{ t('activity_log_btn') }}">
   {% for a in activities %}
   {% set s = active_map.get(a) %}
-  {% set opens_record_dialog = a in ['feeding', 'sleep'] and not s %}
+  {% set opens_record_dialog = a in ['feeding', 'sleep', 'poopoo'] and not s %}
   <form method="post" action="/ui/activity" class="activity-form">
     <input type="hidden" name="activity" value="{{ a }}">
     <button type="{{ 'button' if opens_record_dialog else 'submit' }}"
@@ -26,7 +26,7 @@
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_log_btn') if a in ['feeding', 'sleep'] or a not in timed else t('activity_start_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_log_btn') if a in ['feeding', 'sleep', 'poopoo'] or a not in timed else t('activity_start_btn') }}</span>
       {% endif %}
     </button>
   </form>
@@ -216,17 +216,51 @@
                   aria-label="{{ t('milk_increase') }}">+</button>
         </span>
       </label>
+      <label class="duration-field is-hidden" data-sleep-dialog-field>
+        <span>{{ t('duration_hhmm') }}</span>
+        <span class="duration-stepper">
+          <button type="button" data-duration-step="-15"
+                  aria-label="{{ t('duration_decrease') }}">−</button>
+          <span class="duration-value">
+            <input type="text" name="duration" inputmode="numeric" autocomplete="off"
+                   class="duration-input" placeholder="HH:MM"
+                   pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
+                   data-duration-invalid="{{ t('duration_hhmm_invalid') }}" disabled>
+          </span>
+          <button type="button" data-duration-step="15"
+                  aria-label="{{ t('duration_increase') }}">+</button>
+        </span>
+      </label>
+      <div class="poopoo-fields is-hidden" data-poopoo-dialog-field>
+        {% for group, label in [
+          ('amount', t('poopoo_amount')),
+          ('color', t('poopoo_color')),
+          ('texture', t('poopoo_texture'))
+        ] %}
+        <fieldset class="poopoo-choice-group">
+          <legend>{{ label }}</legend>
+          <div class="poopoo-choices">
+            {% for option in poopoo_options[group] %}
+            <label class="poopoo-choice">
+              <input type="radio" name="poopoo_{{ group }}" value="{{ option }}"
+                     required disabled>
+              <span>{{ pol(option) }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        {% endfor %}
+        <label class="poopoo-extra-notes">{{ t('poopoo_extra_notes') }}
+          <textarea name="notes" rows="3"
+                    placeholder="{{ t('poopoo_extra_notes_placeholder') }}" disabled></textarea>
+        </label>
+      </div>
       <div class="record-time-fields">
         <label>{{ t('col_date') }}
           <input type="date" name="date" value="{{ now_date }}" required>
         </label>
         <label>{{ t('col_end_time') }}
           <input type="time" name="end_time" value="{{ now_time }}" required>
-        </label>
-        <label class="is-hidden" data-sleep-dialog-field>{{ t('duration_hhmm') }}
-          <input type="text" name="duration" inputmode="numeric" autocomplete="off"
-                 placeholder="HH:MM" pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
-                 data-duration-invalid="{{ t('duration_hhmm_invalid') }}" disabled>
         </label>
       </div>
     </div>
@@ -244,8 +278,10 @@
     const activity = form?.querySelector('input[name="activity"]');
     const milkField = form?.querySelector('[data-feeding-dialog-field]');
     const sleepField = form?.querySelector('[data-sleep-dialog-field]');
+    const poopooField = form?.querySelector('[data-poopoo-dialog-field]');
     const volume = form?.querySelector('input[name="volume_ml"]');
     const duration = form?.querySelector('input[name="duration"]');
+    const poopooInputs = poopooField?.querySelectorAll('input, textarea') || [];
     const renderedAt = Date.now();
     const renderedWallTime = new Date(
       (dialog?.dataset.nowDate || '') + 'T' + (dialog?.dataset.nowTime || '00:00') + ':00'
@@ -268,18 +304,22 @@
 
     function setDialogMode(mode) {
       const isFeeding = mode === 'feeding';
+      const isSleep = mode === 'sleep';
+      const isPoopoo = mode === 'poopoo';
       if (activity) activity.value = mode;
       milkField?.classList.toggle('is-hidden', !isFeeding);
-      sleepField?.classList.toggle('is-hidden', isFeeding);
+      sleepField?.classList.toggle('is-hidden', !isSleep);
+      poopooField?.classList.toggle('is-hidden', !isPoopoo);
       if (volume) {
         volume.disabled = !isFeeding;
         volume.required = isFeeding;
       }
       if (duration) {
-        duration.disabled = isFeeding;
-        duration.required = !isFeeding;
+        duration.disabled = !isSleep;
+        duration.required = isSleep;
         duration.setCustomValidity('');
       }
+      poopooInputs.forEach(input => { input.disabled = !isPoopoo; });
     }
 
     function openDialog(mode) {
@@ -289,7 +329,12 @@
       refreshDateTime();
       if (typeof dialog.showModal === 'function') dialog.showModal();
       else dialog.setAttribute('open', '');
-      (mode === 'feeding' ? volume : duration)?.focus();
+      const firstInput = mode === 'feeding'
+        ? volume
+        : mode === 'sleep'
+          ? duration
+          : poopooField?.querySelector('input, textarea');
+      firstInput?.focus();
     }
 
     document.addEventListener('click', event => {
@@ -309,6 +354,18 @@
       }
     });
     duration?.addEventListener('input', () => duration.setCustomValidity(''));
+    form?.querySelectorAll('[data-duration-step]').forEach(button => {
+      button.addEventListener('click', () => {
+        const match = duration.value.match(/^([0-9]{2}):([0-5][0-9])$/);
+        const current = match ? parseInt(match[1], 10) * 60 + parseInt(match[2], 10) : 0;
+        const step = parseInt(button.dataset.durationStep || '0', 10) || 0;
+        const stepped = current + step;
+        const next = Math.min(23 * 60 + 59, stepped > 0 ? stepped : (current || 15));
+        duration.value = twoDigits(Math.floor(next / 60)) + ':' + twoDigits(next % 60);
+        duration.setCustomValidity('');
+        duration.focus();
+      });
+    });
     form?.querySelectorAll('[data-volume-step]').forEach(button => {
       button.addEventListener('click', () => {
         const current = parseInt(volume.value || '0', 10) || 0;
@@ -557,11 +614,12 @@
           <input type="text" name="activity_name_{{ loop.index0 }}" value="{{ a }}"
                  class="activity-name-input"
                  {% if a == 'feeding' %}readonly title="{{ t('config_feeding_locked') }}"{% endif %}>
+          {% set end_time_activity = a in ['feeding', 'poopoo'] %}
           <label class="timed-toggle">
             <input type="checkbox" name="activity_timed_{{ loop.index0 }}"
                    {% if a in timed %}checked{% endif %}
-                   {% if a == 'feeding' %}disabled{% endif %}>
-            {{ t('config_end_time') if a == 'feeding' else t('config_timed') }}
+                   {% if end_time_activity %}disabled{% endif %}>
+            {{ t('config_end_time') if end_time_activity else t('config_timed') }}
           </label>
           {% if a != 'feeding' %}
           <button type="button" class="row-remove ghost" aria-label="{{ t('config_remove_activity') }}">×</button>
@@ -570,6 +628,36 @@
         {% endfor %}
       </div>
       <button type="button" id="add-activity" class="ghost">{{ t('config_add_activity') }}</button>
+    </fieldset>
+    <fieldset class="config-poopoo-options full-width">
+      <legend>{{ t('config_poopoo_options') }}</legend>
+      <input type="hidden" name="poopoo_options_present" value="1">
+      <p class="hint">{{ t('config_poopoo_options_hint') }}</p>
+      <div class="poopoo-config-groups">
+        {% for group, label in [
+          ('amount', t('poopoo_amount')),
+          ('color', t('poopoo_color')),
+          ('texture', t('poopoo_texture'))
+        ] %}
+        <div class="poopoo-config-group"
+             data-poopoo-option-group
+             data-option-prefix="poopoo_{{ group }}_options_item_">
+          <h3>{{ label }}</h3>
+          <div data-poopoo-option-rows>
+            {% for option in poopoo_options[group] %}
+            <div class="poopoo-option-row">
+              <input type="text" name="poopoo_{{ group }}_options_item_{{ loop.index0 }}"
+                     value="{{ option }}" pattern="[^,]+">
+              <button type="button" class="poopoo-option-remove row-remove ghost"
+                      aria-label="{{ t('config_remove_option') }}">×</button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="poopoo-option-add ghost"
+                  data-add-poopoo-option>{{ t('config_add_option') }}</button>
+        </div>
+        {% endfor %}
+      </div>
     </fieldset>
     <label>{{ t('config_default_language') }}
       <select name="default_language">
@@ -609,6 +697,39 @@
       if (e.target.classList.contains('row-remove')) {
         e.target.closest('.activity-row').remove();
       }
+    });
+  })();
+</script>
+
+<script>
+  (function () {
+    const removeLabel = {{ t('config_remove_option') | tojson }};
+    document.querySelectorAll('[data-poopoo-option-group]').forEach(group => {
+      const rows = group.querySelector('[data-poopoo-option-rows]');
+      const prefix = group.dataset.optionPrefix || '';
+      group.querySelector('[data-add-poopoo-option]')?.addEventListener('click', () => {
+        let idx = 0;
+        while (rows.querySelector('[name="' + prefix + idx + '"]')) idx++;
+        const row = document.createElement('div');
+        row.className = 'poopoo-option-row';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.name = prefix + idx;
+        input.pattern = '[^,]+';
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'poopoo-option-remove row-remove ghost';
+        remove.setAttribute('aria-label', removeLabel);
+        remove.textContent = '×';
+        row.append(input, remove);
+        rows.appendChild(row);
+        input.focus();
+      });
+      rows.addEventListener('click', event => {
+        if (event.target.classList.contains('poopoo-option-remove')) {
+          event.target.closest('.poopoo-option-row')?.remove();
+        }
+      });
     });
   })();
 </script>

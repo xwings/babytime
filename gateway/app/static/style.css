@@ -377,6 +377,42 @@ button.danger:hover { background: var(--danger-hover); }
 }
 #add-activity:hover { background: var(--surface-hover); }
 
+.config-poopoo-options {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.75rem 1rem 1rem;
+}
+.config-poopoo-options legend {
+  padding: 0 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.config-poopoo-options > .hint { margin: 0 0 0.75rem; }
+.poopoo-config-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.poopoo-config-group h3 {
+  margin: 0 0 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.poopoo-option-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+.poopoo-option-row input { min-width: 0; flex: 1; }
+.poopoo-option-add {
+  margin-top: 0.1rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border);
+}
+.poopoo-option-add:hover { background: var(--surface-hover); }
+
 .row-form {
   display: flex;
   flex-wrap: wrap;
@@ -482,9 +518,9 @@ button.danger:hover { background: var(--danger-hover); }
 }
 
 .record-time-fields label { min-width: 0; }
-.record-time-fields [data-sleep-dialog-field] { grid-column: 1 / -1; }
 
-.milk-volume-stepper {
+.milk-volume-stepper,
+.duration-stepper {
   display: grid;
   grid-template-columns: 3.25rem minmax(0, 8.5rem) 3.25rem;
   justify-content: center;
@@ -492,10 +528,11 @@ button.danger:hover { background: var(--danger-hover); }
   align-items: stretch;
 }
 
-.record-dialog-body .milk-volume-input {
+.record-dialog-body .milk-volume-input,
+.record-dialog-body .duration-input {
   width: 100%;
   height: 3.5rem;
-  padding: 0.35rem 2.25rem 0.35rem 0.5rem;
+  padding: 0.35rem 0.5rem;
   color: #172033 !important;
   background: #ffffff !important;
   -webkit-text-fill-color: #172033 !important;
@@ -506,7 +543,12 @@ button.danger:hover { background: var(--danger-hover); }
   text-align: center;
 }
 
-.milk-volume-value {
+.record-dialog-body .milk-volume-input {
+  padding-right: 2.25rem;
+}
+
+.milk-volume-value,
+.duration-value {
   position: relative;
   min-width: 0;
 }
@@ -521,7 +563,8 @@ button.danger:hover { background: var(--danger-hover); }
   pointer-events: none;
 }
 
-.milk-volume-stepper button {
+.milk-volume-stepper button,
+.duration-stepper button {
   min-height: 3.5rem;
   padding: 0;
   color: var(--primary);
@@ -530,7 +573,65 @@ button.danger:hover { background: var(--danger-hover); }
   font-size: 2rem;
   font-weight: 700;
 }
-.milk-volume-stepper button:hover { background: #dfeaff; }
+.milk-volume-stepper button:hover,
+.duration-stepper button:hover { background: #dfeaff; }
+
+.poopoo-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.poopoo-choice-group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.poopoo-choice-group legend {
+  margin-bottom: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.poopoo-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+.record-dialog-body .poopoo-choice {
+  position: relative;
+  display: block;
+  color: var(--text);
+  cursor: pointer;
+}
+.record-dialog-body .poopoo-choice input {
+  position: absolute;
+  width: 1px;
+  min-height: 1px;
+  opacity: 0;
+}
+.poopoo-choice span {
+  display: block;
+  padding: 0.65rem 0.75rem;
+  color: var(--primary);
+  background: #eef4ff;
+  border: 1px solid #a9c3f5;
+  border-radius: 6px;
+  font-weight: 600;
+  text-align: center;
+}
+.poopoo-choice input:checked + span {
+  color: #ffffff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.poopoo-choice input:focus-visible + span {
+  outline: 3px solid rgba(37, 99, 235, 0.25);
+  outline-offset: 2px;
+}
+.record-dialog-body .poopoo-extra-notes textarea {
+  width: 100%;
+  min-height: 5rem;
+  font-family: inherit;
+}
 
 .record-dialog-actions button {
   min-width: 6rem;
@@ -764,6 +865,8 @@ code {
 
   .bulk-actions { width: 100%; }
   .bulk-actions button { flex: 1; }
+
+  .poopoo-config-groups { grid-template-columns: 1fr; }
 
   .record-dialog {
     width: calc(100% - 1rem);

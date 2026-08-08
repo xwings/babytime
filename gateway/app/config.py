@@ -14,10 +14,19 @@ DEFAULTS: dict = {
     "feeding_alert_minutes": "120",
     "default_volume_ml": "",
     "default_language": "en",
+    "poopoo_amount_options": "many,less",
+    "poopoo_color_options": "yellow,green",
+    "poopoo_texture_options": "soft,hard",
     "timezone": "UTC",
     "ui_show_count": "10",
     "trusted_networks": "10.0.0.0/8",
     "trusted_proxies": "",
+}
+
+POOPOO_OPTION_KEYS = {
+    "amount": "poopoo_amount_options",
+    "color": "poopoo_color_options",
+    "texture": "poopoo_texture_options",
 }
 
 _lock = threading.Lock()
@@ -99,6 +108,21 @@ def activity_list(cfg: dict) -> list:
     return out
 
 
+def poopoo_options(cfg: dict) -> dict[str, list[str]]:
+    """Ordered, deduplicated choices for each Poopoo attribute group."""
+    out: dict[str, list[str]] = {}
+    for group, config_key in POOPOO_OPTION_KEYS.items():
+        seen: set[str] = set()
+        values: list[str] = []
+        for part in (cfg.get(config_key) or "").replace("\n", ",").split(","):
+            value = part.strip()
+            if value and value not in seen:
+                seen.add(value)
+                values.append(value)
+        out[group] = values
+    return out
+
+
 def _parse_cidrs(raw: str) -> list:
     """Comma/newline-separated CIDR string → list of `ip_network`. Unparseable
     entries are dropped rather than raising, so one typo in the config can't
@@ -169,15 +193,14 @@ def timed_activities(cfg: dict) -> set:
     """Activities recorded as start->stop sessions (running timer); the rest
     are completed point-in-time records.
 
-    Feeding is deliberately never an activity-bar timer: the web uses its
-    dedicated end-time milk dialog and the device uses one end-time press.
-    Ignore a legacy ``feeding`` entry that may still exist in config.json.
+    Feeding and Poopoo are deliberately never activity-bar timers: both use
+    dedicated end-time dialogs. Ignore legacy entries for either activity.
     """
     raw = (cfg.get("timed_activities") or "").replace("\n", ",")
     out: set = set()
     for part in raw.split(","):
         name = part.strip()
-        if name and name != "feeding":
+        if name and name not in {"feeding", "poopoo"}:
             out.add(name)
     return out
 
