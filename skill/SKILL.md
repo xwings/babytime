@@ -77,8 +77,9 @@ Non-2xx responses print to stderr and exit non-zero.
 
 `dump <YYYY-MM-DD>` returns everything for one calendar day in a single
 object: `{date, records, day_note, summary}`, where `records` are that day's
-entries oldest-first and `summary` is `{feeds, total_ml, total_g, poopoo}`.
-The date is bucketed in
+entries oldest-first. `summary` contains Milk/Food/Poopoo/Sleep counts,
+`total_ml`, `total_g`, and combined Sleep as `sleep_duration` (`HH:MM`). The
+date is bucketed in
 the **gateway's** timezone, so it lines up with what the browser shows. Use it
 for "show me everything from yesterday" or to build a daily review.
 

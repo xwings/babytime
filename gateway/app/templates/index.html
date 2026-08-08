@@ -470,7 +470,12 @@
         <button type="button" class="fold-toggle" aria-label="{{ t('records_toggle_aria') }}">
           <span class="chevron">▾</span>
         </button>
-        <span class="date-label">{{ g.date }} ({{ t('date_count', n=g.ml_count, plural='' if g.ml_count == 1 else 's') }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %}, {{ g.total_g }} {{ t('col_g') }}, {{ t('date_poopoo_count', n=g.poopoo_count) }})</span>
+        <span class="date-label">{{ g.date }} (
+          {{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }},
+          {{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }},
+          {{ t('date_poopoo_summary', n=g.poopoo, plural='' if g.poopoo == 1 else 's') }},
+          {{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', hours=g.sleep_hours, minutes=g.sleep_minutes) }}
+        )</span>
       </div>
       <div class="day-note-block">
         <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('day_note_today') if g.date == now_date else t('col_day_note') }}</label>

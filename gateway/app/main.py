@@ -538,11 +538,45 @@ def _record_date_epoch(record: dict) -> int:
     return int(record["start_epoch"])
 
 
+def _daily_activity_summary(records: list[dict]) -> dict:
+    """Counts and intake/duration totals displayed in each date header."""
+    activities = [config.canonical_activity(r["activity"]) for r in records]
+    sleep_seconds = sum(
+        max(0, int(r["stop_epoch"]) - int(r["start_epoch"]))
+        for r, activity in zip(records, activities)
+        if activity == "sleep" and r.get("stop_epoch") is not None
+    )
+    sleep_minutes = sleep_seconds // 60
+    return {
+        # Preserve the established volume-bearing feed count for API clients.
+        "feeds": sum(
+            1
+            for r, activity in zip(records, activities)
+            if activity == "feeding" and r["volume_ml"]
+        ),
+        "milk_count": activities.count("feeding"),
+        "total_ml": sum(
+            (r["volume_ml"] or 0)
+            for r, activity in zip(records, activities)
+            if activity == "feeding"
+        ),
+        "food_count": activities.count("solid_food"),
+        "total_g": sum(
+            (r["volume_g"] or 0)
+            for r, activity in zip(records, activities)
+            if activity == "solid_food"
+        ),
+        "poopoo": activities.count("poopoo"),
+        "sleep_count": activities.count("sleep"),
+        "sleep_seconds": sleep_seconds,
+        "sleep_hours": f"{sleep_minutes // 60:02d}",
+        "sleep_minutes": f"{sleep_minutes % 60:02d}",
+        "sleep_duration": f"{sleep_minutes // 60:02d}:{sleep_minutes % 60:02d}",
+    }
+
+
 def _day_payload(date: str) -> dict:
-    """All records on `date` (gateway-local), its day note, and a feeding
-    summary. The date bucketing matches the web UI's date grouping, and
-    `feeds`/`total_ml` use the same volume-bearing-feeding convention as the
-    date header, so the numbers line up with what the browser shows."""
+    """Records, day note, and per-activity totals for a gateway-local date."""
     tz = zoneinfo(config.load().get("timezone") or "UTC")
     rows = [
         r for r in db.list_records()
@@ -553,26 +587,7 @@ def _day_payload(date: str) -> dict:
         "date": date,
         "records": rows,
         "day_note": db.get_day_notes([date]).get(date, ""),
-        "summary": {
-            "feeds": sum(
-                1 for r in rows if r["activity"] == "feeding" and r["volume_ml"]
-            ),
-            "total_ml": sum(
-                (r["volume_ml"] or 0)
-                for r in rows
-                if r["activity"] == "feeding"
-            ),
-            "total_g": sum(
-                (r["volume_g"] or 0)
-                for r in rows
-                if r["activity"] == "solid_food"
-            ),
-            "poopoo": sum(
-                1
-                for r in rows
-                if config.canonical_activity(r["activity"]) == "poopoo"
-            ),
-        },
+        "summary": _daily_activity_summary(rows),
     }
 
 
@@ -784,26 +799,7 @@ async def ui_home(
         {
             "date": d,
             "records": by_date[d],
-            "ml_count": sum(
-                1
-                for r in by_date[d]
-                if r["activity"] == "feeding" and r["volume_ml"]
-            ),
-            "total_ml": sum(
-                (r["volume_ml"] or 0)
-                for r in by_date[d]
-                if r["activity"] == "feeding"
-            ),
-            "total_g": sum(
-                (r["volume_g"] or 0)
-                for r in by_date[d]
-                if r["activity"] == "solid_food"
-            ),
-            "poopoo_count": sum(
-                1
-                for r in by_date[d]
-                if config.canonical_activity(r["activity"]) == "poopoo"
-            ),
+            **_daily_activity_summary(by_date[d]),
             "note": day_notes.get(d, ""),
         }
         for d in page_dates
