@@ -742,7 +742,8 @@ async def ui_home(
     # Poopoo deliberately ignores old sessions and always opens its popup.
     active_map = {
         a: s for a in activities
-        if (a in timed or a in {"feeding", "sleep"})
+        if config.canonical_activity(a) != "poopoo"
+        and (a in timed or a in {"feeding", "sleep"})
         and (s := db.get_active(a))
     }
     last_fed = next(
@@ -811,6 +812,7 @@ def _feeding_volume(activity: str, raw_ml) -> Optional[int]:
 
 @app.post("/ui/activity")
 async def ui_activity_toggle(activity: str = Form("feeding")):
+    activity = config.canonical_activity(activity) or "feeding"
     ts = int(time.time())
     cfg = config.load()
     if activity == "feeding":
@@ -872,7 +874,7 @@ async def ui_create(
 ):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
-    activity = activity or "feeding"
+    activity = config.canonical_activity(activity) or "feeding"
 
     # Feeding derives Start from a fixed duration. Sleep accepts an explicit
     # HH:MM duration. Poopoo is an independent point record. All three treat
@@ -938,7 +940,9 @@ async def ui_bulk_save(request: Request):
         stop_time = (form.get(f"stop_time_{rid}") or "").strip()
         if not date or (not start_time and not stop_time):
             continue
-        activity = (form.get(f"activity_{rid}") or "feeding").strip() or "feeding"
+        activity = config.canonical_activity(
+            form.get(f"activity_{rid}") or "feeding"
+        ) or "feeding"
         existing = existing_by_id.get(rid)
         if activity == "feeding":
             end_epoch = combine_date_time(date, stop_time or start_time, tz)
@@ -1031,7 +1035,9 @@ async def ui_save_config(request: Request):
         items["timed_activities"] = ",".join(
             name
             for ri, name in rows
-            if name and name not in {"feeding", "poopoo"} and ri in timed_rows
+            if config.canonical_activity(name) not in {"feeding", "poopoo"}
+            and name
+            and ri in timed_rows
         )
     if poopoo_options_present:
         for key, values in poopoo_rows.items():

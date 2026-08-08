@@ -29,6 +29,8 @@ POOPOO_OPTION_KEYS = {
     "texture": "poopoo_texture_options",
 }
 
+_BUILTIN_ACTIVITIES = {"feeding", "sleep", "poopoo"}
+
 _lock = threading.Lock()
 _cache: Optional[dict] = None
 
@@ -90,6 +92,13 @@ def update(items: dict) -> dict:
         return dict(_cache)
 
 
+def canonical_activity(name: str) -> str:
+    """Normalize built-in activity names while preserving custom names."""
+    value = (name or "").strip()
+    folded = value.casefold()
+    return folded if folded in _BUILTIN_ACTIVITIES else value
+
+
 def activity_list(cfg: dict) -> list:
     """Configured activity types, in order, deduped, with 'feeding' first.
 
@@ -101,7 +110,7 @@ def activity_list(cfg: dict) -> list:
     out: list = ["feeding"]
     seen.add("feeding")
     for part in raw.split(","):
-        name = part.strip()
+        name = canonical_activity(part)
         if name and name not in seen:
             seen.add(name)
             out.append(name)
@@ -199,7 +208,7 @@ def timed_activities(cfg: dict) -> set:
     raw = (cfg.get("timed_activities") or "").replace("\n", ",")
     out: set = set()
     for part in raw.split(","):
-        name = part.strip()
+        name = canonical_activity(part)
         if name and name not in {"feeding", "poopoo"}:
             out.add(name)
     return out

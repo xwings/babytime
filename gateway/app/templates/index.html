@@ -10,23 +10,24 @@
          data-activity-start-label="{{ t('activity_start_btn') }}"
          data-activity-log-label="{{ t('activity_log_btn') }}">
   {% for a in activities %}
-  {% set s = active_map.get(a) %}
-  {% set opens_record_dialog = a == 'poopoo' or (a in ['feeding', 'sleep'] and not s) %}
+  {% set activity_key = a | trim | lower %}
+  {% set s = none if activity_key == 'poopoo' else active_map.get(a) %}
+  {% set opens_record_dialog = activity_key == 'poopoo' or (activity_key in ['feeding', 'sleep'] and not s) %}
   <form method="post" action="/ui/activity" class="activity-form">
-    <input type="hidden" name="activity" value="{{ a }}">
+    <input type="hidden" name="activity" value="{{ activity_key if activity_key in ['feeding', 'sleep', 'poopoo'] else a }}">
     <button type="{{ 'button' if opens_record_dialog else 'submit' }}"
-            data-activity="{{ a }}"
-            {% if opens_record_dialog %}data-open-record-dialog="{{ a }}"{% endif %}
-            class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if a == 'feeding' and feeding_alert.due else '' }}">
+            data-activity="{{ activity_key if activity_key in ['feeding', 'sleep', 'poopoo'] else a }}"
+            {% if opens_record_dialog %}data-open-record-dialog="{{ activity_key }}"{% endif %}
+            class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if activity_key == 'feeding' and feeding_alert.due else '' }}">
       <span class="activity-name">{{ al(a) }}</span>
       {% if s %}
       <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
-      {% elif a == 'feeding' and last_fed %}
+      {% elif activity_key == 'feeding' and last_fed %}
       <span class="activity-alert">{{ t('feeding_alert_due') }}</span>
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_log_btn') if a in ['feeding', 'sleep', 'poopoo'] or a not in timed else t('activity_start_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_log_btn') if activity_key in ['feeding', 'sleep', 'poopoo'] or a not in timed else t('activity_start_btn') }}</span>
       {% endif %}
     </button>
   </form>
