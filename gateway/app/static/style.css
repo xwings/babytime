@@ -225,7 +225,7 @@ section h2 {
 }
 
 .records-table .notes-input {
-  min-width: 10rem;
+  min-width: 7rem;
 }
 
 /* Drop the number-input spinner on compact amount fields. */
@@ -239,19 +239,17 @@ section h2 {
   margin: 0;
 }
 
-/* Desktop column sizing (mobile uses the two-row grid below). Amount fits 3-4
-   digits, so pin its column tight and let Notes — the last column — take the
-   freed width. `nth-child(5)`/`(7)` match the fixed column order (… ml,
-   activity, notes); a greedy `width:100%` on Notes absorbs the slack without
-   forcing a large min-width that could overflow. */
+/* Desktop column sizing (mobile uses the two-row grid below). Reserve enough
+   room for a 4-5 digit amount plus its ml/g unit, while keeping Notes compact.
+   `nth-child(5)`/`(7)` match the fixed amount/activity/notes column order. */
 @media (min-width: 641px) {
   .records-table th:nth-child(5),
-  .records-table td:nth-child(5) { width: 5.5rem; }
+  .records-table td:nth-child(5) { width: 7.5rem; }
   /* min-width gives amount a firm floor so Notes cannot squeeze
      it; without it `max-width` alone collapses the field to min-content. */
-  .records-table input[type=number].ml-input { min-width: 3.5rem; max-width: 4rem; }
+  .records-table input[type=number].ml-input { min-width: 4rem; max-width: 5rem; }
   .records-table th:nth-child(7),
-  .records-table td:nth-child(7) { width: 100%; }
+  .records-table td:nth-child(7) { width: 11rem; }
 }
 
 .record-amount-field {
@@ -898,7 +896,7 @@ code {
   .records-table tbody { display: block; width: 100%; }
   .records-table tr {
     display: grid;
-    grid-template-columns: auto 1fr 1fr 1.3fr;
+    grid-template-columns: auto 1.25fr 1fr 1fr;
     align-items: center;
     gap: 0.3rem 0.5rem;
     border: 1px solid var(--border);
