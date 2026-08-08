@@ -31,9 +31,10 @@ Look up the host and token for this deployment in TOOLS.md.
 | Field | Meaning |
 | ----- | ------- |
 | `id` | server-assigned record id |
-| `start_epoch` / `stop_epoch` | session bounds. A feeding is a completed end-time record, stored with both values equal |
+| `start_epoch` / `stop_epoch` | session bounds; Milk and Solid food are completed records derived from their end time |
 | `activity` | one of the gateway-configured types — run `activities` to list them; do not invent new ones |
-| `volume_ml` | only meaningful for `feeding`; ignored/forced null for other activities |
+| `volume_ml` | Milk amount in ml; only meaningful for the internal `feeding` activity |
+| `volume_g` | Solid food amount in g; only meaningful for `solid_food` |
 | `notes` | free text |
 | `device_id` | who recorded it (`agent` for this skill) |
 
@@ -57,6 +58,7 @@ python3 scripts/babytime.py activities                         # [{activity, tim
 python3 scripts/babytime.py list --limit 10
 python3 scripts/babytime.py list --activity feeding
 python3 scripts/babytime.py add --start "2026-05-27 14:45" --ml 90 --notes "left side"  # feeding end time
+python3 scripts/babytime.py add --activity solid_food --start "2026-05-27 18:00" --g 60
 python3 scripts/babytime.py add --activity sleep --start "2026-05-27 21:00" --stop "2026-05-27 21:30"
 python3 scripts/babytime.py update 12 --stop "2026-05-27 14:50" --ml 120
 python3 scripts/babytime.py update 12 --activity poopoo        # volume is dropped automatically

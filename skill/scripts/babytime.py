@@ -70,6 +70,8 @@ def _mutation_body(args) -> dict:
         body["activity"] = args.activity
     if args.ml is not None:
         body["volume_ml"] = args.ml
+    if args.g is not None:
+        body["volume_g"] = args.g
     if args.notes is not None:
         body["notes"] = args.notes
     return body
@@ -118,7 +120,8 @@ def _add_field_flags(p) -> None:
     p.add_argument("--start", help="epoch or 'YYYY-MM-DD HH:MM' (gateway tz)")
     p.add_argument("--stop", help="epoch or 'YYYY-MM-DD HH:MM' (gateway tz)")
     p.add_argument("--activity", help="feeding, sleep, poopoo, ... (default feeding on add)")
-    p.add_argument("--ml", type=int, help="volume in ml (feeding only; ignored otherwise)")
+    p.add_argument("--ml", type=int, help="volume in ml (Milk only; ignored otherwise)")
+    p.add_argument("--g", type=int, help="weight in g (Solid food only; ignored otherwise)")
     p.add_argument("--notes", help="free-text note")
 
 

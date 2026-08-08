@@ -93,10 +93,11 @@ Device-facing:
 Agent-facing:
 
 - `GET /api/records` / `POST /api/records` — list (newest-first) and create.
-  For feeding, `start` is interpreted as the end time (or an explicit `stop`
-  wins); the stored Start is recalculated from the configured duration. Other
-  timed activities keep their start/stop bounds; a supplied stop must be
-  within 30 minutes of start.
+  For Milk or Solid food, `start` is interpreted as the end time (or an
+  explicit `stop` wins); the stored Start is recalculated from the configured
+  duration. Use `volume_ml` for Milk and `volume_g` for Solid food. Other timed
+  activities keep their start/stop bounds; a supplied stop must be within 30
+  minutes of start.
 - `PATCH /api/records/{id}` / `DELETE /api/records/{id}` — edit / remove.
   Edits that leave a record longer than 30 minutes are rejected.
 - `GET /api/day_notes` — `{date: note}` map of all per-day notes.
@@ -106,12 +107,13 @@ Agent-facing:
 
 UI/admin:
 
-- `GET /` — web UI: records table with inline edit, plus a phone-sized feeding
-  dialog opened from the Feeding button with compact −/milk/+ controls and
+- `GET /` — web UI: records table with inline edit, plus a phone-sized intake
+  dialog opened from the Milk or Solid food button with compact −/amount/+
+  controls using ml for Milk and g for Solid food, and
   Date and End fields, per-date day-note field, and configuration form. Date
   and End refresh to the current gateway time whenever the dialog opens;
-  Start is calculated on save. Feeding rows are
-  grouped by End date and expose Start as read-only.
+  Start is calculated on save. Milk and Solid food rows are grouped by End
+  date and expose Start as read-only.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
   actions. Timed records must stop within 30 minutes of their start.
   `POST /records/save` persists both record edits and day notes.
@@ -135,8 +137,8 @@ than that cap (default 15; `0` disables the cap and produces point feedings).
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `activity_types` | `feeding,sleep,poopoo,supplement` | comma-separated; `feeding` always first. Legacy `subpliment` is normalized to `supplement` |
-| `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Feeding, Poopoo, and Supplement use dedicated end-time dialogs, so entries for them here are ignored |
+| `activity_types` | `feeding,solid_food,sleep,poopoo,supplement` | comma-separated; Milk (`feeding`) and Solid food are always first. Legacy `subpliment` is normalized to `supplement` |
+| `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Milk, Solid food, Poopoo, and Supplement use dedicated end-time dialogs, so entries for them here are ignored |
 | `auto_stop_minutes` | `15` | feeding duration (`Start = End - minutes`) and auto-stop cap for active sessions; `0` produces point feedings and disables auto-stop |
 | `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web Feeding button blinks blue/red, and the device display blinks a red background. `0` disables |
 | `default_volume_ml` | `` | pre-fills the web milk dialog and is attached to a feeding logged from an ESP32 button |

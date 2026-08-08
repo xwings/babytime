@@ -11,13 +11,13 @@
          data-activity-log-label="{{ t('activity_log_btn') }}">
   {% for a in activities %}
   {% set activity_key = a | trim | lower %}
-  {% set point_popup = activity_key in ['poopoo', 'supplement'] %}
-  {% set s = none if point_popup else active_map.get(a) %}
-  {% set opens_record_dialog = point_popup or (activity_key in ['feeding', 'sleep'] and not s) %}
+  {% set always_popup = activity_key in ['solid_food', 'poopoo', 'supplement'] %}
+  {% set s = none if always_popup else active_map.get(a) %}
+  {% set opens_record_dialog = always_popup or (activity_key in ['feeding', 'sleep'] and not s) %}
   <form method="post" action="/ui/activity" class="activity-form">
-    <input type="hidden" name="activity" value="{{ activity_key if activity_key in ['feeding', 'sleep', 'poopoo', 'supplement'] else a }}">
+    <input type="hidden" name="activity" value="{{ activity_key if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement'] else a }}">
     <button type="{{ 'button' if opens_record_dialog else 'submit' }}"
-            data-activity="{{ activity_key if activity_key in ['feeding', 'sleep', 'poopoo', 'supplement'] else a }}"
+            data-activity="{{ activity_key if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement'] else a }}"
             {% if opens_record_dialog %}data-open-record-dialog="{{ activity_key }}"{% endif %}
             class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if activity_key == 'feeding' and feeding_alert.due else '' }}">
       <span class="activity-name">{{ al(a) }}</span>
@@ -28,7 +28,7 @@
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_log_btn') if activity_key in ['feeding', 'sleep', 'poopoo', 'supplement'] or a not in timed else t('activity_start_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_log_btn') if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement'] or a not in timed else t('activity_start_btn') }}</span>
       {% endif %}
     </button>
   </form>
@@ -40,7 +40,7 @@
     const U = (window.I18N || { unit_hour: 'h', unit_minute: 'm', unit_second: 's' });
     const bar = document.querySelector('.activity-bar');
     const feeding = document.querySelector('.activity-btn[data-activity="feeding"]');
-    const feedingName = feeding?.querySelector('.activity-name')?.textContent || 'Feeding';
+    const feedingName = feeding?.querySelector('.activity-name')?.textContent || 'Milk';
     let serverOffsetSeconds = 0;
     let syncInFlight = false;
 
@@ -203,19 +203,23 @@
     </div>
     <div class="record-dialog-body">
       <input type="hidden" name="activity" value="feeding">
-      <label class="milk-volume-field" data-feeding-dialog-field>
-        <span>{{ t('milk_amount') }}</span>
+      <label class="milk-volume-field" data-intake-dialog-field
+             data-milk-label="{{ t('milk_amount') }}"
+             data-solid-food-label="{{ t('solid_food_amount') }}"
+             data-ml-unit="{{ t('col_ml') }}"
+             data-g-unit="{{ t('col_g') }}">
+        <span data-intake-amount-label>{{ t('milk_amount') }}</span>
         <span class="milk-volume-stepper">
-          <button type="button" data-volume-step="-10"
-                  aria-label="{{ t('milk_decrease') }}">−</button>
+          <button type="button" data-amount-step="-10"
+                  aria-label="{{ t('amount_decrease') }}">−</button>
           <span class="milk-volume-value">
-            <input type="number" name="volume_ml" min="0" step="10" inputmode="numeric"
+            <input type="number" name="amount" min="0" step="10" inputmode="numeric"
                    autocomplete="off" class="ml-input milk-volume-input"
                    value="{{ config.default_volume_ml or '' }}" required autofocus>
-            <span class="milk-volume-unit">{{ t('col_ml') }}</span>
+            <span class="milk-volume-unit" data-intake-amount-unit>{{ t('col_ml') }}</span>
           </span>
-          <button type="button" data-volume-step="10"
-                  aria-label="{{ t('milk_increase') }}">+</button>
+          <button type="button" data-amount-step="10"
+                  aria-label="{{ t('amount_increase') }}">+</button>
         </span>
       </label>
       <label class="duration-field is-hidden" data-sleep-dialog-field>
@@ -292,11 +296,13 @@
     const dialog = document.getElementById('add-record-dialog');
     const form = dialog?.querySelector('.record-dialog-form');
     const activity = form?.querySelector('input[name="activity"]');
-    const milkField = form?.querySelector('[data-feeding-dialog-field]');
+    const intakeField = form?.querySelector('[data-intake-dialog-field]');
     const sleepField = form?.querySelector('[data-sleep-dialog-field]');
     const poopooField = form?.querySelector('[data-poopoo-dialog-field]');
     const supplementField = form?.querySelector('[data-supplement-dialog-field]');
-    const volume = form?.querySelector('input[name="volume_ml"]');
+    const amount = form?.querySelector('input[name="amount"]');
+    const amountLabel = intakeField?.querySelector('[data-intake-amount-label]');
+    const amountUnit = intakeField?.querySelector('[data-intake-amount-unit]');
     const duration = form?.querySelector('input[name="duration"]');
     const poopooInputs = poopooField?.querySelectorAll('input, textarea') || [];
     const supplementInputs = supplementField?.querySelectorAll('input') || [];
@@ -322,17 +328,30 @@
 
     function setDialogMode(mode) {
       const isFeeding = mode === 'feeding';
+      const isSolidFood = mode === 'solid_food';
+      const isIntake = isFeeding || isSolidFood;
       const isSleep = mode === 'sleep';
       const isPoopoo = mode === 'poopoo';
       const isSupplement = mode === 'supplement';
       if (activity) activity.value = mode;
-      milkField?.classList.toggle('is-hidden', !isFeeding);
+      intakeField?.classList.toggle('is-hidden', !isIntake);
       sleepField?.classList.toggle('is-hidden', !isSleep);
       poopooField?.classList.toggle('is-hidden', !isPoopoo);
       supplementField?.classList.toggle('is-hidden', !isSupplement);
-      if (volume) {
-        volume.disabled = !isFeeding;
-        volume.required = isFeeding;
+      if (amount) {
+        amount.disabled = !isIntake;
+        amount.required = isIntake;
+        if (isSolidFood) amount.value = '';
+      }
+      if (amountLabel && intakeField) {
+        amountLabel.textContent = isSolidFood
+          ? intakeField.dataset.solidFoodLabel
+          : intakeField.dataset.milkLabel;
+      }
+      if (amountUnit && intakeField) {
+        amountUnit.textContent = isSolidFood
+          ? intakeField.dataset.gUnit
+          : intakeField.dataset.mlUnit;
       }
       if (duration) {
         duration.disabled = !isSleep;
@@ -350,8 +369,8 @@
       refreshDateTime();
       if (typeof dialog.showModal === 'function') dialog.showModal();
       else dialog.setAttribute('open', '');
-      const firstInput = mode === 'feeding'
-        ? volume
+      const firstInput = mode === 'feeding' || mode === 'solid_food'
+        ? amount
         : mode === 'sleep'
           ? duration
           : mode === 'poopoo'
@@ -389,12 +408,12 @@
         duration.focus();
       });
     });
-    form?.querySelectorAll('[data-volume-step]').forEach(button => {
+    form?.querySelectorAll('[data-amount-step]').forEach(button => {
       button.addEventListener('click', () => {
-        const current = parseInt(volume.value || '0', 10) || 0;
-        const step = parseInt(button.dataset.volumeStep || '0', 10) || 0;
-        volume.value = String(Math.max(0, current + step));
-        volume.focus();
+        const current = parseInt(amount.value || '0', 10) || 0;
+        const step = parseInt(button.dataset.amountStep || '0', 10) || 0;
+        amount.value = String(Math.max(0, current + step));
+        amount.focus();
       });
     });
     dialog?.querySelectorAll('[data-close-record-dialog]').forEach(button => {
@@ -438,7 +457,7 @@
             <th>{{ t('col_start') }}</th>
             <th>{{ t('col_end_time') }}</th>
             <th>{{ t('col_duration') }}</th>
-            <th>{{ t('col_ml') }}</th>
+            <th>{{ t('col_amount') }}</th>
             <th>{{ t('col_activity') }}</th>
             <th>{{ t('col_notes') }}</th>
           </tr>
@@ -450,7 +469,7 @@
             <td>
               <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check">
               <input type="hidden" name="date_{{ r.id }}"
-                     value="{{ ((r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'poopoo', 'supplement'] else r.start_epoch) | localdate_input(tz) }}">
+                     value="{{ ((r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'solid_food', 'poopoo', 'supplement'] else r.start_epoch) | localdate_input(tz) }}">
             </td>
             <td data-label="{{ t('col_start') }}">
               {% if is_point_record or r.activity in ['poopoo', 'supplement'] %}
@@ -458,19 +477,25 @@
               {% else %}
               <input type="time" name="start_time_{{ r.id }}"
                      value="{{ r.start_epoch | localtime_only(tz) }}" required
-                     {% if r.activity == 'feeding' %}readonly{% endif %}>
+                     {% if r.activity in ['feeding', 'solid_food'] %}readonly{% endif %}>
               {% endif %}
             </td>
             <td data-label="{{ t('col_end_time') }}">
               <input type="time" name="stop_time_{{ r.id }}"
                      value="{{ ((r.stop_epoch or r.start_epoch) | localtime_only(tz)) if (r.stop_epoch or r.activity not in timed) else '' }}">
             </td>
-            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity in ['feeding', 'sleep']) and not is_point_record else '—' }}</td>
-            <td data-label="{{ t('col_ml') }}">
-              <input type="number" name="volume_ml_{{ r.id }}" min="0" step="1"
-                     class="ml-input"
-                     value="{{ r.volume_ml if (r.volume_ml is not none and r.activity == 'feeding') else '' }}"
-                     {% if r.activity != 'feeding' %}disabled data-feeding-only="1"{% endif %}>
+            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity in ['feeding', 'solid_food', 'sleep']) and not is_point_record else '—' }}</td>
+            <td data-label="{{ t('col_amount') }}">
+              {% set has_amount = r.activity in ['feeding', 'solid_food'] %}
+              <span class="record-amount-field">
+                <input type="number" name="amount_{{ r.id }}" min="0" step="1"
+                       class="ml-input amount-input"
+                       value="{{ r.volume_ml if r.activity == 'feeding' and r.volume_ml is not none else (r.volume_g if r.activity == 'solid_food' and r.volume_g is not none else '') }}"
+                       {% if not has_amount %}disabled{% endif %}>
+                <span class="record-amount-unit{% if not has_amount %} is-hidden{% endif %}"
+                      data-ml-unit="{{ t('col_ml') }}"
+                      data-g-unit="{{ t('col_g') }}">{{ t('col_g') if r.activity == 'solid_food' else t('col_ml') }}</span>
+              </span>
             </td>
             <td data-label="{{ t('col_activity') }}">
               <select name="activity_{{ r.id }}" class="activity-select">
@@ -558,21 +583,28 @@
       });
     });
 
-    // Feeding owns ml and has a server-derived, read-only Start.
+    // Milk owns ml, Solid food owns g, and both have a derived read-only Start.
     document.querySelectorAll('.activity-select').forEach(sel => {
       const row = sel.closest('tr');
-      const ml = row?.querySelector('.ml-input');
+      const amount = row?.querySelector('.amount-input');
+      const unit = row?.querySelector('.record-amount-unit');
       const start = row?.querySelector('input[name^="start_time_"]');
-      if (!ml) return;
+      if (!amount) return;
       function sync() {
-        const feeding = sel.value === 'feeding';
-        ml.disabled = !feeding;
-        if (start) start.readOnly = feeding;
-        if (feeding) {
-          ml.placeholder = '';
+        const milk = sel.value === 'feeding';
+        const solidFood = sel.value === 'solid_food';
+        const hasAmount = milk || solidFood;
+        amount.disabled = !hasAmount;
+        if (start) start.readOnly = hasAmount;
+        if (unit) {
+          unit.textContent = solidFood ? unit.dataset.gUnit : unit.dataset.mlUnit;
+          unit.classList.toggle('is-hidden', !hasAmount);
+        }
+        if (hasAmount) {
+          amount.placeholder = '';
         } else {
-          ml.value = '';
-          ml.placeholder = '--';
+          amount.value = '';
+          amount.placeholder = '--';
         }
       }
       sel.addEventListener('change', sync);
@@ -591,7 +623,7 @@
       for (const row of document.querySelectorAll('.records-table tbody tr')) {
         const checked = row.querySelector('.row-check')?.checked;
         const select = row.querySelector('.activity-select');
-        const cappedTimed = !['feeding', 'sleep'].includes(select?.value) &&
+        const cappedTimed = !['feeding', 'solid_food', 'sleep'].includes(select?.value) &&
           select?.selectedOptions?.[0]?.dataset.timed === '1';
         if (!checked || !cappedTimed) continue;
         if (!validateDuration(
@@ -634,17 +666,22 @@
       <div id="activity-rows">
         {% for a in activities %}
         <div class="activity-row">
+          {% if a in ['feeding', 'solid_food'] %}
+          <input type="hidden" name="activity_name_{{ loop.index0 }}" value="{{ a }}">
+          <input type="text" value="{{ al(a) }}" class="activity-name-input"
+                 readonly title="{{ t('config_feeding_locked') if a == 'feeding' else t('config_solid_food_locked') }}">
+          {% else %}
           <input type="text" name="activity_name_{{ loop.index0 }}" value="{{ a }}"
-                 class="activity-name-input"
-                 {% if a == 'feeding' %}readonly title="{{ t('config_feeding_locked') }}"{% endif %}>
-          {% set end_time_activity = a in ['feeding', 'poopoo', 'supplement'] %}
+                 class="activity-name-input">
+          {% endif %}
+          {% set end_time_activity = a in ['feeding', 'solid_food', 'poopoo', 'supplement'] %}
           <label class="timed-toggle">
             <input type="checkbox" name="activity_timed_{{ loop.index0 }}"
                    {% if a in timed %}checked{% endif %}
                    {% if end_time_activity %}disabled{% endif %}>
             {{ t('config_end_time') if end_time_activity else t('config_timed') }}
           </label>
-          {% if a != 'feeding' %}
+          {% if a not in ['feeding', 'solid_food'] %}
           <button type="button" class="row-remove ghost" aria-label="{{ t('config_remove_activity') }}">×</button>
           {% endif %}
         </div>

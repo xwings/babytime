@@ -228,8 +228,7 @@ section h2 {
   min-width: 10rem;
 }
 
-/* Drop the number-input spinner on ml fields — it eats ~1.5 digits of width
-   and the value is typed, not stepped. Applies everywhere ml appears. */
+/* Drop the number-input spinner on compact amount fields. */
 .ml-input {
   appearance: textfield;
   -moz-appearance: textfield;
@@ -240,19 +239,32 @@ section h2 {
   margin: 0;
 }
 
-/* Desktop column sizing (mobile uses the two-row grid below). ml fits 3-4
+/* Desktop column sizing (mobile uses the two-row grid below). Amount fits 3-4
    digits, so pin its column tight and let Notes — the last column — take the
    freed width. `nth-child(5)`/`(7)` match the fixed column order (… ml,
    activity, notes); a greedy `width:100%` on Notes absorbs the slack without
    forcing a large min-width that could overflow. */
 @media (min-width: 641px) {
   .records-table th:nth-child(5),
-  .records-table td:nth-child(5) { width: 4.5rem; }
-  /* min-width gives ml a firm floor so the greedy Notes column can't squeeze
+  .records-table td:nth-child(5) { width: 5.5rem; }
+  /* min-width gives amount a firm floor so Notes cannot squeeze
      it; without it `max-width` alone collapses the field to min-content. */
   .records-table input[type=number].ml-input { min-width: 3.5rem; max-width: 4rem; }
   .records-table th:nth-child(7),
   .records-table td:nth-child(7) { width: 100%; }
+}
+
+.record-amount-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  white-space: nowrap;
+}
+
+.record-amount-unit {
+  color: var(--text-faint);
+  font-size: 0.8rem;
 }
 
 input, textarea, button, select {
@@ -880,7 +892,7 @@ code {
   /* Records table -> two-row cards. A flat 7-column row is too dense on a
      phone, so each record becomes a small card laid out as a 4-column grid
      over two rows: row 1 is "when" (checkbox · start · stop · duration),
-     row 2 is "what" (ml · activity · note), indented under the times. */
+     row 2 is "what" (amount · activity · note), indented under the times. */
   .records-table thead { display: none; }
   .records-table,
   .records-table tbody { display: block; width: 100%; }
@@ -907,17 +919,10 @@ code {
   .records-table td:nth-child(2) { grid-area: 1 / 2; }
   .records-table td:nth-child(3) { grid-area: 1 / 3; }
   .records-table td:nth-child(4) { grid-area: 1 / 4; color: var(--text-faint); }
-  /* Row 2: (checkbox column left empty) | ml | activity | note */
+  /* Row 2: (checkbox column left empty) | amount | activity | note */
   .records-table td:nth-child(5) { grid-area: 2 / 2; gap: 0.3rem; }
   .records-table td:nth-child(6) { grid-area: 2 / 3; }
   .records-table td:nth-child(7) { grid-area: 2 / 4; }
-  /* Show the "ml" unit after the volume so the bare number isn't ambiguous. */
-  .records-table td:nth-child(5)::after {
-    content: attr(data-label);
-    flex: 0 0 auto;
-    color: var(--text-faint);
-    font-size: 0.8rem;
-  }
   .records-table td input,
   .records-table td select { width: 100%; min-width: 0; flex: 1; }
   .records-table .notes-input { min-width: 0; }

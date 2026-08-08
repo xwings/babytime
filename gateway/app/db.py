@@ -29,6 +29,7 @@ def init() -> None:
                 start_epoch INTEGER NOT NULL,
                 stop_epoch INTEGER,
                 volume_ml INTEGER,
+                volume_g INTEGER,
                 notes TEXT,
                 activity TEXT NOT NULL DEFAULT 'feeding',
                 device_id TEXT NOT NULL DEFAULT '',
@@ -42,6 +43,12 @@ def init() -> None:
             );
             """
         )
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(records)").fetchall()
+        }
+        if "volume_g" not in columns:
+            conn.execute("ALTER TABLE records ADD COLUMN volume_g INTEGER")
         conn.commit()
 
 
@@ -109,6 +116,7 @@ def create_record(
     start_epoch: int,
     stop_epoch: Optional[int] = None,
     volume_ml: Optional[int] = None,
+    volume_g: Optional[int] = None,
     notes: Optional[str] = None,
     activity: str = "feeding",
     device_id: str = "",
@@ -116,16 +124,25 @@ def create_record(
     conn = get_conn()
     with _lock:
         cur = conn.execute(
-            "INSERT INTO records (start_epoch, stop_epoch, volume_ml, notes, activity, device_id) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (start_epoch, stop_epoch, volume_ml, notes, activity, device_id),
+            "INSERT INTO records "
+            "(start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id),
         )
         conn.commit()
         return cur.lastrowid
 
 
 def update_record(rid: int, **fields) -> None:
-    allowed = {"start_epoch", "stop_epoch", "volume_ml", "notes", "activity", "device_id"}
+    allowed = {
+        "start_epoch",
+        "stop_epoch",
+        "volume_ml",
+        "volume_g",
+        "notes",
+        "activity",
+        "device_id",
+    }
     sets = []
     params: list = []
     for k, v in fields.items():
@@ -235,4 +252,3 @@ def set_day_note(date: str, note: str) -> None:
                 (date, text),
             )
         conn.commit()
-

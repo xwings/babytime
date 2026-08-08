@@ -526,12 +526,12 @@ async def api_list_records(limit: int = 100, date: Optional[str] = None):
 def _record_date_epoch(record: dict) -> int:
     """Timestamp used to place a record on a calendar day.
 
-    Feeding, sleep, Poopoo, and Supplement are logged by end time; other
-    session types retain their historical start-time grouping.
+    Milk, Solid food, sleep, Poopoo, and Supplement are logged by end time;
+    other session types retain their historical start-time grouping.
     """
     if (
         config.canonical_activity(record.get("activity") or "")
-        in {"feeding", "sleep", "poopoo", "supplement"}
+        in {"feeding", "solid_food", "sleep", "poopoo", "supplement"}
         and record.get("stop_epoch") is not None
     ):
         return int(record["stop_epoch"])
@@ -554,8 +554,14 @@ def _day_payload(date: str) -> dict:
         "records": rows,
         "day_note": db.get_day_notes([date]).get(date, ""),
         "summary": {
-            "feeds": sum(1 for r in rows if r["volume_ml"]),
-            "total_ml": sum((r["volume_ml"] or 0) for r in rows),
+            "feeds": sum(
+                1 for r in rows if r["activity"] == "feeding" and r["volume_ml"]
+            ),
+            "total_ml": sum(
+                (r["volume_ml"] or 0)
+                for r in rows
+                if r["activity"] == "feeding"
+            ),
         },
     }
 
@@ -564,6 +570,7 @@ class RecordIn(BaseModel):
     start: Optional[int | str] = None
     stop: Optional[int | str] = None
     volume_ml: Optional[int] = None
+    volume_g: Optional[int] = None
     activity: str = "feeding"
     notes: Optional[str] = None
     device_id: str = "agent"
@@ -584,7 +591,7 @@ async def api_create_record(body: RecordIn):
     start = _to_epoch(body.start, tz)
     if start is None:
         raise HTTPException(400, "start is required")
-    if activity == "feeding":
+    if activity in {"feeding", "solid_food"}:
         # A supplied stop is explicit End; otherwise the older single `start`
         # field is interpreted as End. Start is derived from configured duration.
         end = _to_epoch(body.stop, tz) or start
@@ -598,6 +605,7 @@ async def api_create_record(body: RecordIn):
         start_epoch=start,
         stop_epoch=stop,
         volume_ml=_feeding_volume(activity, body.volume_ml),
+        volume_g=_solid_food_weight(activity, body.volume_g),
         activity=activity,
         notes=body.notes or None,
         device_id=body.device_id or "agent",
@@ -627,22 +635,42 @@ async def api_update_record(rid: int, body: RecordIn):
     effective_activity = fields.get("activity") or config.canonical_activity(
         existing["activity"]
     )
-    if effective_activity != "feeding":
-        if existing["volume_ml"] is not None or "volume_ml" in provided:
-            fields["volume_ml"] = None  # non-feeding never carries volume
-    elif "volume_ml" in provided:
-        fields["volume_ml"] = _feeding_volume(effective_activity, provided["volume_ml"])
+    if effective_activity == "feeding":
+        fields["volume_g"] = None
+        if "volume_ml" in provided:
+            fields["volume_ml"] = _feeding_volume(
+                effective_activity, provided["volume_ml"]
+            )
+        elif "activity" in provided:
+            fields["volume_ml"] = None
+    elif effective_activity == "solid_food":
+        fields["volume_ml"] = None
+        if "volume_g" in provided:
+            fields["volume_g"] = _solid_food_weight(
+                effective_activity, provided["volume_g"]
+            )
+        elif "activity" in provided:
+            fields["volume_g"] = None
+    else:
+        fields["volume_ml"] = None
+        fields["volume_g"] = None
 
-    if effective_activity in {"feeding", "poopoo", "supplement"} and (
+    time_or_activity_changed = (
         "activity" in provided or "start_epoch" in fields or "stop_epoch" in fields
-    ):
+    )
+    if effective_activity in {
+        "feeding",
+        "solid_food",
+        "poopoo",
+        "supplement",
+    } and time_or_activity_changed:
         end_epoch = (
             fields.get("stop_epoch")
             or fields.get("start_epoch")
             or existing.get("stop_epoch")
             or existing["start_epoch"]
         )
-        if effective_activity == "feeding":
+        if effective_activity in {"feeding", "solid_food"}:
             fields["start_epoch"], fields["stop_epoch"] = _feeding_bounds(end_epoch, cfg)
         else:
             fields["start_epoch"] = fields["stop_epoch"] = end_epoch
@@ -746,8 +774,16 @@ async def ui_home(
         {
             "date": d,
             "records": by_date[d],
-            "ml_count": sum(1 for r in by_date[d] if r["volume_ml"]),
-            "total_ml": sum((r["volume_ml"] or 0) for r in by_date[d]),
+            "ml_count": sum(
+                1
+                for r in by_date[d]
+                if r["activity"] == "feeding" and r["volume_ml"]
+            ),
+            "total_ml": sum(
+                (r["volume_ml"] or 0)
+                for r in by_date[d]
+                if r["activity"] == "feeding"
+            ),
             "note": day_notes.get(d, ""),
         }
         for d in page_dates
@@ -755,11 +791,12 @@ async def ui_home(
 
     activities = config.activity_list(cfg)
     timed = config.timed_activities(cfg)
-    # Surface normal Sleep timers and legacy open Feeding sessions so they
-    # can be closed. Poopoo/Supplement always open their point-record popups.
+    # Surface normal Sleep timers and legacy open Milk sessions so they can
+    # be closed. Solid food, Poopoo, and Supplement always open their dialogs.
     active_map = {
         a: s for a in activities
-        if config.canonical_activity(a) not in {"poopoo", "supplement"}
+        if config.canonical_activity(a)
+        not in {"solid_food", "poopoo", "supplement"}
         and (a in timed or a in {"feeding", "sleep"})
         and (s := db.get_active(a))
     }
@@ -818,14 +855,31 @@ async def ui_home(
 
 
 def _feeding_volume(activity: str, raw_ml) -> Optional[int]:
-    """Volume is only meaningful for feeding; other activities store none.
+    """Milk volume is only meaningful for the historical ``feeding`` type.
 
-    Accepts the raw form string or an int/None (JSON API), so the rule has
-    a single definition shared by the web UI and the JSON endpoints."""
+    Accepts a raw form string or an int/None so browser and JSON writes share
+    the same normalization rule.
+    """
     if activity != "feeding" or raw_ml is None:
         return None
     s = str(raw_ml).strip()
     return int(s) if s else None
+
+
+def _solid_food_weight(activity: str, raw_g) -> Optional[int]:
+    """Gram amount is only meaningful for Solid food records."""
+    if activity != "solid_food" or raw_g is None:
+        return None
+    value = str(raw_g).strip()
+    return int(value) if value else None
+
+
+def _intake_amounts(activity: str, raw_amount) -> tuple[Optional[int], Optional[int]]:
+    """Map the UI's shared amount input to its unit-specific DB column."""
+    return (
+        _feeding_volume(activity, raw_amount),
+        _solid_food_weight(activity, raw_amount),
+    )
 
 
 @app.post("/ui/activity")
@@ -833,12 +887,12 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
     activity = config.canonical_activity(activity) or "feeding"
     ts = int(time.time())
     cfg = config.load()
-    if activity == "feeding":
-        # The normal browser path opens the milk-entry dialog and posts to
+    if activity in {"feeding", "solid_food"}:
+        # The normal browser path opens an amount-entry dialog and posts to
         # /records. Keep direct/form-only callers fixed-duration too.
         start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
-        active = db.get_active(activity)
-        if active:
+        active = db.get_active(activity) if activity == "feeding" else None
+        if active and activity == "feeding":
             db.update_record(
                 active["id"],
                 start_epoch=start_epoch,
@@ -883,6 +937,7 @@ async def ui_create(
     duration: str = Form(""),
     start_time: str = Form(""),
     stop_time: str = Form(""),
+    amount: str = Form(""),
     volume_ml: str = Form(""),
     activity: str = Form("feeding"),
     notes: str = Form(""),
@@ -895,14 +950,14 @@ async def ui_create(
     tz = cfg.get("timezone") or "UTC"
     activity = config.canonical_activity(activity) or "feeding"
 
-    # Feeding derives Start from a fixed duration. Sleep accepts an explicit
-    # HH:MM duration. Poopoo and Supplement are independent point records.
-    # All popup modes treat the supplied time as End.
+    # Milk and Solid food derive Start from a fixed duration. Sleep accepts an
+    # explicit HH:MM duration. Poopoo and Supplement are independent point
+    # records. All popup modes treat the supplied time as End.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
             raise HTTPException(400, "date and end_time required")
-        if activity == "feeding":
+        if activity in {"feeding", "solid_food"}:
             start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
         elif activity in {"poopoo", "supplement"}:
             start_epoch = stop_epoch = end_epoch
@@ -936,10 +991,13 @@ async def ui_create(
         )
     elif activity == "supplement":
         notes = _supplement_notes(cfg, supplement_type, notes)
+    raw_amount = amount if amount.strip() else volume_ml
+    stored_ml, stored_g = _intake_amounts(activity, raw_amount)
     db.create_record(
         start_epoch=start_epoch,
         stop_epoch=stop_epoch,
-        volume_ml=_feeding_volume(activity, volume_ml),
+        volume_ml=stored_ml,
+        volume_g=stored_g,
         activity=activity,
         notes=notes.strip() or None,
         device_id="web",
@@ -965,7 +1023,7 @@ async def ui_bulk_save(request: Request):
             form.get(f"activity_{rid}") or "feeding"
         ) or "feeding"
         existing = existing_by_id.get(rid)
-        if activity == "feeding":
+        if activity in {"feeding", "solid_food"}:
             end_epoch = combine_date_time(date, stop_time or start_time, tz)
             if end_epoch is None:
                 continue
@@ -990,12 +1048,17 @@ async def ui_bulk_save(request: Request):
                 stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch, activity)
         if start_epoch is None or (existing is None):
             continue
-        volume_ml = form.get(f"volume_ml_{rid}") or ""
+        raw_amount = form.get(f"amount_{rid}")
+        if raw_amount is None:
+            legacy_key = "volume_g" if activity == "solid_food" else "volume_ml"
+            raw_amount = form.get(f"{legacy_key}_{rid}") or ""
+        volume_ml, volume_g = _intake_amounts(activity, raw_amount)
         db.update_record(
             rid,
             start_epoch=start_epoch,
             stop_epoch=stop_epoch,
-            volume_ml=_feeding_volume(activity, volume_ml),
+            volume_ml=volume_ml,
+            volume_g=volume_g,
             activity=activity,
             notes=(form.get(f"notes_{rid}") or "").strip() or None,
         )
@@ -1061,13 +1124,13 @@ async def ui_save_config(request: Request):
     if rows:
         # Rebuild the two activity lists from the per-row name + timed toggle.
         # Disabled end-time toggles need not round-trip; config parsing keeps
-        # Feeding, Poopoo, and Supplement out of the timed activity set.
+        # Built-in end-time activities stay out of the timed activity set.
         items["activity_types"] = ",".join(name for _, name in rows if name)
         items["timed_activities"] = ",".join(
             name
             for ri, name in rows
             if config.canonical_activity(name)
-            not in {"feeding", "poopoo", "supplement"}
+            not in {"feeding", "solid_food", "poopoo", "supplement"}
             and name
             and ri in timed_rows
         )

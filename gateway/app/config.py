@@ -8,7 +8,7 @@ from typing import Callable, Optional
 CONFIG_PATH = os.environ.get("GATEWAY_CONFIG_PATH", "/babytime/config.json")
 
 DEFAULTS: dict = {
-    "activity_types": "feeding,sleep,poopoo,supplement",
+    "activity_types": "feeding,solid_food,sleep,poopoo,supplement",
     "timed_activities": "sleep",
     "auto_stop_minutes": "15",
     "feeding_alert_minutes": "120",
@@ -32,6 +32,10 @@ POOPOO_OPTION_KEYS = {
 
 _BUILTIN_ACTIVITY_ALIASES = {
     "feeding": "feeding",
+    "milk": "feeding",
+    "solid_food": "solid_food",
+    "solid food": "solid_food",
+    "solidfood": "solid_food",
     "sleep": "sleep",
     "poopoo": "poopoo",
     "supplement": "supplement",
@@ -107,15 +111,14 @@ def canonical_activity(name: str) -> str:
 
 
 def activity_list(cfg: dict) -> list:
-    """Configured activity types, in order, deduped, with 'feeding' first.
+    """Configured activities, deduped, with both intake types first.
 
-    'feeding' is the one type the rest of the app special-cases (volume_ml,
-    the firmware default), so it is always present regardless of config.
+    Milk (the historical ``feeding`` identifier) and Solid food are built-in
+    amount-entry buttons, so both remain present regardless of older config.
     """
     raw = (cfg.get("activity_types") or "").replace("\n", ",")
-    seen: set = set()
-    out: list = ["feeding"]
-    seen.add("feeding")
+    out: list = ["feeding", "solid_food"]
+    seen: set = set(out)
     for part in raw.split(","):
         name = canonical_activity(part)
         if name and name not in seen:
@@ -221,14 +224,20 @@ def timed_activities(cfg: dict) -> set:
     """Activities recorded as start->stop sessions (running timer); the rest
     are completed point-in-time records.
 
-    Feeding, Poopoo, and Supplement are deliberately never activity-bar
-    timers: they use dedicated end-time dialogs. Ignore legacy entries.
+    Milk, Solid food, Poopoo, and Supplement are deliberately never
+    activity-bar timers: they use dedicated end-time dialogs. Ignore legacy
+    entries.
     """
     raw = (cfg.get("timed_activities") or "").replace("\n", ",")
     out: set = set()
     for part in raw.split(","):
         name = canonical_activity(part)
-        if name and name not in {"feeding", "poopoo", "supplement"}:
+        if name and name not in {
+            "feeding",
+            "solid_food",
+            "poopoo",
+            "supplement",
+        }:
             out.add(name)
     return out
 
