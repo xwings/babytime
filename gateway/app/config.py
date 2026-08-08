@@ -8,8 +8,8 @@ from typing import Callable, Optional
 CONFIG_PATH = os.environ.get("GATEWAY_CONFIG_PATH", "/babytime/config.json")
 
 DEFAULTS: dict = {
-    "activity_types": "feeding,solid_food,sleep,poopoo,supplement",
-    "timed_activities": "sleep",
+    "activity_types": "feeding,solid_food,sleep,poopoo,supplement,etc",
+    "timed_activities": "sleep,etc",
     "auto_stop_minutes": "15",
     "feeding_alert_minutes": "120",
     "default_volume_ml": "",
@@ -40,6 +40,7 @@ _BUILTIN_ACTIVITY_ALIASES = {
     "poopoo": "poopoo",
     "supplement": "supplement",
     "subpliment": "supplement",
+    "etc": "etc",
 }
 
 _lock = threading.Lock()
@@ -229,7 +230,7 @@ def timed_activities(cfg: dict) -> set:
     entries.
     """
     raw = (cfg.get("timed_activities") or "").replace("\n", ",")
-    out: set = set()
+    out: set = {"etc"} if "etc" in activity_list(cfg) else set()
     for part in raw.split(","):
         name = canonical_activity(part)
         if name and name not in {

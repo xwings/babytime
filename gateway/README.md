@@ -137,8 +137,8 @@ than that cap (default 15; `0` disables the cap and produces point feedings).
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `activity_types` | `feeding,solid_food,sleep,poopoo,supplement` | comma-separated; Milk (`feeding`) and Solid food are always first. Legacy `subpliment` is normalized to `supplement` |
-| `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Milk, Solid food, Poopoo, and Supplement use dedicated end-time dialogs, so entries for them here are ignored |
+| `activity_types` | `feeding,solid_food,sleep,poopoo,supplement,etc` | comma-separated; Milk (`feeding`) and Solid food are always first. Legacy `subpliment` is normalized to `supplement` |
+| `timed_activities` | `sleep,etc` | comma-separated session types. Etc uses a dedicated Notes + Start/End dialog rather than a running activity-bar timer. Milk, Solid food, Poopoo, and Supplement use their own dialogs |
 | `auto_stop_minutes` | `15` | feeding duration (`Start = End - minutes`) and auto-stop cap for active sessions; `0` produces point feedings and disables auto-stop |
 | `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web Feeding button blinks blue/red, and the device display blinks a red background. `0` disables |
 | `default_volume_ml` | `` | pre-fills the web milk dialog and is attached to a feeding logged from an ESP32 button |

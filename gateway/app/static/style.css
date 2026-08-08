@@ -545,6 +545,10 @@ button.danger:hover { background: var(--danger-hover); }
   gap: 0.75rem;
 }
 
+.record-time-fields.has-start-time {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .record-time-fields label { min-width: 0; }
 
 .milk-volume-stepper,
@@ -904,6 +908,12 @@ code {
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
   .record-dialog-actions button { flex: 1; }
+  .record-time-fields.has-start-time {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .record-time-fields.has-start-time [data-record-date-field] {
+    grid-column: 1 / -1;
+  }
 
   /* Records table -> two-row cards. A flat 7-column row is too dense on a
      phone, so each record becomes a small card laid out as a 4-column grid

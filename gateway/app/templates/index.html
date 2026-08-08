@@ -11,13 +11,13 @@
          data-activity-log-label="{{ t('activity_log_btn') }}">
   {% for a in activities %}
   {% set activity_key = a | trim | lower %}
-  {% set always_popup = activity_key in ['solid_food', 'poopoo', 'supplement'] %}
+  {% set always_popup = activity_key in ['solid_food', 'poopoo', 'supplement', 'etc'] %}
   {% set s = none if always_popup else active_map.get(a) %}
   {% set opens_record_dialog = always_popup or (activity_key in ['feeding', 'sleep'] and not s) %}
   <form method="post" action="/ui/activity" class="activity-form">
-    <input type="hidden" name="activity" value="{{ activity_key if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement'] else a }}">
+    <input type="hidden" name="activity" value="{{ activity_key if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement', 'etc'] else a }}">
     <button type="{{ 'button' if opens_record_dialog else 'submit' }}"
-            data-activity="{{ activity_key if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement'] else a }}"
+            data-activity="{{ activity_key if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement', 'etc'] else a }}"
             {% if opens_record_dialog %}data-open-record-dialog="{{ activity_key }}"{% endif %}
             class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if activity_key == 'feeding' and feeding_alert.due else '' }}">
       <span class="activity-name">{{ al(a) }}</span>
@@ -28,7 +28,7 @@
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_log_btn') if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement'] or a not in timed else t('activity_start_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_log_btn') if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement', 'etc'] or a not in timed else t('activity_start_btn') }}</span>
       {% endif %}
     </button>
   </form>
@@ -275,9 +275,18 @@
           </div>
         </fieldset>
       </div>
-      <div class="record-time-fields">
-        <label>{{ t('col_date') }}
+      <div class="poopoo-fields is-hidden" data-etc-dialog-field>
+        <label class="poopoo-extra-notes">{{ t('col_notes') }}
+          <textarea name="notes" rows="3"
+                    placeholder="{{ t('etc_notes_placeholder') }}" disabled></textarea>
+        </label>
+      </div>
+      <div class="record-time-fields" data-record-time-fields>
+        <label data-record-date-field>{{ t('col_date') }}
           <input type="date" name="date" value="{{ now_date }}" required>
+        </label>
+        <label class="is-hidden" data-etc-start-time-field>{{ t('col_start') }}
+          <input type="time" name="start_time" value="{{ now_time }}" required disabled>
         </label>
         <label>{{ t('col_end_time') }}
           <input type="time" name="end_time" value="{{ now_time }}" required>
@@ -300,12 +309,17 @@
     const sleepField = form?.querySelector('[data-sleep-dialog-field]');
     const poopooField = form?.querySelector('[data-poopoo-dialog-field]');
     const supplementField = form?.querySelector('[data-supplement-dialog-field]');
+    const etcField = form?.querySelector('[data-etc-dialog-field]');
+    const etcStartField = form?.querySelector('[data-etc-start-time-field]');
+    const etcStart = etcStartField?.querySelector('input[name="start_time"]');
+    const timeFields = form?.querySelector('[data-record-time-fields]');
     const amount = form?.querySelector('input[name="amount"]');
     const amountLabel = intakeField?.querySelector('[data-intake-amount-label]');
     const amountUnit = intakeField?.querySelector('[data-intake-amount-unit]');
     const duration = form?.querySelector('input[name="duration"]');
     const poopooInputs = poopooField?.querySelectorAll('input, textarea') || [];
     const supplementInputs = supplementField?.querySelectorAll('input') || [];
+    const etcInputs = etcField?.querySelectorAll('input, textarea') || [];
     const renderedAt = Date.now();
     const renderedWallTime = new Date(
       (dialog?.dataset.nowDate || '') + 'T' + (dialog?.dataset.nowTime || '00:00') + ':00'
@@ -320,10 +334,12 @@
       const now = new Date(renderedWallTime.getTime() + (Date.now() - renderedAt));
       const date = form.querySelector('input[name="date"]');
       const endTime = form.querySelector('input[name="end_time"]');
+      const startTime = form.querySelector('input[name="start_time"]');
       if (date) {
         date.value = now.getFullYear() + '-' + twoDigits(now.getMonth() + 1) + '-' + twoDigits(now.getDate());
       }
       if (endTime) endTime.value = twoDigits(now.getHours()) + ':' + twoDigits(now.getMinutes());
+      if (startTime) startTime.value = twoDigits(now.getHours()) + ':' + twoDigits(now.getMinutes());
     }
 
     function setDialogMode(mode) {
@@ -333,11 +349,15 @@
       const isSleep = mode === 'sleep';
       const isPoopoo = mode === 'poopoo';
       const isSupplement = mode === 'supplement';
+      const isEtc = mode === 'etc';
       if (activity) activity.value = mode;
       intakeField?.classList.toggle('is-hidden', !isIntake);
       sleepField?.classList.toggle('is-hidden', !isSleep);
       poopooField?.classList.toggle('is-hidden', !isPoopoo);
       supplementField?.classList.toggle('is-hidden', !isSupplement);
+      etcField?.classList.toggle('is-hidden', !isEtc);
+      etcStartField?.classList.toggle('is-hidden', !isEtc);
+      timeFields?.classList.toggle('has-start-time', isEtc);
       if (amount) {
         amount.disabled = !isIntake;
         amount.required = isIntake;
@@ -360,6 +380,11 @@
       }
       poopooInputs.forEach(input => { input.disabled = !isPoopoo; });
       supplementInputs.forEach(input => { input.disabled = !isSupplement; });
+      etcInputs.forEach(input => { input.disabled = !isEtc; });
+      if (etcStart) {
+        etcStart.disabled = !isEtc;
+        etcStart.required = isEtc;
+      }
     }
 
     function openDialog(mode) {
@@ -375,7 +400,9 @@
           ? duration
           : mode === 'poopoo'
             ? poopooField?.querySelector('input, textarea')
-            : supplementField?.querySelector('input');
+            : mode === 'supplement'
+              ? supplementField?.querySelector('input')
+              : etcField?.querySelector('textarea');
       firstInput?.focus();
     }
 
@@ -443,7 +470,7 @@
         <button type="button" class="fold-toggle" aria-label="{{ t('records_toggle_aria') }}">
           <span class="chevron">▾</span>
         </button>
-        <span class="date-label">{{ g.date }} ({{ t('date_count', n=g.ml_count, plural='' if g.ml_count == 1 else 's') }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %})</span>
+        <span class="date-label">{{ g.date }} ({{ t('date_count', n=g.ml_count, plural='' if g.ml_count == 1 else 's') }}{% if g.total_ml %}, {{ g.total_ml }} {{ t('col_ml') }}{% endif %}, {{ g.total_g }} {{ t('col_g') }}, {{ t('date_poopoo_count', n=g.poopoo_count) }})</span>
       </div>
       <div class="day-note-block">
         <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('day_note_today') if g.date == now_date else t('col_day_note') }}</label>
@@ -675,11 +702,12 @@
                  class="activity-name-input">
           {% endif %}
           {% set end_time_activity = a in ['feeding', 'solid_food', 'poopoo', 'supplement'] %}
+          {% set start_end_activity = a == 'etc' %}
           <label class="timed-toggle">
             <input type="checkbox" name="activity_timed_{{ loop.index0 }}"
                    {% if a in timed %}checked{% endif %}
-                   {% if end_time_activity %}disabled{% endif %}>
-            {{ t('config_end_time') if end_time_activity else t('config_timed') }}
+                   {% if end_time_activity or start_end_activity %}disabled{% endif %}>
+            {{ t('config_end_time') if end_time_activity else (t('config_start_end') if start_end_activity else t('config_timed')) }}
           </label>
           {% if a not in ['feeding', 'solid_food'] %}
           <button type="button" class="row-remove ghost" aria-label="{{ t('config_remove_activity') }}">×</button>

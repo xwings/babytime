@@ -562,6 +562,16 @@ def _day_payload(date: str) -> dict:
                 for r in rows
                 if r["activity"] == "feeding"
             ),
+            "total_g": sum(
+                (r["volume_g"] or 0)
+                for r in rows
+                if r["activity"] == "solid_food"
+            ),
+            "poopoo": sum(
+                1
+                for r in rows
+                if config.canonical_activity(r["activity"]) == "poopoo"
+            ),
         },
     }
 
@@ -784,6 +794,16 @@ async def ui_home(
                 for r in by_date[d]
                 if r["activity"] == "feeding"
             ),
+            "total_g": sum(
+                (r["volume_g"] or 0)
+                for r in by_date[d]
+                if r["activity"] == "solid_food"
+            ),
+            "poopoo_count": sum(
+                1
+                for r in by_date[d]
+                if config.canonical_activity(r["activity"]) == "poopoo"
+            ),
             "note": day_notes.get(d, ""),
         }
         for d in page_dates
@@ -792,11 +812,11 @@ async def ui_home(
     activities = config.activity_list(cfg)
     timed = config.timed_activities(cfg)
     # Surface normal Sleep timers and legacy open Milk sessions so they can
-    # be closed. Solid food, Poopoo, and Supplement always open their dialogs.
+    # be closed. Solid food, Poopoo, Supplement, and Etc open their dialogs.
     active_map = {
         a: s for a in activities
         if config.canonical_activity(a)
-        not in {"solid_food", "poopoo", "supplement"}
+        not in {"solid_food", "poopoo", "supplement", "etc"}
         and (a in timed or a in {"feeding", "sleep"})
         and (s := db.get_active(a))
     }
@@ -906,7 +926,7 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
                 device_id="web",
                 volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
             )
-    elif activity in {"poopoo", "supplement"}:
+    elif activity in {"poopoo", "supplement", "etc"}:
         # The browser normally uses the popup. A direct call still creates a
         # new independent point record and ignores any older active record.
         db.create_record(
@@ -952,7 +972,7 @@ async def ui_create(
 
     # Milk and Solid food derive Start from a fixed duration. Sleep accepts an
     # explicit HH:MM duration. Poopoo and Supplement are independent point
-    # records. All popup modes treat the supplied time as End.
+    # records. Etc accepts explicit Start and End fields.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
@@ -1041,7 +1061,7 @@ async def ui_bulk_save(request: Request):
             stop_epoch = end_epoch
         else:
             start_epoch = combine_date_time(date, start_time, tz)
-            if activity not in timed and activity != "sleep":
+            if activity not in timed and activity not in {"sleep", "etc"}:
                 stop_epoch = start_epoch
             else:
                 stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
@@ -1132,7 +1152,7 @@ async def ui_save_config(request: Request):
             if config.canonical_activity(name)
             not in {"feeding", "solid_food", "poopoo", "supplement"}
             and name
-            and ri in timed_rows
+            and (ri in timed_rows or config.canonical_activity(name) == "etc")
         )
     if poopoo_options_present:
         for key, values in poopoo_rows.items():
