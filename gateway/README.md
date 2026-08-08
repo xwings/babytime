@@ -135,12 +135,16 @@ than that cap (default 15; `0` disables the cap and produces point feedings).
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `activity_types` | `feeding,sleep,poopoo` | comma-separated; `feeding` always first |
-| `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Feeding is handled separately by its end-time milk dialog (and by one end-time press on ESP32), so legacy `feeding` entries here are ignored |
+| `activity_types` | `feeding,sleep,poopoo,supplement` | comma-separated; `feeding` always first. Legacy `subpliment` is normalized to `supplement` |
+| `timed_activities` | `sleep` | comma-separated subset controlling activity-bar timers. Feeding, Poopoo, and Supplement use dedicated end-time dialogs, so entries for them here are ignored |
 | `auto_stop_minutes` | `15` | feeding duration (`Start = End - minutes`) and auto-stop cap for active sessions; `0` produces point feedings and disables auto-stop |
 | `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web Feeding button blinks blue/red, and the device display blinks a red background. `0` disables |
 | `default_volume_ml` | `` | pre-fills the web milk dialog and is attached to a feeding logged from an ESP32 button |
 | `default_language` | `en` | UI language (`en`/`zh`) for browsers without a `lang` cookie; the per-browser switch still overrides it |
+| `poopoo_amount_options` | `many,less` | configurable amount choices shown in the Poopoo dialog |
+| `poopoo_color_options` | `yellow,green` | configurable color choices shown in the Poopoo dialog |
+| `poopoo_texture_options` | `soft,hard` | configurable texture choices shown in the Poopoo dialog |
+| `supplement_options` | `AD,D3` | configurable choices shown in the Supplement dialog and stored in record Notes |
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |
 | `ui_show_count` | `10` | dates per page on the web UI (records grouped by date; rows from the last 24h are pre-checked) |
 | `trusted_networks` | `10.0.0.0/8` | comma-separated CIDR blocks whose clients skip auth when `GATEWAY_TOKEN` is set; everyone else must present the token. Unparseable entries are ignored |

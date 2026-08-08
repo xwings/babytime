@@ -39,6 +39,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "act_feeding": "Feeding",
         "act_sleep": "Sleep",
         "act_poopoo": "Poopoo",
+        "act_supplement": "Supplement",
         # Records section
         "records_heading": "Records ({n} across {d} day{plural})",
         "records_select_all": "Select all on page",
@@ -73,6 +74,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "poopoo_option_green": "Green",
         "poopoo_option_soft": "Soft",
         "poopoo_option_hard": "Hard",
+        "supplement_type": "Supplement",
         # Table columns
         "col_date": "Date",
         "col_start": "Start",
@@ -101,6 +103,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_poopoo_options_hint": "Add or remove the choices shown in the Poopoo popup.",
         "config_add_option": "+ Add item",
         "config_remove_option": "Remove item",
+        "config_supplement_options": "Supplement options",
+        "config_supplement_options_hint": "Add or remove the choices shown in the Supplement popup.",
         # Time units (read by the live-elapsed JS in index.html)
         "unit_hour": "h",
         "unit_minute": "m",
@@ -154,6 +158,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "poopoo_option_green": "绿色",
         "poopoo_option_soft": "软",
         "poopoo_option_hard": "硬",
+        "supplement_type": "补充剂",
         # Table columns
         "col_date": "日期",
         "col_start": "开始",
@@ -182,6 +187,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_poopoo_options_hint": "添加或删除便便弹窗中显示的选项。",
         "config_add_option": "+ 添加选项",
         "config_remove_option": "删除选项",
+        "config_supplement_options": "补充剂选项",
+        "config_supplement_options_hint": "添加或删除补充剂弹窗中显示的选项。",
         # Time units
         "unit_hour": "时",
         "unit_minute": "分",

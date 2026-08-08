@@ -11,12 +11,13 @@
          data-activity-log-label="{{ t('activity_log_btn') }}">
   {% for a in activities %}
   {% set activity_key = a | trim | lower %}
-  {% set s = none if activity_key == 'poopoo' else active_map.get(a) %}
-  {% set opens_record_dialog = activity_key == 'poopoo' or (activity_key in ['feeding', 'sleep'] and not s) %}
+  {% set point_popup = activity_key in ['poopoo', 'supplement'] %}
+  {% set s = none if point_popup else active_map.get(a) %}
+  {% set opens_record_dialog = point_popup or (activity_key in ['feeding', 'sleep'] and not s) %}
   <form method="post" action="/ui/activity" class="activity-form">
-    <input type="hidden" name="activity" value="{{ activity_key if activity_key in ['feeding', 'sleep', 'poopoo'] else a }}">
+    <input type="hidden" name="activity" value="{{ activity_key if activity_key in ['feeding', 'sleep', 'poopoo', 'supplement'] else a }}">
     <button type="{{ 'button' if opens_record_dialog else 'submit' }}"
-            data-activity="{{ activity_key if activity_key in ['feeding', 'sleep', 'poopoo'] else a }}"
+            data-activity="{{ activity_key if activity_key in ['feeding', 'sleep', 'poopoo', 'supplement'] else a }}"
             {% if opens_record_dialog %}data-open-record-dialog="{{ activity_key }}"{% endif %}
             class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if activity_key == 'feeding' and feeding_alert.due else '' }}">
       <span class="activity-name">{{ al(a) }}</span>
@@ -27,7 +28,7 @@
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_log_btn') if activity_key in ['feeding', 'sleep', 'poopoo'] or a not in timed else t('activity_start_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_log_btn') if activity_key in ['feeding', 'sleep', 'poopoo', 'supplement'] or a not in timed else t('activity_start_btn') }}</span>
       {% endif %}
     </button>
   </form>
@@ -256,6 +257,20 @@
                     placeholder="{{ t('poopoo_extra_notes_placeholder') }}" disabled></textarea>
         </label>
       </div>
+      <div class="poopoo-fields is-hidden" data-supplement-dialog-field>
+        <fieldset class="poopoo-choice-group">
+          <legend>{{ t('supplement_type') }}</legend>
+          <div class="poopoo-choices">
+            {% for option in supplement_options %}
+            <label class="poopoo-choice">
+              <input type="radio" name="supplement_type" value="{{ option }}"
+                     required disabled>
+              <span>{{ option }}</span>
+            </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+      </div>
       <div class="record-time-fields">
         <label>{{ t('col_date') }}
           <input type="date" name="date" value="{{ now_date }}" required>
@@ -280,9 +295,11 @@
     const milkField = form?.querySelector('[data-feeding-dialog-field]');
     const sleepField = form?.querySelector('[data-sleep-dialog-field]');
     const poopooField = form?.querySelector('[data-poopoo-dialog-field]');
+    const supplementField = form?.querySelector('[data-supplement-dialog-field]');
     const volume = form?.querySelector('input[name="volume_ml"]');
     const duration = form?.querySelector('input[name="duration"]');
     const poopooInputs = poopooField?.querySelectorAll('input, textarea') || [];
+    const supplementInputs = supplementField?.querySelectorAll('input') || [];
     const renderedAt = Date.now();
     const renderedWallTime = new Date(
       (dialog?.dataset.nowDate || '') + 'T' + (dialog?.dataset.nowTime || '00:00') + ':00'
@@ -307,10 +324,12 @@
       const isFeeding = mode === 'feeding';
       const isSleep = mode === 'sleep';
       const isPoopoo = mode === 'poopoo';
+      const isSupplement = mode === 'supplement';
       if (activity) activity.value = mode;
       milkField?.classList.toggle('is-hidden', !isFeeding);
       sleepField?.classList.toggle('is-hidden', !isSleep);
       poopooField?.classList.toggle('is-hidden', !isPoopoo);
+      supplementField?.classList.toggle('is-hidden', !isSupplement);
       if (volume) {
         volume.disabled = !isFeeding;
         volume.required = isFeeding;
@@ -321,6 +340,7 @@
         duration.setCustomValidity('');
       }
       poopooInputs.forEach(input => { input.disabled = !isPoopoo; });
+      supplementInputs.forEach(input => { input.disabled = !isSupplement; });
     }
 
     function openDialog(mode) {
@@ -334,7 +354,9 @@
         ? volume
         : mode === 'sleep'
           ? duration
-          : poopooField?.querySelector('input, textarea');
+          : mode === 'poopoo'
+            ? poopooField?.querySelector('input, textarea')
+            : supplementField?.querySelector('input');
       firstInput?.focus();
     }
 
@@ -428,10 +450,10 @@
             <td>
               <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check">
               <input type="hidden" name="date_{{ r.id }}"
-                     value="{{ ((r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'poopoo'] else r.start_epoch) | localdate_input(tz) }}">
+                     value="{{ ((r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'poopoo', 'supplement'] else r.start_epoch) | localdate_input(tz) }}">
             </td>
             <td data-label="{{ t('col_start') }}">
-              {% if is_point_record or r.activity == 'poopoo' %}
+              {% if is_point_record or r.activity in ['poopoo', 'supplement'] %}
               <span class="instant-dash">—</span>
               {% else %}
               <input type="time" name="start_time_{{ r.id }}"
@@ -615,7 +637,7 @@
           <input type="text" name="activity_name_{{ loop.index0 }}" value="{{ a }}"
                  class="activity-name-input"
                  {% if a == 'feeding' %}readonly title="{{ t('config_feeding_locked') }}"{% endif %}>
-          {% set end_time_activity = a in ['feeding', 'poopoo'] %}
+          {% set end_time_activity = a in ['feeding', 'poopoo', 'supplement'] %}
           <label class="timed-toggle">
             <input type="checkbox" name="activity_timed_{{ loop.index0 }}"
                    {% if a in timed %}checked{% endif %}
@@ -641,10 +663,10 @@
           ('texture', t('poopoo_texture'))
         ] %}
         <div class="poopoo-config-group"
-             data-poopoo-option-group
+             data-option-list-group
              data-option-prefix="poopoo_{{ group }}_options_item_">
           <h3>{{ label }}</h3>
-          <div data-poopoo-option-rows>
+          <div data-option-list-rows>
             {% for option in poopoo_options[group] %}
             <div class="poopoo-option-row">
               <input type="text" name="poopoo_{{ group }}_options_item_{{ loop.index0 }}"
@@ -655,9 +677,33 @@
             {% endfor %}
           </div>
           <button type="button" class="poopoo-option-add ghost"
-                  data-add-poopoo-option>{{ t('config_add_option') }}</button>
+                  data-add-option-list-item>{{ t('config_add_option') }}</button>
         </div>
         {% endfor %}
+      </div>
+    </fieldset>
+    <fieldset class="config-poopoo-options full-width">
+      <legend>{{ t('config_supplement_options') }}</legend>
+      <input type="hidden" name="supplement_options_present" value="1">
+      <p class="hint">{{ t('config_supplement_options_hint') }}</p>
+      <div class="poopoo-config-groups">
+        <div class="poopoo-config-group"
+             data-option-list-group
+             data-option-prefix="supplement_options_item_">
+          <h3>{{ t('supplement_type') }}</h3>
+          <div data-option-list-rows>
+            {% for option in supplement_options %}
+            <div class="poopoo-option-row">
+              <input type="text" name="supplement_options_item_{{ loop.index0 }}"
+                     value="{{ option }}" pattern="[^,]+">
+              <button type="button" class="poopoo-option-remove row-remove ghost"
+                      aria-label="{{ t('config_remove_option') }}">×</button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="poopoo-option-add ghost"
+                  data-add-option-list-item>{{ t('config_add_option') }}</button>
+        </div>
       </div>
     </fieldset>
     <label>{{ t('config_default_language') }}
@@ -705,10 +751,10 @@
 <script>
   (function () {
     const removeLabel = {{ t('config_remove_option') | tojson }};
-    document.querySelectorAll('[data-poopoo-option-group]').forEach(group => {
-      const rows = group.querySelector('[data-poopoo-option-rows]');
+    document.querySelectorAll('[data-option-list-group]').forEach(group => {
+      const rows = group.querySelector('[data-option-list-rows]');
       const prefix = group.dataset.optionPrefix || '';
-      group.querySelector('[data-add-poopoo-option]')?.addEventListener('click', () => {
+      group.querySelector('[data-add-option-list-item]')?.addEventListener('click', () => {
         let idx = 0;
         while (rows.querySelector('[name="' + prefix + idx + '"]')) idx++;
         const row = document.createElement('div');

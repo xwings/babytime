@@ -180,6 +180,19 @@ def _poopoo_notes(
     return "; ".join(parts)
 
 
+def _supplement_notes(cfg: dict, supplement_type: str, extra_notes: str = "") -> str:
+    """Validate a Supplement choice and serialize it into record notes."""
+    choice = (supplement_type or "").strip()
+    allowed = config.supplement_options(cfg)
+    if (allowed and not choice) or (choice and choice not in allowed):
+        raise HTTPException(400, "supplement selection is required")
+    parts = [f"Supplement: {choice}"] if choice else []
+    extra = (extra_notes or "").strip()
+    if extra:
+        parts.append(f"Extra notes: {extra}")
+    return "; ".join(parts)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init()
@@ -434,17 +447,18 @@ async def api_post_event(event: EventIn):
         raise HTTPException(400, "type must be 'start', 'stop', or 'log'")
     ts = event.timestamp_epoch or int(time.time())
     cfg = config.load()
+    activity = config.canonical_activity(event.activity) or "feeding"
     if event.type == "start":
-        if db.get_active(event.activity) is None:
+        if db.get_active(activity) is None:
             db.create_record(
                 start_epoch=ts,
-                activity=event.activity,
+                activity=activity,
                 device_id=event.device_id,
-                volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
+                volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
             )
     elif event.type == "stop":
-        if event.activity == "feeding":
-            active = db.get_active(event.activity)
+        if activity == "feeding":
+            active = db.get_active(activity)
             if active:
                 start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
                 db.update_record(
@@ -453,13 +467,13 @@ async def api_post_event(event: EventIn):
                     stop_epoch=stop_epoch,
                 )
         else:
-            db.stop_active(stop_epoch=ts, activity=event.activity)
+            db.stop_active(stop_epoch=ts, activity=activity)
     else:
         # Current devices send one `log` event when a feed has finished. If
         # an older client left a session open, normalize it to the configured
         # duration too. For Feeding, the press is always End.
-        active = db.get_active(event.activity)
-        if event.activity == "feeding":
+        active = db.get_active(activity)
+        if activity == "feeding":
             start_epoch, stop_epoch = _feeding_bounds(ts, cfg)
             if active:
                 db.update_record(
@@ -471,28 +485,28 @@ async def api_post_event(event: EventIn):
                 db.create_record(
                     start_epoch=start_epoch,
                     stop_epoch=stop_epoch,
-                    activity=event.activity,
+                    activity=activity,
                     device_id=event.device_id,
-                    volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
+                    volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
                 )
-        elif event.activity == "poopoo":
-            # Every Poopoo log is independent; do not close or reuse an older
-            # open record.
+        elif activity in {"poopoo", "supplement"}:
+            # Every point-activity log is independent; do not close or reuse
+            # an older open record.
             db.create_record(
                 start_epoch=ts,
                 stop_epoch=ts,
-                activity=event.activity,
+                activity=activity,
                 device_id=event.device_id,
             )
         elif active:
-            db.stop_active(stop_epoch=ts, activity=event.activity)
+            db.stop_active(stop_epoch=ts, activity=activity)
         else:
             db.create_record(
                 start_epoch=ts,
                 stop_epoch=ts,
-                activity=event.activity,
+                activity=activity,
                 device_id=event.device_id,
-                volume_ml=_feeding_volume(event.activity, cfg.get("default_volume_ml")),
+                volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
             )
     return state_payload()
 
@@ -512,11 +526,12 @@ async def api_list_records(limit: int = 100, date: Optional[str] = None):
 def _record_date_epoch(record: dict) -> int:
     """Timestamp used to place a record on a calendar day.
 
-    Feeding, sleep, and Poopoo are logged by end time; other session types
-    retain their historical start-time grouping.
+    Feeding, sleep, Poopoo, and Supplement are logged by end time; other
+    session types retain their historical start-time grouping.
     """
     if (
-        record.get("activity") in {"feeding", "sleep", "poopoo"}
+        config.canonical_activity(record.get("activity") or "")
+        in {"feeding", "sleep", "poopoo", "supplement"}
         and record.get("stop_epoch") is not None
     ):
         return int(record["stop_epoch"])
@@ -565,7 +580,7 @@ def _require_record(rid: int) -> dict:
 async def api_create_record(body: RecordIn):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
-    activity = body.activity or "feeding"
+    activity = config.canonical_activity(body.activity) or "feeding"
     start = _to_epoch(body.start, tz)
     if start is None:
         raise HTTPException(400, "start is required")
@@ -574,7 +589,7 @@ async def api_create_record(body: RecordIn):
         # field is interpreted as End. Start is derived from configured duration.
         end = _to_epoch(body.stop, tz) or start
         start, stop = _feeding_bounds(end, cfg)
-    elif activity == "poopoo":
+    elif activity in {"poopoo", "supplement"}:
         end = _to_epoch(body.stop, tz) or start
         start = stop = end
     else:
@@ -607,16 +622,18 @@ async def api_update_record(rid: int, body: RecordIn):
     if "device_id" in provided:
         fields["device_id"] = provided["device_id"] or ""
     if "activity" in provided:
-        fields["activity"] = provided["activity"] or "feeding"
+        fields["activity"] = config.canonical_activity(provided["activity"]) or "feeding"
 
-    effective_activity = provided.get("activity") or existing["activity"]
+    effective_activity = fields.get("activity") or config.canonical_activity(
+        existing["activity"]
+    )
     if effective_activity != "feeding":
         if existing["volume_ml"] is not None or "volume_ml" in provided:
             fields["volume_ml"] = None  # non-feeding never carries volume
     elif "volume_ml" in provided:
         fields["volume_ml"] = _feeding_volume(effective_activity, provided["volume_ml"])
 
-    if effective_activity in {"feeding", "poopoo"} and (
+    if effective_activity in {"feeding", "poopoo", "supplement"} and (
         "activity" in provided or "start_epoch" in fields or "stop_epoch" in fields
     ):
         end_epoch = (
@@ -738,11 +755,11 @@ async def ui_home(
 
     activities = config.activity_list(cfg)
     timed = config.timed_activities(cfg)
-    # Surface legacy open Feeding/Sleep sessions so they can be closed.
-    # Poopoo deliberately ignores old sessions and always opens its popup.
+    # Surface normal Sleep timers and legacy open Feeding sessions so they
+    # can be closed. Poopoo/Supplement always open their point-record popups.
     active_map = {
         a: s for a in activities
-        if config.canonical_activity(a) != "poopoo"
+        if config.canonical_activity(a) not in {"poopoo", "supplement"}
         and (a in timed or a in {"feeding", "sleep"})
         and (s := db.get_active(a))
     }
@@ -777,6 +794,7 @@ async def ui_home(
             "feeding_alert": feeding_alert,
             "config": cfg,
             "poopoo_options": config.poopoo_options(cfg),
+            "supplement_options": config.supplement_options(cfg),
             "tz": tz_name,
             "now_date": now.strftime("%Y-%m-%d"),
             "now_time": now.strftime("%H:%M"),
@@ -834,7 +852,7 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
                 device_id="web",
                 volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
             )
-    elif activity == "poopoo":
+    elif activity in {"poopoo", "supplement"}:
         # The browser normally uses the popup. A direct call still creates a
         # new independent point record and ignores any older active record.
         db.create_record(
@@ -871,21 +889,22 @@ async def ui_create(
     poopoo_amount: str = Form(""),
     poopoo_color: str = Form(""),
     poopoo_texture: str = Form(""),
+    supplement_type: str = Form(""),
 ):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
     activity = config.canonical_activity(activity) or "feeding"
 
     # Feeding derives Start from a fixed duration. Sleep accepts an explicit
-    # HH:MM duration. Poopoo is an independent point record. All three treat
-    # the supplied time as End; keep accepting start_time for older callers.
+    # HH:MM duration. Poopoo and Supplement are independent point records.
+    # All popup modes treat the supplied time as End.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
             raise HTTPException(400, "date and end_time required")
         if activity == "feeding":
             start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
-        elif activity == "poopoo":
+        elif activity in {"poopoo", "supplement"}:
             start_epoch = stop_epoch = end_epoch
         elif activity == "sleep" and not start_time.strip():
             stop_epoch = end_epoch
@@ -915,6 +934,8 @@ async def ui_create(
             poopoo_texture,
             notes,
         )
+    elif activity == "supplement":
+        notes = _supplement_notes(cfg, supplement_type, notes)
     db.create_record(
         start_epoch=start_epoch,
         stop_epoch=stop_epoch,
@@ -949,7 +970,7 @@ async def ui_bulk_save(request: Request):
             if end_epoch is None:
                 continue
             start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
-        elif activity == "poopoo":
+        elif activity in {"poopoo", "supplement"}:
             end_epoch = combine_date_time(date, stop_time or start_time, tz)
             if end_epoch is None:
                 continue
@@ -1003,6 +1024,8 @@ async def ui_save_config(request: Request):
         key: [] for key in config.POOPOO_OPTION_KEYS.values()
     }
     poopoo_options_present = False
+    supplement_rows: list[str] = []
+    supplement_options_present = False
     for key, value in form.multi_items():
         if key.startswith("activity_name_"):
             rows.append((key[len("activity_name_"):], str(value).strip()))
@@ -1010,6 +1033,14 @@ async def ui_save_config(request: Request):
             timed_rows.add(key[len("activity_timed_"):])
         elif key == "poopoo_options_present":
             poopoo_options_present = True
+        elif key == "supplement_options_present":
+            supplement_options_present = True
+        elif key.startswith("supplement_options_item_"):
+            option = str(value).strip()
+            if "," in option:
+                raise HTTPException(400, "supplement options cannot contain commas")
+            if option:
+                supplement_rows.append(option)
         else:
             option_key = next(
                 (
@@ -1030,18 +1061,21 @@ async def ui_save_config(request: Request):
     if rows:
         # Rebuild the two activity lists from the per-row name + timed toggle.
         # Disabled end-time toggles need not round-trip; config parsing keeps
-        # Feeding and Poopoo out of the timed activity set.
+        # Feeding, Poopoo, and Supplement out of the timed activity set.
         items["activity_types"] = ",".join(name for _, name in rows if name)
         items["timed_activities"] = ",".join(
             name
             for ri, name in rows
-            if config.canonical_activity(name) not in {"feeding", "poopoo"}
+            if config.canonical_activity(name)
+            not in {"feeding", "poopoo", "supplement"}
             and name
             and ri in timed_rows
         )
     if poopoo_options_present:
         for key, values in poopoo_rows.items():
             items[key] = ",".join(dict.fromkeys(values))
+    if supplement_options_present:
+        items["supplement_options"] = ",".join(dict.fromkeys(supplement_rows))
     config.update(items)
     return RedirectResponse("/#config", status_code=303)
 

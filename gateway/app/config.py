@@ -8,7 +8,7 @@ from typing import Callable, Optional
 CONFIG_PATH = os.environ.get("GATEWAY_CONFIG_PATH", "/babytime/config.json")
 
 DEFAULTS: dict = {
-    "activity_types": "feeding,sleep,poopoo",
+    "activity_types": "feeding,sleep,poopoo,supplement",
     "timed_activities": "sleep",
     "auto_stop_minutes": "15",
     "feeding_alert_minutes": "120",
@@ -17,6 +17,7 @@ DEFAULTS: dict = {
     "poopoo_amount_options": "many,less",
     "poopoo_color_options": "yellow,green",
     "poopoo_texture_options": "soft,hard",
+    "supplement_options": "AD,D3",
     "timezone": "UTC",
     "ui_show_count": "10",
     "trusted_networks": "10.0.0.0/8",
@@ -29,7 +30,13 @@ POOPOO_OPTION_KEYS = {
     "texture": "poopoo_texture_options",
 }
 
-_BUILTIN_ACTIVITIES = {"feeding", "sleep", "poopoo"}
+_BUILTIN_ACTIVITY_ALIASES = {
+    "feeding": "feeding",
+    "sleep": "sleep",
+    "poopoo": "poopoo",
+    "supplement": "supplement",
+    "subpliment": "supplement",
+}
 
 _lock = threading.Lock()
 _cache: Optional[dict] = None
@@ -96,7 +103,7 @@ def canonical_activity(name: str) -> str:
     """Normalize built-in activity names while preserving custom names."""
     value = (name or "").strip()
     folded = value.casefold()
-    return folded if folded in _BUILTIN_ACTIVITIES else value
+    return _BUILTIN_ACTIVITY_ALIASES.get(folded, value)
 
 
 def activity_list(cfg: dict) -> list:
@@ -130,6 +137,18 @@ def poopoo_options(cfg: dict) -> dict[str, list[str]]:
                 values.append(value)
         out[group] = values
     return out
+
+
+def supplement_options(cfg: dict) -> list[str]:
+    """Ordered, deduplicated choices shown in the Supplement popup."""
+    seen: set[str] = set()
+    values: list[str] = []
+    for part in (cfg.get("supplement_options") or "").replace("\n", ",").split(","):
+        value = part.strip()
+        if value and value not in seen:
+            seen.add(value)
+            values.append(value)
+    return values
 
 
 def _parse_cidrs(raw: str) -> list:
@@ -202,14 +221,14 @@ def timed_activities(cfg: dict) -> set:
     """Activities recorded as start->stop sessions (running timer); the rest
     are completed point-in-time records.
 
-    Feeding and Poopoo are deliberately never activity-bar timers: both use
-    dedicated end-time dialogs. Ignore legacy entries for either activity.
+    Feeding, Poopoo, and Supplement are deliberately never activity-bar
+    timers: they use dedicated end-time dialogs. Ignore legacy entries.
     """
     raw = (cfg.get("timed_activities") or "").replace("\n", ",")
     out: set = set()
     for part in raw.split(","):
         name = canonical_activity(part)
-        if name and name not in {"feeding", "poopoo"}:
+        if name and name not in {"feeding", "poopoo", "supplement"}:
             out.add(name)
     return out
 
