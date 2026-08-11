@@ -111,8 +111,7 @@ UI/admin:
   dialog opened from the Milk or Solid food button with compact −/amount/+
   controls using ml for Milk and g for Solid food, and
   Date and End fields, per-date day-note field, and configuration form. Date
-  and End refresh to the current gateway time in 24-hour `HH:MM` format
-  whenever the dialog opens;
+  and End refresh to the current gateway time whenever the dialog opens;
   Start is calculated on save. Milk and Solid food rows are grouped by End
   date and expose Start as read-only.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
