@@ -246,11 +246,11 @@ section h2 {
   .records-table th:nth-child(2),
   .records-table td:nth-child(2),
   .records-table th:nth-child(3),
-  .records-table td:nth-child(3) { width: 6.25rem; }
+  .records-table td:nth-child(3) { width: 8rem; }
   .records-table td:nth-child(2) input[type=time],
   .records-table td:nth-child(3) input[type=time] {
-    min-width: 5.5rem;
-    max-width: 5.75rem;
+    min-width: 7rem;
+    max-width: 7.5rem;
   }
   .records-table th:nth-child(4),
   .records-table td:nth-child(4) {
@@ -952,7 +952,7 @@ code {
   .records-table td input,
   .records-table td select { width: 100%; min-width: 0; flex: 1; }
   .records-table td:nth-child(2) input[type=time],
-  .records-table td:nth-child(3) input[type=time] { max-width: 5.5rem; }
+  .records-table td:nth-child(3) input[type=time] { max-width: 7rem; }
   .records-table .notes-input { min-width: 0; }
   .row-check { width: 1.2rem; height: 1.2rem; flex: 0 0 auto; }
 

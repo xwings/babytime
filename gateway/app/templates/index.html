@@ -286,10 +286,10 @@
           <input type="date" name="date" value="{{ now_date }}" required>
         </label>
         <label class="is-hidden" data-etc-start-time-field>{{ t('col_start') }}
-          <input type="time" lang="en-GB" name="start_time" value="{{ now_time }}" required disabled>
+          <input type="time" lang="en-US" name="start_time" value="{{ now_time }}" required disabled>
         </label>
         <label>{{ t('col_end_time') }}
-          <input type="time" lang="en-GB" name="end_time" value="{{ now_time }}" required>
+          <input type="time" lang="en-US" name="end_time" value="{{ now_time }}" required>
         </label>
       </div>
     </div>
@@ -507,13 +507,13 @@
               {% if is_point_record or r.activity in ['poopoo', 'supplement'] %}
               <span class="instant-dash">—</span>
               {% else %}
-              <input type="time" lang="en-GB" name="start_time_{{ r.id }}"
+              <input type="time" lang="en-US" name="start_time_{{ r.id }}"
                      value="{{ r.start_epoch | localtime_only(tz) }}" required
                      {% if r.activity in ['feeding', 'solid_food'] %}readonly{% endif %}>
               {% endif %}
             </td>
             <td data-label="{{ t('col_end_time') }}">
-              <input type="time" lang="en-GB" name="stop_time_{{ r.id }}"
+              <input type="time" lang="en-US" name="stop_time_{{ r.id }}"
                      value="{{ ((r.stop_epoch or r.start_epoch) | localtime_only(tz)) if (r.stop_epoch or r.activity not in timed) else '' }}">
             </td>
             <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity in ['feeding', 'solid_food', 'sleep']) and not is_point_record else '—' }}</td>
