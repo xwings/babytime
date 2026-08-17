@@ -94,8 +94,11 @@ Pass means all of:
   `YYYY-MM-DD (N times[, M ml])` — the count reads "1 time" / "6 times"
   and counts only that day's records with a volume (feedings), so it
   pairs with the millilitre total; the total is appended only when at
-  least one record that day has a volume. Feedings spanning midnight are
-  assigned to the date of End, matching the button/dialog timestamp.
+  least one record that day has a volume. No record spans midnight in the
+  first place (see the midnight rule in [gateway-api.md](gateway-api.md)):
+  a sleep across the boundary appears as one row per date, and a feed
+  logged just after midnight is trimmed onto the earlier date, ending
+  `23:59`.
 - There is no per-date select-all; selection and deletion are per-record
   (each row's checkbox, plus the page-wide "select all on page" button).
   Rows render unchecked — nothing is selected by default.

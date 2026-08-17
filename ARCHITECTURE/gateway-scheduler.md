@@ -27,7 +27,11 @@ network without ever sending the `stop`.
   non-positive `auto_stop_minutes` disables it. Sessions whose activity
   is not in `config.timed_activities(cfg)` are skipped — instant events
   are logged closed and must never be capped (belt-and-suspenders, since
-  the UI never opens them).
+  the UI never opens them). A cap that lands past local midnight is cut
+  by `util.midnight_segments` first, so auto-stop obeys the same
+  midnight rule as every other write path (see
+  [gateway-api.md](gateway-api.md)); the extra day's row comes from
+  `db.clone_segments`.
 - `gateway/app/scheduler.py:25` — `scheduler_loop()` — `async` task:
   wakes every 60 s and calls `_enforce_auto_stop`. Cancellable via
   `asyncio.CancelledError`.
@@ -35,7 +39,7 @@ network without ever sending the `stop`.
 ## Interactions
 
 - Reads/writes through [gateway-storage.md](gateway-storage.md):
-  `get_active`, `stop_active`.
+  `get_active`, `stop_active`, `clone_segments`.
 - Launched once at startup by `lifespan` in
   [gateway-api.md](gateway-api.md) via
   `asyncio.create_task(scheduler_loop())`; cancelled on shutdown.

@@ -58,6 +58,7 @@ Persistence for the gateway. Three stores:
 - `stop_active(stop_epoch=..., activity=None)` — close the open session for that activity (or the latest open one); returns truthy if a row was updated.
 - `create_record(..., activity='feeding')` — insert. "At most one active per activity" is enforced by the caller (`api_post_event` / `ui_activity_toggle`) checking `get_active(activity)` first, not by this function.
 - `update_record(id, **fields)` — inline UI edit path; `activity` is an allowed field.
+- `clone_segments(id, segments)` — insert a copy of record `id` for each extra segment of a midnight split (the caller has already stored the first on `id`). Copies activity, notes, and device but deliberately not volume: a split session is one real event, so only the day it started on carries the intake amount. Empty `segments` is a no-op, which is the common case. See the midnight rule in [gateway-api.md](gateway-api.md).
 - `delete_record(id)`.
 - `list_records(limit=..., ids=..., offset=..., activity=...)` — newest-first by `COALESCE(stop_epoch, start_epoch)`; `activity` filters to one type (e.g. `"feeding"` for device state).
 - `count_records()`.

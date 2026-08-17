@@ -2,6 +2,7 @@ import asyncio
 import time
 
 from . import config, db
+from .util import midnight_segments
 
 
 def _enforce_auto_stop(cfg: dict) -> None:
@@ -21,7 +22,15 @@ def _enforce_auto_stop(cfg: dict) -> None:
         return  # instant events are never open; nothing to cap
     cap = int(active["start_epoch"]) + minutes * 60
     if int(time.time()) >= cap:
-        if db.stop_active(stop_epoch=cap):
+        # A long cap can push the close past midnight; store it day by day.
+        segments = midnight_segments(
+            int(active["start_epoch"]),
+            cap,
+            active["activity"],
+            cfg.get("timezone") or "UTC",
+        )
+        if db.stop_active(stop_epoch=segments[0][1]):
+            db.clone_segments(active["id"], segments[1:])
             print(f"[scheduler] auto-stopped session {active['id']} at {minutes}min cap")
 
 

@@ -133,6 +133,30 @@ def create_record(
         return cur.lastrowid
 
 
+def clone_segments(rid: int, segments: list) -> None:
+    """Insert a copy of record `rid` for each extra segment of a midnight
+    split (`segments` is everything after the first, already stored on `rid`).
+
+    Copies activity, notes, and device but not volume: a split session is one
+    real event, so only the row it started on carries the intake amount.
+    """
+    if not segments:
+        return
+    conn = get_conn()
+    with _lock:
+        row = conn.execute("SELECT * FROM records WHERE id=?", (rid,)).fetchone()
+        if row is None:
+            return
+        for start_epoch, stop_epoch in segments:
+            conn.execute(
+                "INSERT INTO records "
+                "(start_epoch, stop_epoch, notes, activity, device_id) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (start_epoch, stop_epoch, row["notes"], row["activity"], row["device_id"]),
+            )
+        conn.commit()
+
+
 def update_record(rid: int, **fields) -> None:
     allowed = {
         "start_epoch",

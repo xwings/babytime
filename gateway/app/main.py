@@ -24,7 +24,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from . import config, db, i18n, scheduler
-from .util import zoneinfo
+from .util import midnight_segments, zoneinfo
 
 GATEWAY_TOKEN = os.environ.get("GATEWAY_TOKEN", "").strip()
 MAX_RECORD_DURATION_SECONDS = 30 * 60
@@ -148,9 +148,55 @@ def _duration_hhmm_seconds(value: str) -> int:
 
 
 def _feeding_bounds(end_epoch: int, cfg: dict) -> tuple[int, int]:
-    """Return the configured fixed-duration feeding ending at ``end_epoch``."""
+    """Return the configured fixed-duration feeding ending at ``end_epoch``.
+
+    A feed logged just after midnight would otherwise start on the previous
+    day; it is clamped back to that day's end so the record stays whole.
+    """
     duration_seconds = config.feeding_duration_minutes(cfg) * 60
-    return max(0, end_epoch - duration_seconds), end_epoch
+    start_epoch = max(0, end_epoch - duration_seconds)
+    return _segments(start_epoch, end_epoch, "feeding", cfg)[0]
+
+
+def _segments(
+    start_epoch: int,
+    stop_epoch: Optional[int],
+    activity: str,
+    cfg: dict,
+) -> list:
+    """`util.midnight_segments` in the gateway's configured timezone."""
+    return midnight_segments(
+        start_epoch, stop_epoch, activity, cfg.get("timezone") or "UTC"
+    )
+
+
+def _create_segments(segments: list, **fields) -> int:
+    """Store a span as one row per calendar day; returns the first row's id."""
+    rid = db.create_record(
+        start_epoch=segments[0][0], stop_epoch=segments[0][1], **fields
+    )
+    db.clone_segments(rid, segments[1:])
+    return rid
+
+
+def _update_segments(rid: int, segments: list, **fields) -> None:
+    """Rewrite `rid` as the first segment, spilling the rest into new rows."""
+    db.update_record(
+        rid, start_epoch=segments[0][0], stop_epoch=segments[0][1], **fields
+    )
+    db.clone_segments(rid, segments[1:])
+
+
+def _stop_session(activity: str, stop_epoch: int, cfg: dict) -> bool:
+    """Close the open session of `activity`, cutting it at local midnight."""
+    active = db.get_active(activity)
+    if not active:
+        return False
+    segments = _segments(int(active["start_epoch"]), stop_epoch, activity, cfg)
+    if not db.stop_active(stop_epoch=segments[0][1], activity=activity):
+        return False
+    db.clone_segments(active["id"], segments[1:])
+    return True
 
 
 def _poopoo_notes(
@@ -467,7 +513,7 @@ async def api_post_event(event: EventIn):
                     stop_epoch=stop_epoch,
                 )
         else:
-            db.stop_active(stop_epoch=ts, activity=activity)
+            _stop_session(activity, ts, cfg)
     else:
         # Current devices send one `log` event when a feed has finished. If
         # an older client left a session open, normalize it to the configured
@@ -499,7 +545,7 @@ async def api_post_event(event: EventIn):
                 device_id=event.device_id,
             )
         elif active:
-            db.stop_active(stop_epoch=ts, activity=activity)
+            _stop_session(activity, ts, cfg)
         else:
             db.create_record(
                 start_epoch=ts,
@@ -626,9 +672,10 @@ async def api_create_record(body: RecordIn):
         start = stop = end
     else:
         stop = _normalize_stop_epoch(start, _to_epoch(body.stop, tz), activity)
-    rid = db.create_record(
-        start_epoch=start,
-        stop_epoch=stop,
+    # A sleep spanning midnight is stored as one record per calendar day; the
+    # first is returned, the rest are siblings visible via GET /api/records.
+    rid = _create_segments(
+        _segments(start, stop, activity, cfg),
         volume_ml=_feeding_volume(activity, body.volume_ml),
         volume_g=_solid_food_weight(activity, body.volume_g),
         activity=activity,
@@ -683,6 +730,7 @@ async def api_update_record(rid: int, body: RecordIn):
     time_or_activity_changed = (
         "activity" in provided or "start_epoch" in fields or "stop_epoch" in fields
     )
+    tail: list = []
     if effective_activity in {
         "feeding",
         "solid_food",
@@ -701,14 +749,20 @@ async def api_update_record(rid: int, body: RecordIn):
             fields["start_epoch"] = fields["stop_epoch"] = end_epoch
     elif "start_epoch" in fields or "stop_epoch" in fields:
         start_epoch = fields.get("start_epoch", existing["start_epoch"])
-        stop_epoch = fields.get("stop_epoch", existing["stop_epoch"])
-        fields["stop_epoch"] = _normalize_stop_epoch(
+        stop_epoch = _normalize_stop_epoch(
             start_epoch,
-            stop_epoch,
+            fields.get("stop_epoch", existing["stop_epoch"]),
             effective_activity,
         )
+        # An edit that pushes the span past midnight is cut like a new one:
+        # a sleep gains a second row for the next day, anything else is
+        # trimmed back to the day it started on.
+        segments = _segments(start_epoch, stop_epoch, effective_activity, cfg)
+        fields["start_epoch"], fields["stop_epoch"] = segments[0]
+        tail = segments[1:]
 
     db.update_record(rid, **fields)
+    db.clone_segments(rid, tail)
     return _require_record(rid)
 
 
@@ -935,9 +989,8 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
         # Instant event: log a single closed timestamp (start == stop) so it
         # never looks like an open session to the device, scheduler, or UI.
         db.create_record(start_epoch=ts, stop_epoch=ts, activity=activity, device_id="web")
-    elif db.get_active(activity):
-        db.stop_active(stop_epoch=ts, activity=activity)
-    else:
+    elif not _stop_session(activity, ts, cfg):
+        # Nothing was running, so this press starts a session instead.
         db.create_record(
             start_epoch=ts,
             activity=activity,
@@ -1009,9 +1062,10 @@ async def ui_create(
         notes = _supplement_notes(cfg, supplement_type, notes)
     raw_amount = amount if amount.strip() else volume_ml
     stored_ml, stored_g = _intake_amounts(activity, raw_amount)
-    db.create_record(
-        start_epoch=start_epoch,
-        stop_epoch=stop_epoch,
+    # A sleep entered across midnight is stored as one row per day; every
+    # other activity is trimmed to the day it started on.
+    _create_segments(
+        _segments(start_epoch, stop_epoch, activity, cfg),
         volume_ml=stored_ml,
         volume_g=stored_g,
         activity=activity,
@@ -1069,10 +1123,9 @@ async def ui_bulk_save(request: Request):
             legacy_key = "volume_g" if activity == "solid_food" else "volume_ml"
             raw_amount = form.get(f"{legacy_key}_{rid}") or ""
         volume_ml, volume_g = _intake_amounts(activity, raw_amount)
-        db.update_record(
+        _update_segments(
             rid,
-            start_epoch=start_epoch,
-            stop_epoch=stop_epoch,
+            _segments(start_epoch, stop_epoch, activity, cfg),
             volume_ml=volume_ml,
             volume_g=volume_g,
             activity=activity,

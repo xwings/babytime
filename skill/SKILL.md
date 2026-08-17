@@ -48,6 +48,13 @@ completed record: pass its end time as `start` (the compatibility field name)
 and the gateway stores both epochs equal. Other instant activities work the
 same way.
 
+**No record crosses midnight.** Write the real times; the gateway cuts them.
+A sleep from 21:00 to 06:00 is stored as two records — `21:00–23:59:59` on the
+first day and `00:00:00–06:00` on the next — and `add` prints only the first,
+so `dump <date>` is how you see both. Everything else is trimmed to the day it
+started on: a bottle at `23:50–00:05` is filed as `23:50–23:59:59` on the
+earlier day. Editing one half of a split sleep does not touch the other half.
+
 ## Helper script (preferred when shell is available)
 
 `script/babytime.py` is a dependency-free Python 3 client:
