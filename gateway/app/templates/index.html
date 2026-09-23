@@ -443,9 +443,9 @@
   </div>
 
   {% for g in groups %}
-  <section class="date-group" data-date="{{ g.date }}" aria-labelledby="day-{{ g.date }}">
+  <section class="date-group{% if g.date != now_date %} collapsed{% endif %}" data-date="{{ g.date }}" aria-labelledby="day-{{ g.date }}">
     <div class="date-header">
-      <button type="button" class="fold-toggle" aria-expanded="true" aria-controls="timeline-{{ g.date }}">
+      <button type="button" class="fold-toggle" aria-expanded="{{ 'true' if g.date == now_date else 'false' }}" aria-controls="timeline-{{ g.date }}">
         <span class="date-label" id="day-{{ g.date }}">{{ t('today') if g.date == now_date else g.date }}{% if g.date == now_date %}<span class="date-subtitle">{{ g.date }}</span>{% endif %}</span>
         <span class="chevron" aria-hidden="true">▾</span>
       </button>
@@ -453,13 +453,13 @@
               aria-haspopup="dialog" aria-label="{{ t('edit_day_note') }} · {{ g.date }}">{{ icon('journal') }}{{ t('col_day_note') }}</button>
     </div>
     <div class="day-summary">
-      {% if g.milk_count %}<span class="summary-chip milk" title="{{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }}">{{ icon('feeding') }}{{ al('feeding') }} {{ g.milk_count }}{{ t('unit_times') }} · {{ g.total_ml }} {{ t('col_ml') }}</span>{% endif %}
-      {% if g.food_count %}<span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }}">{{ icon('solid_food') }}{{ al('solid_food') }} {{ g.food_count }}{{ t('unit_times') }} · {{ g.total_g }} {{ t('col_g') }}</span>{% endif %}
-      {% if g.sleep_count %}<span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', hours=g.sleep_hours | int, minutes=g.sleep_minutes | int) }}">{{ icon('sleep') }}{{ al('sleep') }} {{ g.sleep_count }}{{ t('unit_times') }} · {{ g.sleep_hours | int }}{{ t('unit_hour') }} {{ g.sleep_minutes | int }}{{ t('unit_minute') }}</span>{% endif %}
-      {% if g.poopoo %}<span class="summary-chip diaper">{{ icon('poopoo') }}{{ t('date_poopoo_count', n=g.poopoo) }}</span>{% endif %}
+      <span class="summary-chip milk" title="{{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }}">{{ icon('feeding') }}{{ al('feeding') }} {{ g.milk_count }}{{ t('unit_times') }} · {{ g.total_ml }} {{ t('col_ml') }}</span>
+      <span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }}">{{ icon('solid_food') }}{{ al('solid_food') }} {{ g.food_count }}{{ t('unit_times') }} · {{ g.total_g }} {{ t('col_g') }}</span>
+      <span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', hours=g.sleep_hours | int, minutes=g.sleep_minutes | int) }}">{{ icon('sleep') }}{{ al('sleep') }} {{ g.sleep_count }}{{ t('unit_times') }} · {{ g.sleep_hours | int }}{{ t('unit_hour') }} {{ g.sleep_minutes | int }}{{ t('unit_minute') }}</span>
+      <span class="summary-chip diaper" title="{{ t('date_poopoo_summary', n=g.poopoo, plural='' if g.poopoo == 1 else 's') }}">{{ icon('poopoo') }}{{ t('date_poopoo_count', n=g.poopoo) }}</span>
     </div>
     {% if g.note %}<p class="day-note-preview">{{ g.note }}</p>{% endif %}
-    <ol class="day-timeline" id="timeline-{{ g.date }}">
+    <ol class="day-timeline" id="timeline-{{ g.date }}"{% if g.date != now_date %} hidden{% endif %}>
       {% for r in g.records %}
       {% set intake = r.activity in ['feeding', 'solid_food'] %}
       {% set point = r.activity in ['poopoo', 'supplement'] or (r.stop_epoch is not none and r.stop_epoch == r.start_epoch) %}

@@ -68,10 +68,12 @@ or accessible names. CSS tokens are canonical for palette/control styling.
   reminder no longer flashes. Firmware flashing is a separate contract.
 - Daily timelines are flat lists without tables or checkboxes. Dates and
   displayed event times descend: intake and built-in points use End; Sleep
-  and other sessions use Start. Every date starts expanded; fold buttons
-  maintain `aria-expanded` and hide their list. Summaries show counts/intake
-  and completed sleep duration; only present activities appear. Fold state
-  is not stored across reloads.
+  and other sessions use Start. Today starts expanded; all other dates start
+  folded, including on older pages. Fold buttons maintain `aria-expanded`
+  and hide their list and day-note preview. Colored summary badges for Milk,
+  Solid food, Sleep and Poopoo stay visible above each timeline when folded,
+  including zero totals. They show counts/intake and completed sleep duration.
+  Fold state is not stored across reloads.
 - Each timeline entry is a native button with time, decorative activity icon,
   label, amount or duration, and escaped notes. It opens `#edit-record-dialog`.
   Save posts one hidden `record_id` and the existing `*_ID` fields to
