@@ -1,9 +1,23 @@
 {% extends "base.html" %}
+{% from "icons.html" import icon %}
 {% block content %}
 
-<div class="tab-panel active" data-tab="records">
+<div class="tab-panel active" data-tab="records" id="panel-records" role="tabpanel" aria-labelledby="tab-records">
 
-<section class="activity-bar {{ 'feeding-alert' if feeding_alert.due else '' }}"
+<div class="page-intro">
+  <div>
+    <p class="eyebrow">{{ t('daily_care') }}</p>
+    <h1>{{ t('welcome_heading') }}</h1>
+    <p class="intro-copy">{{ t('welcome_copy') }}</p>
+  </div>
+  <div class="today-chip">{{ icon('calendar') }}<span>{{ t('today') }}<time datetime="{{ now_date }}">{{ now_date }}</time></span></div>
+</div>
+<div class="section-heading">
+  <h2>{{ t('quick_log') }}</h2>
+  <span class="section-caption">{{ t('quick_log_hint') }}</span>
+</div>
+
+<section aria-label="{{ t('quick_log') }}" class="activity-bar {{ 'feeding-alert' if feeding_alert.due else '' }}"
          data-feeding-alert-minutes="{{ feeding_alert.threshold_minutes }}"
          data-last-fed-label="{{ t('last_fed') }}"
          data-feeding-alert-label="{{ t('feeding_alert_due') }}"
@@ -20,6 +34,7 @@
             data-activity="{{ activity_key if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement', 'etc'] else a }}"
             {% if opens_record_dialog %}data-open-record-dialog="{{ activity_key }}"{% endif %}
             class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if activity_key == 'feeding' and feeding_alert.due else '' }}">
+      <span class="activity-icon">{{ icon(activity_key) }}</span>
       <span class="activity-name">{{ al(a) }}</span>
       {% if s %}
       <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
@@ -78,7 +93,8 @@
         ? state.last_feeding
         : null;
 
-      feeding.replaceChildren(span('activity-name', feedingName));
+      const activityIcon = feeding.querySelector('.activity-icon');
+      feeding.replaceChildren(...(activityIcon ? [activityIcon] : []), span('activity-name', feedingName));
       if (active) {
         feeding.type = 'submit';
         delete feeding.dataset.openRecordDialog;
@@ -455,7 +471,11 @@
 <section class="records">
   <form method="post" id="records-form">
     <div class="records-head">
-      <h2>{{ t('records_heading', n=total_records, d=total_dates, plural='' if total_dates == 1 else 's') }}</h2>
+      <div>
+        <p class="eyebrow">{{ t('records_eyebrow') }}</p>
+        <h2>{{ t('journal_heading') }}</h2>
+        <p class="section-caption">{{ t('records_heading', n=total_records, d=total_dates, plural='' if total_dates == 1 else 's') }}</p>
+      </div>
       <div class="bulk-actions">
         <button type="button" id="check-all-btn" class="ghost">{{ t('records_select_all') }}</button>
         <button type="submit" formaction="/records/save">{{ t('records_save') }}</button>
@@ -467,25 +487,26 @@
     {% for g in groups %}
     <div class="date-group{% if g.date != now_date %} collapsed{% endif %}" data-date="{{ g.date }}">
       <div class="date-header">
-        <button type="button" class="fold-toggle" aria-label="{{ t('records_toggle_aria') }}">
+        <button type="button" class="fold-toggle" aria-label="{{ t('records_toggle_aria') }} {{ g.date }}" aria-expanded="{{ 'true' if g.date == now_date else 'false' }}">
           <span class="chevron">▾</span>
         </button>
-        <span class="date-label">{{ g.date }} (
-          {{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }},
-          {{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }},
-          {{ t('date_poopoo_summary', n=g.poopoo, plural='' if g.poopoo == 1 else 's') }},
-          {{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', hours=g.sleep_hours, minutes=g.sleep_minutes) }}
-        )</span>
+        <span class="date-label">{{ t('today') if g.date == now_date else g.date }}{% if g.date == now_date %}<span class="date-subtitle">{{ g.date }}</span>{% endif %}</span>
+        <div class="day-summary">
+          <span class="summary-chip milk" title="{{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }}"><span class="sr-only">{{ al('feeding') }}: </span>{{ icon('feeding') }}{{ g.total_ml }} {{ t('col_ml') }}<span class="sr-only"> · {{ t('date_count', n=g.milk_count, plural='' if g.milk_count == 1 else 's') }}</span></span>
+          <span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }}"><span class="sr-only">{{ al('solid_food') }}: </span>{{ icon('solid_food') }}{{ g.total_g }} {{ t('col_g') }}<span class="sr-only"> · {{ t('date_count', n=g.food_count, plural='' if g.food_count == 1 else 's') }}</span></span>
+          <span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', hours=g.sleep_hours, minutes=g.sleep_minutes) }}"><span class="sr-only">{{ al('sleep') }}: </span>{{ icon('sleep') }}{{ g.sleep_hours }}{{ t('unit_hour') }} {{ g.sleep_minutes }}{{ t('unit_minute') }}<span class="sr-only"> · {{ t('date_count', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's') }}</span></span>
+          <span class="summary-chip diaper" title="{{ t('date_poopoo_summary', n=g.poopoo, plural='' if g.poopoo == 1 else 's') }}">{{ icon('poopoo') }}{{ t('date_poopoo_count', n=g.poopoo) }}</span>
+        </div>
       </div>
       <div class="day-note-block">
         <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('day_note_today') if g.date == now_date else t('col_day_note') }}</label>
         <textarea class="day-note" id="day_note_{{ g.date }}" name="day_note_{{ g.date }}"
-                  rows="3" placeholder="{{ t('day_note_placeholder') }}">{{ g.note }}</textarea>
+                  rows="2" placeholder="{{ t('day_note_placeholder') }}">{{ g.note }}</textarea>
       </div>
       <table class="records-table">
         <thead>
           <tr>
-            <th></th>
+            <th><span class="sr-only">{{ t('select_record') }}</span></th>
             <th>{{ t('col_start') }}</th>
             <th>{{ t('col_end_time') }}</th>
             <th>{{ t('col_duration') }}</th>
@@ -499,7 +520,7 @@
           {% set is_point_record = r.stop_epoch is not none and r.stop_epoch == r.start_epoch %}
           <tr>
             <td>
-              <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check">
+              <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check" aria-label="{{ t('select_record') }} {{ r.id }}">
               <input type="hidden" name="date_{{ r.id }}"
                      value="{{ ((r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'solid_food', 'poopoo', 'supplement'] else r.start_epoch) | localdate_input(tz) }}">
             </td>
@@ -507,20 +528,20 @@
               {% if is_point_record or r.activity in ['poopoo', 'supplement'] %}
               <span class="instant-dash">—</span>
               {% else %}
-              <input type="time" lang="en-US" name="start_time_{{ r.id }}"
+              <input type="time" lang="en-US" name="start_time_{{ r.id }}" aria-label="{{ t('col_start') }}"
                      value="{{ r.start_epoch | localtime_only(tz) }}" required
                      {% if r.activity in ['feeding', 'solid_food'] %}readonly{% endif %}>
               {% endif %}
             </td>
             <td data-label="{{ t('col_end_time') }}">
-              <input type="time" lang="en-US" name="stop_time_{{ r.id }}"
+              <input type="time" lang="en-US" name="stop_time_{{ r.id }}" aria-label="{{ t('col_end_time') }}"
                      value="{{ ((r.stop_epoch or r.start_epoch) | localtime_only(tz)) if (r.stop_epoch or r.activity not in timed) else '' }}">
             </td>
             <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity in ['feeding', 'solid_food', 'sleep']) and not is_point_record else '—' }}</td>
             <td data-label="{{ t('col_amount') }}">
               {% set has_amount = r.activity in ['feeding', 'solid_food'] %}
               <span class="record-amount-field">
-                <input type="number" name="amount_{{ r.id }}" min="0" step="1"
+                <input type="number" name="amount_{{ r.id }}" aria-label="{{ t('col_amount') }}" min="0" step="1"
                        class="ml-input amount-input"
                        value="{{ r.volume_ml if r.activity == 'feeding' and r.volume_ml is not none else (r.volume_g if r.activity == 'solid_food' and r.volume_g is not none else '') }}"
                        {% if not has_amount %}disabled{% endif %}>
@@ -530,7 +551,7 @@
               </span>
             </td>
             <td data-label="{{ t('col_activity') }}">
-              <select name="activity_{{ r.id }}" class="activity-select">
+              <select name="activity_{{ r.id }}" aria-label="{{ t('col_activity') }}" class="activity-select">
                 {% for a in activities %}
                 <option value="{{ a }}" data-timed="{{ '1' if a in timed else '0' }}" {% if a == r.activity %}selected{% endif %}>{{ al(a) }}</option>
                 {% endfor %}
@@ -540,7 +561,7 @@
               </select>
             </td>
             <td data-label="{{ t('col_notes') }}">
-              <input type="text" name="notes_{{ r.id }}" class="notes-input"
+              <input type="text" name="notes_{{ r.id }}" aria-label="{{ t('col_notes') }}" class="notes-input"
                      value="{{ r.notes | default('') }}"
                      placeholder="{{ t('col_notes') }}">
             </td>
@@ -550,7 +571,12 @@
       </table>
     </div>
     {% else %}
-    <p class="empty">{{ t('no_records') }}</p>
+    <div class="empty">
+      <span class="empty-icon">{{ icon('journal') }}</span>
+      <h3>{{ t('no_records') }}</h3>
+      <p>{{ t('empty_hint') }}</p>
+      <button type="button" data-open-record-dialog="feeding">{{ icon('plus') }}{{ t('first_record') }}</button>
+    </div>
     {% endfor %}
   </form>
 
@@ -611,7 +637,8 @@
     document.querySelectorAll('.date-group').forEach(group => {
       const fold = group.querySelector('.fold-toggle');
       fold?.addEventListener('click', () => {
-        group.classList.toggle('collapsed');
+        const collapsed = group.classList.toggle('collapsed');
+        fold.setAttribute('aria-expanded', String(!collapsed));
       });
     });
 
@@ -683,12 +710,19 @@
 
 </div><!-- /tab-panel records -->
 
-<div class="tab-panel" data-tab="config">
+<div class="tab-panel" data-tab="config" id="panel-config" role="tabpanel" aria-labelledby="tab-config">
+<div class="page-intro">
+  <div>
+    <p class="eyebrow">{{ t('make_it_yours') }}</p>
+    <h1>{{ t('config_heading') }}</h1>
+    <p class="intro-copy">{{ t('config_intro') }}</p>
+  </div>
+</div>
 
 <section class="config" id="config">
   <form method="post" action="/config" class="grid-form">
     <div class="records-head full-width">
-      <h2>{{ t('config_heading') }}</h2>
+      <h2>{{ t('config_preferences') }}</h2>
       <div class="bulk-actions">
         <button type="submit">{{ t('config_save') }}</button>
       </div>
@@ -700,11 +734,11 @@
         <div class="activity-row">
           {% if a in ['feeding', 'solid_food'] %}
           <input type="hidden" name="activity_name_{{ loop.index0 }}" value="{{ a }}">
-          <input type="text" value="{{ al(a) }}" class="activity-name-input"
+          <input type="text" value="{{ al(a) }}" class="activity-name-input" aria-label="{{ t('col_activity') }}"
                  readonly title="{{ t('config_feeding_locked') if a == 'feeding' else t('config_solid_food_locked') }}">
           {% else %}
           <input type="text" name="activity_name_{{ loop.index0 }}" value="{{ a }}"
-                 class="activity-name-input">
+                 class="activity-name-input" aria-label="{{ t('col_activity') }}">
           {% endif %}
           {% set end_time_activity = a in ['feeding', 'solid_food', 'poopoo', 'supplement'] %}
           {% set start_end_activity = a == 'etc' %}
@@ -740,7 +774,7 @@
             {% for option in poopoo_options[group] %}
             <div class="poopoo-option-row">
               <input type="text" name="poopoo_{{ group }}_options_item_{{ loop.index0 }}"
-                     value="{{ option }}" pattern="[^,]+">
+                     value="{{ option }}" pattern="[^,]+" aria-label="{{ label }}">
               <button type="button" class="poopoo-option-remove row-remove ghost"
                       aria-label="{{ t('config_remove_option') }}">×</button>
             </div>
@@ -765,7 +799,7 @@
             {% for option in supplement_options %}
             <div class="poopoo-option-row">
               <input type="text" name="supplement_options_item_{{ loop.index0 }}"
-                     value="{{ option }}" pattern="[^,]+">
+                     value="{{ option }}" pattern="[^,]+" aria-label="{{ t('supplement_type') }}">
               <button type="button" class="poopoo-option-remove row-remove ghost"
                       aria-label="{{ t('config_remove_option') }}">×</button>
             </div>
@@ -784,7 +818,7 @@
       </select>
     </label>
     {% for key in config_keys_simple %}
-    <label>{{ key }}
+    <label>{{ t('config_' + key) }}
       <input type="text" name="{{ key }}" value="{{ config[key] | default('') }}">
     </label>
     {% endfor %}
@@ -797,6 +831,7 @@
     const addBtn = document.getElementById('add-activity');
     if (!rows || !addBtn) return;
     const TIMED = {{ t('config_timed') | tojson }};
+    const ACTIVITY = {{ t('col_activity') | tojson }};
     const REMOVE = {{ t('config_remove_activity') | tojson }};
     let idx = rows.querySelectorAll('.activity-row').length;
     addBtn.addEventListener('click', () => {
@@ -808,6 +843,7 @@
         '<button type="button" class="row-remove ghost" aria-label="' + REMOVE + '">×</button>';
       rows.appendChild(row);
       idx++;
+      row.querySelector('input').setAttribute('aria-label', ACTIVITY);
       row.querySelector('input').focus();
     });
     rows.addEventListener('click', e => {
@@ -833,6 +869,7 @@
         input.type = 'text';
         input.name = prefix + idx;
         input.pattern = '[^,]+';
+        input.setAttribute('aria-label', group.querySelector('h3').textContent);
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'poopoo-option-remove row-remove ghost';

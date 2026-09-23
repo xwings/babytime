@@ -3,7 +3,7 @@
 
 A remote agent never touches the gateway's SQLite file; it calls the
 gateway over HTTP and the gateway writes its own DB. This script is that
-HTTP client. No third-party packages: it runs on any Python 3.
+HTTP client. No third-party packages: it runs on Python 3.10+.
 
 Connection (global flags, before the subcommand):
   --host URL    gateway base URL, default http://127.0.0.1:8080

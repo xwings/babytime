@@ -62,8 +62,8 @@ configuration form. A feeding asks for the date, milk amount, and an end time;
 Date and End default to the current gateway time. Start is calculated as End
 minus
 `auto_stop_minutes` (15 minutes by default). Set
-`feeding_alert_minutes` there to blink the top Feeding button and device
-display after the last feeding is that many minutes old (`120` by default).
+`feeding_alert_minutes` there to show an amber Milk reminder in the web UI
+and blink the device display after the last feeding is that many minutes old (`120` by default).
 Set
 `GATEWAY_TOKEN` in `docker-compose.yml` to require the token on every route
 (Bearer for machines); clients in `trusted_networks` (default `10.0.0.0/8`)

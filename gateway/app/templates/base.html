@@ -1,26 +1,12 @@
+{% from "icons.html" import icon %}
 <!doctype html>
 <html lang="{{ html_lang or 'en' }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>babytime gateway</title>
-<link rel="stylesheet" href="/static/style.css?v=light-7">
-</head>
-<body>
-<header>
-  <h1>babytime gateway</h1>
-  <nav class="tabs">
-    <span class="lang-switch" role="group" aria-label="Language">
-      <a href="/lang/en" class="lang-btn {% if lang == 'en' %}active{% endif %}">EN</a>
-      <a href="/lang/zh" class="lang-btn {% if lang == 'zh' %}active{% endif %}">中文</a>
-    </span>
-    <button type="button" class="tab-btn active" data-tab="records">{{ t('tab_records') }}</button>
-    <button type="button" class="tab-btn" data-tab="config">{{ t('tab_config') }}</button>
-  </nav>
-</header>
-<main>
-{% block content %}{% endblock %}
-</main>
+<meta name="theme-color" content="#f7f8f2">
+<title>babytime · {{ t('app_tagline') }}</title>
+<link rel="stylesheet" href="/static/style.css?v=sage-1">
 <script>
   window.I18N = {
     unit_hour: {{ t('unit_hour') | tojson }},
@@ -28,18 +14,65 @@
     unit_second: {{ t('unit_second') | tojson }}
   };
 </script>
+</head>
+<body>
+<a class="skip-link" href="#main-content">{{ t('skip_content') }}</a>
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/" aria-label="babytime">
+      <span class="brand-mark">{{ icon('heart') }}</span>
+      <span>babytime<span class="brand-dot">.</span></span>
+    </a>
+    <nav class="tabs" role="tablist" aria-label="{{ t('main_navigation') }}">
+      <button type="button" id="tab-records" class="tab-btn active" data-tab="records"
+              role="tab" aria-controls="panel-records" aria-selected="true">{{ icon('journal') }}{{ t('tab_records') }}</button>
+      <button type="button" id="tab-config" class="tab-btn" data-tab="config"
+              role="tab" aria-controls="panel-config" aria-selected="false" tabindex="-1">{{ icon('settings') }}{{ t('tab_config') }}</button>
+    </nav>
+    <div class="lang-switch" role="group" aria-label="{{ t('language') }}">
+      <a href="/lang/en" lang="en" class="lang-btn {% if lang == 'en' %}active{% endif %}" {% if lang == 'en' %}aria-current="true"{% endif %}>EN</a>
+      <a href="/lang/zh" lang="zh-CN" class="lang-btn {% if lang == 'zh' %}active{% endif %}" {% if lang == 'zh' %}aria-current="true"{% endif %}>中文</a>
+    </div>
+  </div>
+</header>
+<main id="main-content" tabindex="-1">
+{% block content %}{% endblock %}
+</main>
+<footer class="site-footer"><span class="footer-brand">babytime.</span> {{ t('footer_note') }}</footer>
 <script>
   (function () {
-    const buttons = document.querySelectorAll('.tab-btn');
+    const buttons = Array.from(document.querySelectorAll('.tab-btn'));
     const panels = document.querySelectorAll('.tab-panel');
     function activate(name) {
-      buttons.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+      if (!buttons.some(b => b.dataset.tab === name)) name = 'records';
+      buttons.forEach(b => {
+        const active = b.dataset.tab === name;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-selected', String(active));
+        b.tabIndex = active ? 0 : -1;
+      });
       panels.forEach(p => p.classList.toggle('active', p.dataset.tab === name));
       try { history.replaceState(null, '', '#' + name); } catch (e) {}
     }
-    buttons.forEach(b => b.addEventListener('click', () => activate(b.dataset.tab)));
-    const initial = (location.hash || '').replace('#', '') || 'records';
-    if (document.querySelector('.tab-btn[data-tab="' + initial + '"]')) activate(initial);
+    buttons.forEach((b, index) => {
+      b.addEventListener('click', () => activate(b.dataset.tab));
+      b.addEventListener('keydown', event => {
+        let next;
+        if (event.key === 'ArrowRight') next = (index + 1) % buttons.length;
+        else if (event.key === 'ArrowLeft') next = (index + buttons.length - 1) % buttons.length;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = buttons.length - 1;
+        else return;
+        event.preventDefault();
+        activate(buttons[next].dataset.tab);
+        buttons[next].focus();
+      });
+    });
+    activate(location.hash.slice(1));
+    window.addEventListener('hashchange', () => {
+      const name = location.hash.slice(1);
+      if (buttons.some(b => b.dataset.tab === name)) activate(name);
+    });
   })();
 </script>
 </body>

@@ -9,7 +9,7 @@ namespace {
 class Esp32P4_7BBoard : public hal::Board {
  public:
   bool init() override {
-    Serial.println("[hal-esp32p4-7b] board stub — see ARCHITECTURE/firmware-hal.md");
+    Serial.println("[hal-esp32p4-7b] board stub — see ARCHITECTURE/modules/firmware-hal.md");
     bool dispOk  = display_.init();
     bool inputOk = input_.init();
     return dispOk && inputOk;

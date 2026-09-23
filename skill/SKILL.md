@@ -43,10 +43,11 @@ human time string `"YYYY-MM-DD HH:MM"`. Naive strings are interpreted in
 the gateway's configured timezone — you do not need the UTC offset.
 
 `activities` flags each type `timed` or instant. A **timed** activity such as
-sleep is a `start`→`stop` session; give both bounds. Feeding is an instant,
-completed record: pass its end time as `start` (the compatibility field name)
-and the gateway stores both epochs equal. Other instant activities work the
-same way.
+sleep is a `start`→`stop` session; give both bounds. Milk and Solid food are completed end-time records: pass the end as `start`
+(the compatibility field name), or provide an explicit `stop`. The gateway
+derives Start by subtracting the configured `auto_stop_minutes` duration
+before applying the midnight rule. Poopoo and Supplement are point records
+with equal bounds.
 
 **No record crosses midnight.** Write the real times; the gateway cuts them.
 A sleep from 21:00 to 06:00 is stored as two records — `21:00–23:59:59` on the
@@ -57,7 +58,7 @@ earlier day. Editing one half of a split sleep does not touch the other half.
 
 ## Helper script (preferred when shell is available)
 
-`script/babytime.py` is a dependency-free Python 3 client:
+`scripts/babytime.py` is a dependency-free Python 3.10+ client:
 
 ```sh
 python3 scripts/babytime.py --host https://gw.example.com --token abc123 activities

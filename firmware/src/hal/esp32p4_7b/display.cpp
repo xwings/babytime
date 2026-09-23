@@ -5,7 +5,7 @@ namespace hal::esp32p4_7b {
 
 bool DisplayMipiDsi::init() {
   Serial.println("[hal-esp32p4-7b] display stub — MIPI-DSI bring-up pending");
-  Serial.println("[hal-esp32p4-7b] see ARCHITECTURE/firmware-hal.md Open Gaps");
+  Serial.println("[hal-esp32p4-7b] see ARCHITECTURE/modules/firmware-hal.md Known Gaps");
   return true;
 }
 
