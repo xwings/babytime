@@ -1,5 +1,5 @@
 ---
-eatmycode_version: "2.0.0"
+eatmycode_version: "2.1.0"
 ---
 # Gateway Browser UI
 
@@ -9,144 +9,116 @@ Read when: changing `gateway/app/templates/`, `gateway/app/static/`, `gateway/ap
 
 ## Responsibility and Status
 
-Implemented server-rendered Records/Configuration interface, redesigned
-with cream/sage surfaces, six default activity cards, date summaries and
-flat daily timelines with popup editing. Status **in progress** for exhaustive browser
-coverage; local Chromium interaction checks pass. Owns presentation and
-browser state, not record persistence or time normalization. No frontend
-bundler, remote fonts, image service or new package is required.
+Implemented server-rendered Records/Configuration interface: six default
+activity cards, a quick-log dialog, date summaries and flat daily timelines
+with popup editing. Status **in progress**: no committed browser suite and
+no browser check ran in this refresh. Owns presentation and browser state,
+not persistence or time normalization. No bundler, remote fonts or
+packages are used.
 
 ## Code Map
 
 | Path / symbol | Role |
 | --- | --- |
-| `gateway/app/templates/base.html` | Brand/header, language controls, keyboard tabs, skip link, I18N initialization and main/footer. |
-| `gateway/app/templates/index.html`: `renderFeeding`, `setDialogMode`, `syncFields` | Activity state, quick-log dialog, daily timeline, record/day-note dialogs, configuration and inline JavaScript. |
-| `gateway/app/templates/icons.html`: `icon` | Local decorative inline SVG macro; unknown/custom activities get a fallback symbol. |
-| `gateway/app/static/style.css` | Shared palette/layout/control styles, responsive rules and reduced-motion handling. |
-| `gateway/app/i18n.py`: `t`, `read_lang` | EN/ZH strings, labels and cookie/default language precedence. |
+| `gateway/app/templates/base.html` | Head (`window.I18N`, stylesheet `?v=` cache-bust), skip link, language links, ARIA tabs with `hashchange`, main/footer. |
+| `gateway/app/templates/index.html`: `renderFeeding`, `setDialogMode`, `syncFields` | Activity bar, quick-log dialog, timelines, record/day-note dialogs, configuration form and inline JavaScript. |
+| `gateway/app/templates/icons.html`: `icon(name)` | Decorative inline SVG macro; imported in both templates because Jinja macros are not inherited. |
+| `gateway/app/static/style.css` | Tokens, layout, `[data-activity]` colors, breakpoints and reduced-motion rules. |
+| `gateway/app/i18n.py`: `TRANSLATIONS`, `t`, `activity_label`, `poopoo_option_label`, `read_lang` | EN/ZH strings, label helpers (`al`/`pol` in templates), cookie/default precedence. |
 
 ## Local Conventions
 
 Follow [root conventions](../../ARCHITECTURE.md#code-conventions). Templates
-use `t`, `al`, `pol` for translated copy and built-in labels; custom names
-retain their entered text. Config labels are human-readable while submitted
-keys stay stable. Serialize translated JavaScript values with Jinja `tojson`;
-`window.I18N` must initialize in the head before content scripts capture it.
-Icons are decorative/hidden from assistive technology; controls retain text
-or accessible names. CSS tokens are canonical for palette/control styling.
+use `t`, `al`, `pol`; `al` resolves `act_<name>` in the language, then EN,
+then the raw name, so custom names keep their text. Serialize translated
+JavaScript values with `tojson` (two `col_ml`/`col_g` interpolations in
+`index.html` still rely on HTML escaping; fix when touched). `window.I18N`
+initializes in the head; other strings reach JS through `data-*`
+attributes and `tojson` constants, with hard-coded English fallbacks.
+Icons are `aria-hidden`; controls keep text or accessible names. CSS tokens
+are canonical; bump the stylesheet `?v=` query on CSS edits.
 
 ## Contracts and Invariants
 
-- Records/Configuration tabs use `#records`/`#config`, tab roles and roving
-  tabindex. Arrow keys/Home/End activate/focus tabs. The skip link focuses
-  main content. Language controls hit `/lang/{code}`; cookie overrides
-  configured default, then English fallback. EN/ZH are the supported set.
-- Activity cards derive from configured types. Idle Milk/Sleep and all
-  Solid food/Poopoo/Supplement/Etc open the shared dialog. Existing open
-  Milk/Sleep can be closed by form submission; Sleep shows a stop hint while
-  running. Sleep always starts/stops even if its saved timed flag is off.
-  Custom timed types toggle
-  `/ui/activity`, while other custom types log points. Busy guards prevent
-  duplicate activity-button submits and recover on browser pageshow.
-- Milk/Food modes require an amount, with +/-10 step controls and ml/g unit.
-  Sleep submits Date and adjustable Start to open a session; End is hidden
-  and disabled. The next Sleep card press stops it. Poopoo
-  selects configured amount/color/texture plus notes; Supplement chooses
-  a configured option; Etc takes Start/End and notes. Irrelevant controls
-  are disabled so their fields are not submitted. Date/time defaults advance
-  from rendered gateway wall time each time the dialog opens.
-- Keep `/records` form field names and `data-*` hooks stable. The server
-  derives intake Start, validates options/durations and owns midnight rules;
-  browser validation is an additional convenience. Native dialog supplies
-  modal focus behavior; Cancel, Escape and backdrop dismiss it.
-- Counters tick every second. `/api/state` polls every 30 seconds, on load,
-  focus and becoming visible; it refreshes **Milk state only** and corrects
-  clock offset from `server_epoch`. Failed fetches keep rendered state for
-  the next retry. Other records/activity states still need page reload.
-- Due feeding uses amber styling and translated reminder text; the web
-  reminder no longer flashes. Firmware flashing is a separate contract.
-- Daily timelines are flat lists without tables or checkboxes. Dates and
-  displayed event times descend: intake and built-in points use End; Sleep
-  and other sessions use Start. Today starts expanded; all other dates start
-  folded, including on older pages. Fold buttons maintain `aria-expanded`
-  and hide their list and day-note preview. Colored summary badges for Milk,
-  Solid food, Sleep and Poopoo stay visible above each timeline when folded,
-  including zero totals. They show counts/intake and completed sleep duration.
-  Fold state is not stored across reloads.
-- Each timeline entry is a native button with time, decorative activity icon,
-  label, amount or duration, and escaped notes. It opens `#edit-record-dialog`.
-  Save posts one hidden `record_id` and the existing `*_ID` fields to
-  `/records/save`; confirmed Delete posts to `/records/delete`, bypassing
-  edit validation. Custom/deleted activity names remain selectable. Intake
-  Start is read-only; End is editable; ml/g follows the activity. Exact-second
-  field values preserve midnight boundaries on notes-only saves.
-- Day notes are separate from entry notes: the day-note button opens its own
-  dialog posting `day_note_DATE` to `/records/save`; blank clears it. Existing
-  day notes appear as text. Both editor forms fetch then reload the current
-  page on success; failed saves keep the dialog and entered values for retry.
-  Duplicate submits are guarded while saving. Escape, Cancel and backdrop
-  dismiss idle dialogs. Dates/page count is server-owned; empty journal has
-  a direct Milk dialog action.
-- CSS breakpoints at 1050/900/600 px adapt spacing/cards; <=600 px timeline
-  spacing narrows and form fields use 16 px text. Responsive
-  controls, visible focus and reduced-motion rules live in `style.css`.
-- Configuration posts activity names/timed flags, Poopoo/Supplement option
-  lists, default language and settings to `/config`. Built-in intake names
-  stay locked; deleted option sets use presence markers to preserve intent.
+- Tabs: panels `#panel-records`/`#panel-config` with `role=tablist/tab`,
+  roving tabindex and Arrow/Home/End keys; URL hashes `#records`/`#config`
+  select tabs via `hashchange`, and `POST /config` redirects to `/#config`
+  (also the config section id). The skip link focuses main content.
+- Language: `GET /lang/{code}` stores a cookie; any cookie beats
+  `default_language`, and unknown values normalize to `en` without
+  rejection. Supported set is EN/ZH; `t()` falls back language → EN → key.
+  Nothing enforces EN/ZH pairing; both tables currently hold 113 keys, and
+  `col_stop`, `milk_decrease`, `milk_increase` are unused.
+- Field names, `data-*` hooks, browser-called endpoints, `/config` inputs
+  and `ui_home` context keys are contracts listed in the
+  [UI form contract](../topics/gateway-ui-form-contract.md); read it before
+  changing any of them and change API handlers in the same edit.
+- Activity cards derive from configured types; icons key on the lowercased
+  name, with `etc`/custom names falling back to a sparkle; colors come
+  from `[data-activity]`. Idle Milk/Sleep and all Food/Poopoo/Supplement/Etc
+  open the shared dialog; open Milk/Sleep close by submit; Sleep starts and
+  stops regardless of its timed flag. Custom timed types toggle
+  `/ui/activity`; other custom types log points. Busy guards block
+  duplicate submits and reset on `pageshow`.
+- Dialog modes: Milk/Food need an amount (±10 stepper, ml/g); Sleep posts
+  Date plus adjustable Start with End hidden and disabled; Poopoo selects
+  configured amount/color/texture; Supplement one option; Etc Start/End.
+  Disabled controls are not submitted. Date/time defaults advance from
+  rendered gateway wall time on each open. Native `<dialog>` supplies modal
+  focus; Cancel, Escape and backdrop dismiss.
+- Counters tick every second; `/api/state` polls every 30 s and on
+  load/focus/visible, re-rendering **Milk state only** and correcting the
+  clock offset; failed fetches keep rendered state. Due feeding uses amber
+  styling without flashing.
+- Timelines: dates and entries descend by `timeline_epoch`; today renders
+  expanded, other dates `collapsed` with `<ol hidden>` and
+  `aria-expanded=false`; summary chips for Milk, Food, Sleep and Poopoo
+  always render, including zero totals; fold state is not persisted. Each
+  entry is a button carrying a `data-record` payload that opens
+  `#edit-record-dialog`; Save posts to `/records/save`; Delete posts to
+  `/records/delete` without validation. Intake Start is read-only, End
+  editable, unit follows the activity; custom or deleted names stay
+  selectable.
+- Day notes: `#day-note-dialog` posts `day_note_DATE` to `/records/save`;
+  blank clears. Both editors fetch, then reload on success; failures keep
+  the dialog and values; duplicate submits are guarded.
+- CSS: fixed six-column activity grid (three at ≤1050 px); breakpoints at
+  1050/900/600 px; ≤600 px inputs use 16 px text; reduced-motion disables
+  animation. `.sr-only` and `data-suffix` are unused.
 
 ## Dependencies and Boundaries
 
-[API](gateway-api.md) supplies `ui_home` context and every mutation endpoint;
-read it when changing field names, context, response handling or timestamps.
-[Storage](gateway-storage.md) owns configuration/options and canonical
-activity normalization; read it when changing built-in behavior. Templates
-never open a database. Treat Jinja escaping, JSON serialization and DOM
-text insertion as trust boundaries for record notes/custom labels.
+[API](gateway-api.md) supplies `ui_home` context and every mutation
+endpoint; read it when changing field names, context, response handling
+or timestamps. [Storage](gateway-storage.md) owns configuration/options
+and canonical activity normalization; read it when changing built-in
+behavior. Templates never open a database. Treat Jinja escaping, JSON
+serialization and DOM text insertion as trust boundaries for record notes
+and custom labels.
 
 ## Change Guide
 
 | Change trigger | Inspect / extend | Required docs / checks |
 | --- | --- | --- |
-| Layout / icons / breakpoints | Templates, icon macro, CSS | Empty/populated EN/ZH at phone/tablet/desktop; keyboard/focus and long labels. |
-| Dialog / record edits | Mode toggles, validators, handlers | Six default activity flows; amount units, popup save/delete, day notes, exact timestamps; API owner. |
+| Layout / icons / breakpoints | Templates, icon macro, CSS, `?v=` query | Empty/populated EN/ZH at phone/tablet/desktop; keyboard/focus and long labels. |
+| Dialog / record edits | Mode toggles, validators, handlers | Six default flows; units, popup save/delete, day notes, exact timestamps; API owner. |
 | Timer / reminder | State polling, timer formatting, I18N order | Chinese units, remote feeding update, due/disabled alerts, recovery. |
-| Settings / localization | Config controls, translation maps | Add/remove custom activities/options, save/reload and cookie/default precedence. |
+| Settings / localization | Config controls, translation maps | Form contract topic; add/remove activities/options, save/reload, cookie precedence, EN/ZH parity. |
 
 ## Verification
 
-Run root syntax check, then the disposable gateway command in
-[API Verification](gateway-api.md#verification). Open `http://127.0.0.1:8080/`
-in a current browser. There is no frontend build/lint command or committed
-browser suite. Required behavior checks for UI edits:
-
-1. At 360, 390, 768 and 1440 px, render empty and populated logs in EN/ZH:
-   no horizontal page overflow, clipped controls or console errors.
-2. Save all six quick-log modes, tap timeline entries to edit or delete,
-   save/clear entry and day notes, and change language/config/options. Verify
-   only the selected entry mutates; timestamps, totals and ml/g survive reload.
-   Check displayed-time sorting, exact midnight seconds, removed custom types,
-   cancelled dialogs/deletions, invalid saves and fetch failure/retry.
-3. Exercise custom timed activity start/stop and remote Milk state update;
-   counters retain localized units. Test due Milk versus disabled alerts.
-   Start Sleep with an adjusted Start, cancel/reopen, reload and stop it;
-   Start stays editable in its popup and End stays blank while open.
-   Check cross-midnight split on stop and preservation past the timer cap.
-4. Navigate tabs/dialog/folds by keyboard; observe focus and ARIA state.
-   Check long custom names and responsive labels; reduced-motion mode
-   suppresses decorative animation.
-
-Local Chromium checks passed the viewport/language matrix and six activity,
-record edit/note/config/delete, custom-timer, empty/long-name, keyboard,
-Milk-state/alert and reduced-motion flows.
-No Safari/iOS or physical-device browser result is claimed. A screenshot
-alone cannot establish submission/persistence or keyboard behavior.
+Run the root syntax check and unittest command;
+`test_timeline_orders_sleep_by_start_and_intake_by_end` asserts rendered
+HTML contains `day-timeline` and `edit-record-dialog` and no `row-check`.
+Browser behavior is checked with the
+[manual gateway checks](../topics/gateway-manual-checks.md) (read when
+verifying template, CSS, JavaScript or translation edits). No frontend
+build, lint or browser suite exists; no browser check ran in this refresh.
 
 ## Known Gaps
 
 No push channel; only Milk state refreshes without reload. No persisted
-fold state or unsaved-edit recovery. JS/native dialog is required for the
-normal quick-log flow; older-browser fallback is incomplete. Chinese units
-must remain initialized before timer closures are created. Broader assistive
-technology and Safari/iOS checks remain unverified. UI source and browser
-checks, not the old single-640px layout description, define current behavior.
+fold state or unsaved-edit recovery. JavaScript and native `<dialog>` are
+required for the quick-log flow; older-browser fallback is incomplete.
+Chinese units must be initialized before timer closures are created. EN/ZH
+parity, Safari/iOS and assistive-technology behavior are unverified.

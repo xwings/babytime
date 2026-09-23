@@ -1,5 +1,5 @@
 ---
-eatmycode_version: "2.0.0"
+eatmycode_version: "2.1.0"
 ---
 # Gateway Scheduler
 
@@ -10,50 +10,57 @@ Read when: changing `gateway/app/scheduler.py`, task lifespan or auto-stop seman
 ## Responsibility and Status
 
 Implemented background session capping; status **in progress** because
-multi-activity coverage is incomplete. It wakes every 60 seconds and checks
-one open record. It does not send notifications, poll devices or update
-browser state directly.
+multi-activity coverage is incomplete. Every 60 seconds it caps at most one
+due record. It does not notify, poll devices or update browser state.
 
 ## Code Map
 
 | Path / symbol | Role |
 | --- | --- |
 | `gateway/app/scheduler.py`: `_enforce_auto_stop`, `scheduler_loop` | Synchronous cap calculation/write inside an asyncio loop. |
-| `gateway/app/main.py`: `lifespan` | Starts one task after database/config initialization and cancels/awaits it on shutdown. |
-| `gateway/app/util.py`: `midnight_segments` | Shared gateway-local day boundary behavior, owned by [API](gateway-api.md). |
+| `gateway/app/main.py`: `lifespan` | Starts one task after `db.init` and config migration; cancels/awaits it on shutdown. |
+| `gateway/app/util.py`: `SPLIT_ACTIVITIES`, `midnight_segments` | Gateway-local day boundary behavior, owned by [API](gateway-api.md). |
 
 ## Local Conventions
 
-Use the [root baseline](../../ARCHITECTURE.md#code-conventions). `_enforce_auto_stop`
-accepts a config snapshot for deterministic checks. The loop catches/logs
-exceptions per iteration and exits on cancellation; these are observed
-print-based diagnostics, not structured logging.
+Use the [root baseline](../../ARCHITECTURE.md#code-conventions).
+`_enforce_auto_stop` takes a config snapshot for deterministic checks and
+parses `auto_stop_minutes` itself rather than through `config.int_value`.
+The loop catches/prints exceptions per iteration and exits on
+cancellation; diagnostics are `print` calls, not structured logging.
 
 ## Contracts and Invariants
 
-- Sleep happens before each check. `auto_stop_minutes` parses as integer,
-  defaults to 15 on invalid input, and disables enforcement at <=0.
-- Selects the newest open record among legacy feeding and configured timed
-  activities, excluding Sleep. Sleep stays open until manually stopped and
-  cannot block another activity's cap. Only one eligible record is checked
-  per iteration.
-- A due session closes at `start + minutes*60`, not the tick's current time.
-  The write may occur roughly one tick later; stored duration is capped.
-- `midnight_segments` processes the cap before writing; eligible non-sleep
-  activities clamp to the first day. `stop_active` closes the newest
-  active row of the selected activity and `clone_segments` writes additional rows, dropping intake
-  amounts. No notification side effect occurs.
-- Failure prints `[scheduler] error: ...` and keeps the loop alive; a
-  successful cap prints its record ID and configured minutes. FastAPI
-  lifespan cancellation is awaited before exit.
+- Each tick: `asyncio.sleep(60)` (first check 60 s after startup), then
+  `config.load()`; `config.update` refreshes that cache, so UI edits apply
+  on the next tick. `auto_stop_minutes` parses as int (`ValueError` → 15,
+  `TypeError` falls to the loop's error print) and <=0 disables.
+- Eligible set is `timed_activities(cfg) | {feeding} − {sleep}`, so `etc`
+  is capped by default. One `get_active(activity)` query per eligible type;
+  only the newest by `start_epoch` is evaluated (equal starts tie-break by
+  set order). Sleep stays open until manually stopped and cannot block
+  another activity's cap.
+- Due when `int(time.time()) >= start + minutes*60` (patchable via
+  `scheduler.time.time`). The stored stop is `midnight_segments(start, cap,
+  activity, cfg timezone or UTC)[0][1]`, i.e. `min(cap, local midnight
+  after start − 1)`; the write may land one tick late.
+- `stop_active(stop, activity=)` re-queries the newest open row of that
+  activity, which may differ from the evaluated row under a race. The
+  following `clone_segments(id, segments[1:])` is a no-op while
+  `SPLIT_ACTIVITIES == {"sleep"}`, because non-sleep clamps to one segment;
+  keep the call as the guard for future split rules. No notification occurs.
+- Failure prints `[scheduler] error: ...` and keeps the loop alive; success
+  prints the record ID and configured minutes. Lifespan cancellation is
+  awaited before exit.
 
 ## Dependencies and Boundaries
 
-Reads configuration and persists through [Storage](gateway-storage.md).
-Read that owner when changing active lookup/transaction semantics; read
-[API](gateway-api.md) for time splitting or startup changes. Browser changes
-appear on reload; firmware observes state through normal polling. The
-scheduler must share the same time normalization as HTTP writes.
+Reads configuration and persists through [Storage](gateway-storage.md);
+read it when changing active lookup or transaction semantics. Read
+[API](gateway-api.md) for time splitting or startup changes and keep the
+same time normalization as HTTP writes (`main._segments` wraps the same
+helper with the same timezone fallback). Browser changes appear on
+reload; firmware observes state through normal polling.
 
 ## Change Guide
 
@@ -65,7 +72,11 @@ scheduler must share the same time normalization as HTTP writes.
 
 ## Verification
 
-Root Python syntax check plus this deterministic root command (stdlib only):
+`gateway/tests/test_sleep.py` covers cap exclusion with a concurrent
+feeding (`test_sleep_does_not_prevent_other_timers_from_being_capped`) and
+sleep left open (`test_manual_stop_splits_at_local_midnight`); run the root
+unittest command. This deterministic root command (stdlib only) passed in
+this refresh:
 
 ```sh
 PYTHONPATH=gateway python3 - <<'PY'
@@ -89,16 +100,17 @@ print('scheduler smoke passed')
 PY
 ```
 
-Pass proves before-cap preservation and exact capped stop for one session;
-it does not establish whole-loop timing, exception recovery or hardware
-propagation. Use the API owner's disposable gateway to check task startup
-and shutdown; no real-session mutation is needed for this smoke.
+Pass proves before-cap preservation and the exact capped stop for one
+session. Untested: disabled/invalid minutes, a cap crossing midnight,
+newest-wins among several open records, custom timed types, loop
+cadence, exception recovery and cancellation. Task startup/shutdown is
+observed with the [manual gateway checks](../topics/gateway-manual-checks.md)
+(read when verifying against a running gateway).
 
 ## Known Gaps
 
-`gateway/tests/test_sleep.py` verifies sleep cap exclusion and concurrent
-feeding capping (run via the API owner's unittest command). Older eligible
-sessions can remain open while a newer eligible one is active; checking all
-due records in each tick remains outside this contract. Stop and clone calls are separate
-transactions and lookup/write is not atomic. The 60-second cadence delays
-visible closure; changing that is a behavior decision, not a docs fix.
+Older eligible sessions can remain open while a newer eligible one is
+active; checking all due records per tick is outside this contract. Stop
+and clone calls are separate transactions and lookup/write is not atomic.
+`auto_stop_minutes` parsing is duplicated from `config.py`. The 60-second
+cadence delays visible closure.

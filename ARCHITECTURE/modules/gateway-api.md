@@ -1,5 +1,5 @@
 ---
-eatmycode_version: "2.0.0"
+eatmycode_version: "2.1.0"
 ---
 # Gateway API
 
@@ -12,143 +12,115 @@ Read when: changing `gateway/app/main.py`, `gateway/app/util.py`, gateway runtim
 Implemented gateway transport/application boundary; status **in progress**
 for complete behavioral/security coverage. Owns device state/events, record
 and day-note JSON, browser form handlers, template context and the stdlib
-HTTP CLI. It delegates persistence, scheduling and presentation to partners.
+HTTP CLI. Persistence, scheduling and presentation are partner owners.
 
 ## Code Map
 
 | Path / symbol | Role |
 | --- | --- |
-| `gateway/app/main.py`: `require_auth`, `state_payload`, `ui_home`, `RecordIn` | Auth boundary, device snapshot, browser context and record input model; route decorators locate endpoints. |
-| `gateway/app/util.py`: `midnight_segments` | Local-day segmentation shared with scheduler; timezone fallback. |
-| `gateway/{requirements.txt,Dockerfile,docker-compose.yml}` | Runtime dependency pins, uvicorn entrypoint, environment/persistence contract. |
-| `skill/{SKILL.md,scripts/babytime.py}` | Remote-client instructions and stdlib argparse/urllib adapter; no direct SQLite access. |
+| `gateway/app/main.py`: `require_auth`, `browser_api_key_link`, `state_payload`, `ui_home`, `RecordIn` | Auth boundary, key-link middleware, device snapshot, browser context, input models (`EventIn`, `DayNoteIn`); route decorators locate endpoints. |
+| `gateway/app/main.py`: `_to_epoch`, `_feeding_bounds`, `_segments`, `_stop_session`, `_record_date_epoch` | Time parsing, intake derivation, midnight wrapper, session close and day grouping. |
+| `gateway/app/util.py`: `SPLIT_ACTIVITIES`, `zoneinfo`, `local_midnight_after`, `midnight_segments` | Split-rule switch and local-day segmentation shared with the scheduler. |
+| `gateway/{requirements.txt,Dockerfile,docker-compose.yml}` | Dependency pins; uvicorn command with `GATEWAY_BIND_HOST/PORT` and `--no-proxy-headers`; env/persistence contract. |
+| `skill/{SKILL.md,scripts/babytime.py}` | Agent instructions and stdlib argparse/urllib client; no SQLite access. |
 
 ## Local Conventions
 
 Follow [root conventions](../../ARCHITECTURE.md#code-conventions). Observed:
-async route functions call synchronous storage helpers; Pydantic models
-validate JSON shape; `HTTPException` reports client errors; forms redirect
-303 after writes. Config parsing, amount normalization and midnight helpers
-are shared across browser/device/JSON paths. These paths are not identical:
-retain legacy field compatibility explicitly rather than assuming parity.
+async routes call synchronous storage helpers; Pydantic models validate
+JSON; `HTTPException` reports client errors; forms redirect 303 after
+writes. Form paths silently skip unknown `record_id`, missing dates/times
+and unparseable intake ends. Config parsing, amount normalization and
+midnight helpers are shared across browser/device/JSON paths, but the
+paths are not identical: keep legacy fields explicitly.
 
 ## Contracts and Invariants
 
-- `lifespan` initializes SQLite, migrates absent JSON config, starts one
-  scheduler task and cancels/awaits it on shutdown. Paths/token are read
-  from environment; bind defaults are in Dockerfile. `TZ` is not the saved
-  gateway calendar setting: `config.timezone` controls that.
-- Empty `GATEWAY_TOKEN` opens application routes. With a token, trusted
-  client CIDRs bypass auth; otherwise Bearer, Basic password or derived
-  `babytime_access` cookie passes. Comparisons use HMAC-safe comparison.
-  Static assets and FastAPI's generated documentation are outside the
-  ordinary application-route dependency.
-- `_effective_client_ip` walks `X-Forwarded-For` from the connection inward,
-  skipping configured trusted proxies. Preserve `--no-proxy-headers` so
-  uvicorn leaves the real TCP peer intact. A direct untrusted IP cannot
-  normally override itself with a forwarded header; invalid hops are skipped.
-- `GET /?api=...` exchanges a valid token for a year-long HttpOnly,
-  SameSite=Lax, Secure HMAC-derived cookie and strips the key via 303.
-  `shortcut=1` intentionally retains the key in the rendered URL. Responses
-  set no-store/no-referrer. Secure cookie persistence needs HTTPS; the
-  middleware itself does **not** reject HTTP key-link requests.
-- JSON timestamps accept epoch or ISO strings; naive strings use saved
-  gateway timezone (`_to_epoch`). Unknown timezones fall back to UTC.
-  Milk (`feeding`) and `solid_food` record writes interpret `start` as End
-  for compatibility, with explicit `stop` winning; stored Start derives
-  from `auto_stop_minutes`. Poopoo/Supplement record writes use equal bounds.
-  Intake columns are type-specific (`volume_ml` versus `volume_g`).
-- Normalized explicit spans cap at 30 minutes, except sleep at 24 hours;
-  earlier stop is interpreted as next day. Browser sleep starts with Date
-  and adjustable Start, stays open until `/ui/activity` stops it, and ignores
-  the saved timed flag. `/records` rejects malformed/future open starts and
-  redirects repeated open starts without creating duplicates. `/records/save`
-  also rejects future Start edits while Sleep is open. Legacy completed
-  sleep submissions still accept positive `HH:MM` duration up to 23:59;
-  Etc accepts Start/End. Fixed-duration intake
-  and device start/stop paths do not all apply the same duration guard.
-- Closed spans pass through `midnight_segments`: sleep becomes separate
-  rows ending at 23:59:59 and starting at 00:00; other types clamp to the
-  start day. One boundary second is excluded. Open spans pass unchanged
-  until closed; existing rows are not backfilled. Create returns the first
-  segment; siblings are independent and carry no duplicate intake amount.
-- Device `log` records a feeding End, normalizing a legacy open feeding;
-  legacy `start`/`stop` remain accepted. `/api/state` contains feeding-only
-  active/last-feeding, today's feeding tally, eight mixed-activity history
-  rows, server epoch, configured duration and feeding-alert information.
-- `/api/records?date=YYYY-MM-DD` returns oldest-first records, day note and
-  milk/food/poopoo/sleep totals; no date returns newest-first limited rows.
-  `_record_date_epoch` groups completed Milk/Food/Sleep/Poopoo/Supplement by End, others
-  by Start. `ui_home` paginates dates, not records. Missing IDs return 404;
-  malformed date/string timestamps are rejected. Empty day note deletes it.
-- `ui_home` sorts dates descending and each timeline by displayed time:
-  intake/point End, session Start, with ID as tie-breaker. JSON list ordering
-  is unchanged. Popup editors reuse `/records/save` and `/records/delete`
-  with one `record_id`; legacy bulk forms remain accepted. Exact unchanged
-  Date/Start/End/activity preserve original epochs on notes/amount edits,
-  including midnight seconds and intake bounds after duration config changes.
-- CLI uses global `--host`/`--token` flags before subcommands, Bearer auth,
-  15-second request timeout and nonzero exits on HTTP/network errors.
-  `update` forwards only supplied flags. `list --activity` filters after
-  server limiting, so it may return fewer matching rows than the limit.
+- Routes, all behind the app-level `require_auth` dependency (the `/static`
+  mount and FastAPI docs are outside it): `POST /api/events`; `GET
+  /api/state`; `GET /api/records` (`limit` default 100 newest-first, or
+  `date=YYYY-MM-DD`); `POST /api/records`; `PATCH|DELETE /api/records/{rid}`;
+  `GET /api/day_notes`; `PUT /api/day_notes/{date}`; `GET /api/config`;
+  `GET /api/activities`; `GET /`; `GET /lang/{code}`; 303 form posts
+  `/ui/activity`, `/records`, `/records/save`, `/records/delete`, `/config`.
+  JSON routes return 404 for missing IDs; a blank day note deletes.
+- `lifespan` runs `db.init`, migrates absent JSON config from the legacy
+  table, starts one scheduler task and cancels/awaits it on shutdown.
+  `GATEWAY_TOKEN` is stripped at import; empty opens all routes. Saved
+  `config.timezone`, not `TZ`, controls the calendar.
+- With a token, trusted-network CIDRs bypass auth; otherwise Bearer, Basic
+  password, the `babytime_access` cookie or a valid `?api=` key on `GET /`
+  passes. Comparisons use `hmac.compare_digest`.
+- `_effective_client_ip` walks `X-Forwarded-For` from the peer inward,
+  skipping configured trusted proxies and invalid hops; keep uvicorn's
+  `--no-proxy-headers` so the TCP peer stays intact.
+- `browser_api_key_link`: a valid `GET /?api=` sets a year-long HttpOnly,
+  SameSite=Lax, Secure HMAC-derived cookie and 303-strips the key unless
+  `shortcut` is `1`/`true`/`yes`. Responses carry no-store/no-referrer.
+  Plain-HTTP key links are not rejected, but the Secure cookie needs HTTPS.
+- Epoch seconds are the wire format; `_to_epoch` also accepts ISO strings
+  in the saved timezone. Milk/Food `start` means End with Start derived
+  from `auto_stop_minutes`; Poopoo/Supplement are point rows; sleep is the
+  only session that splits at local midnight, other closed spans clamp to
+  their first day; device `log` records a feeding End. Read
+  [record time rules](../topics/gateway-record-time-rules.md) before
+  changing any timestamp, intake, sleep, split, device-event or grouping
+  behavior; it holds the full contract and its gaps.
+- `/api/state` holds feeding-only `active` and `last_feeding`,
+  `today_feeds`/`today_ml`, eight mixed `history` rows, `server_epoch`,
+  `feeding_duration_minutes` and `feeding_alert{due, elapsed_seconds,
+  threshold_minutes, message}`; firmware and browser decode it.
+- Poopoo/Supplement notes serialize as `Amount: x; Color: y; Texture: z;
+  Extra notes: …` and `Supplement: x; Extra notes: …`; a configured option
+  group without a valid selection is 400. `/config` rebuilds
+  `activity_types`/`timed_activities` from `activity_name_N`/`activity_timed_N`,
+  forces `etc` timed, strips built-in intake types and rejects commas.
+- Popup editors post one `record_id` with `*_ID` fields to `/records/save`
+  and `/records/delete`; legacy bulk and `volume_ml_ID`/`volume_g_ID`
+  fields remain accepted. `ui_home` paginates dates (`page` clamped), not
+  records, and exposes the context listed by the UI owner.
+- CLI: global `--host`/`--token` before subcommands, Bearer auth, 15 s
+  timeout, nonzero exit on errors; `add` needs `--start`; `update` forwards
+  only supplied flags; `list` filters `--activity` after the server limit
+  (default 20), so it may return fewer rows than requested.
 
 ## Dependencies and Boundaries
 
 Read [Storage](gateway-storage.md) for schema/settings changes,
 [Scheduler](gateway-scheduler.md) for lifespan/cap changes,
 [UI](gateway-ui.md) for template context/form/i18n changes, and
-[Firmware app](firmware-app.md) for device payload changes. The remote CLI
-must continue using HTTP; it does not own gateway files. Read both storage
-and scheduler when changing midnight behavior. Dependency pins are in root
-snapshot; no frontend dependencies or new runtime packages are required.
+[Firmware app](firmware-app.md) for device payload changes. Read both
+storage and scheduler when changing midnight behavior. The CLI must keep
+using HTTP. Dependency pins live in the root snapshot; no frontend
+dependencies or new runtime packages are required.
 
 ## Change Guide
 
 | Change trigger | Inspect / extend | Required docs / checks |
 | --- | --- | --- |
-| Wire fields / record behavior | Models, all write handlers, CLI and firmware decoder | Backward fields, point/intake/sleep cases, missing IDs, partner owners. |
-| Auth / proxy | Dependency, middleware, Dockerfile command | Untrusted/allowed clients; direct/proxied IP; Bearer/Basic/cookie and shortcut. |
-| Dates / summaries | Normalization, grouping, util, filters | Midnight + timezone + intake units; storage/scheduler/UI partners. |
+| Wire fields / record behavior | Models, all write handlers, CLI and firmware decoder | Record time rules topic; backward fields, point/intake/sleep cases, missing IDs, partner owners. |
+| Auth / proxy | Dependency, middleware, Dockerfile command | Untrusted/allowed clients; direct/proxied IP; Bearer/Basic/cookie/key and shortcut. |
+| Dates / summaries | Normalization, grouping, util, filters | Record time rules topic; midnight + timezone + intake units; storage/scheduler/UI partners. |
 | Browser form contract | Form handlers and context | UI owner; dialog/save/delete/config round-trip. |
 
 ## Verification
 
-Run root setup/syntax commands, then from root run
-`PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v`.
-`gateway/tests/test_sleep.py` covers adjusted/duplicate starts, invalid starts,
-manual stops, local-midnight splits, legacy duration posts and cap exclusions
-using disposable SQLite and a controlled clock. It also covers timeline ordering
-and exact timestamp preservation for popup note/amount edits. Local runtime from `gateway/`, using
-throwaway state and a loopback listener:
-
-```sh
-BABYTIME_CHECK_DIR=$(mktemp -d)
-GATEWAY_DB_PATH="$BABYTIME_CHECK_DIR/gateway.db" GATEWAY_CONFIG_PATH="$BABYTIME_CHECK_DIR/config.json" GATEWAY_TOKEN= .venv/bin/python -m uvicorn app.main:app --no-proxy-headers --host 127.0.0.1 --port 8080
-```
-
-After startup, from root in another terminal:
-
-```sh
-curl --fail --silent http://127.0.0.1:8080/api/state
-python3 skill/scripts/babytime.py --host http://127.0.0.1:8080 activities
-python3 skill/scripts/babytime.py --host http://127.0.0.1:8080 add --start '2026-09-23 12:00' --ml 90
-python3 skill/scripts/babytime.py --host http://127.0.0.1:8080 dump 2026-09-23
-```
-
-Pass: valid state JSON, advertised activities, feeding stored 11:45–12:00
-with default 15-minute duration, and day summary `total_ml=90`. Stop the
-local process after checking; never aim mutation checks at an existing log.
-For changed behavior also exercise PATCH/delete/day notes, cross-midnight
-sleep versus intake clamp, and the authentication matrix above. Syntax and
-an HTTP smoke alone do not establish security or all validation paths.
+Run the root syntax check and unittest command. `gateway/tests/test_sleep.py`
+(9 cases, passing in this refresh) covers adjusted/duplicate starts,
+invalid and future starts, manual stops, local-midnight splits, legacy
+duration posts, cap exclusion, future Start edits, timeline ordering and
+exact timestamp preservation with disposable SQLite and a patched clock.
+For route, auth, CLI or time changes run the
+[manual gateway checks](../topics/gateway-manual-checks.md) (read when
+verifying behavior against a running gateway); its API/CLI sequence passed
+in this refresh.
 
 ## Known Gaps
 
-Committed handler tests cover Sleep and timeline editing; other API behavior relies on
-disposable checks. Input amount ranges and several form failures lack
-consistent client validation; record lists/day grouping read all rows in
-some paths. Re-splitting a sleep does not remove previous siblings; legacy
-minute-only form edits can shave 59 seconds from a midnight-clamped row. Form
-writes have no CSRF token and auth is gateway-wide, with no roles/rate limit.
-The proxy trust configuration and credential-bearing shortcut URL require
-careful review when changed. These are existing limitations, not new scope.
+Committed tests cover Sleep, one cap and timeline editing; other handlers
+rely on manual checks. Time-handling defects are listed in the record time
+rules topic. Amount ranges and some form failures lack validation; some
+list/grouping paths read all rows. No CSRF token; auth is gateway-wide with
+no roles or rate limit. `gateway/README.md` names `BABYTIME_GATEWAY_URL/TOKEN`
+env vars that no code reads (the CLI uses flags) and omits `/api/activities`,
+`/api/records?date=` and `/lang/{code}`.
