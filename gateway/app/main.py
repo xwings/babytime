@@ -51,26 +51,19 @@ def filter_localdate_input(epoch: Optional[int], tz_name: str = "UTC") -> str:
     return datetime.fromtimestamp(int(epoch), tz=zoneinfo(tz_name)).strftime("%Y-%m-%d")
 
 
-def filter_localtime_only(epoch: Optional[int], tz_name: str = "UTC") -> str:
+def filter_localtime_only(
+    epoch: Optional[int], tz_name: str = "UTC", seconds: bool = False
+) -> str:
     if not epoch:
         return ""
-    return datetime.fromtimestamp(int(epoch), tz=zoneinfo(tz_name)).strftime("%H:%M")
-
-
-def filter_duration(start: Optional[int], stop: Optional[int]) -> str:
-    if start is None or stop is None:
-        return ""
-    d = int(stop) - int(start)
-    if d < 0:
-        d = 0
-    total_minutes = d // 60
-    return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+    return datetime.fromtimestamp(int(epoch), tz=zoneinfo(tz_name)).strftime(
+        "%H:%M:%S" if seconds else "%H:%M"
+    )
 
 
 templates.env.filters["localtime"] = filter_localtime
 templates.env.filters["localdate_input"] = filter_localdate_input
 templates.env.filters["localtime_only"] = filter_localtime_only
-templates.env.filters["duration"] = filter_duration
 
 
 def combine_date_time(date_str: str, time_str: str, tz_name: str = "UTC") -> Optional[int]:
@@ -835,11 +828,18 @@ async def ui_home(
     by_date: dict[str, list] = {}
     date_order: list[str] = []
     for r in all_records:
+        r["timeline_epoch"] = (
+            r["stop_epoch"]
+            if r["activity"] in {"feeding", "solid_food", "poopoo", "supplement"}
+            and r["stop_epoch"] is not None
+            else r["start_epoch"]
+        )
         d = datetime.fromtimestamp(_record_date_epoch(r), tz=tz).strftime("%Y-%m-%d")
         if d not in by_date:
             by_date[d] = []
             date_order.append(d)
         by_date[d].append(r)
+    date_order.sort(reverse=True)
     total_dates = len(date_order)
     total_pages = max(1, (total_dates + dates_per_page - 1) // dates_per_page)
     if page < 1:
@@ -852,7 +852,9 @@ async def ui_home(
     groups = [
         {
             "date": d,
-            "records": by_date[d],
+            "records": sorted(
+                by_date[d], key=lambda r: (r["timeline_epoch"], r["id"]), reverse=True
+            ),
             **_daily_activity_summary(by_date[d]),
             "note": day_notes.get(d, ""),
         }
@@ -907,8 +909,6 @@ async def ui_home(
             "now_time": now.strftime("%H:%M"),
             "page": page,
             "total_pages": total_pages,
-            "total_records": len(all_records),
-            "total_dates": total_dates,
             "dates_per_page": dates_per_page,
             "max_record_duration_minutes": MAX_RECORD_DURATION_SECONDS // 60,
             "config_keys_simple": [
@@ -985,7 +985,7 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
             activity=activity,
             device_id="web",
         )
-    elif activity not in config.timed_activities(cfg):
+    elif activity != "sleep" and activity not in config.timed_activities(cfg):
         # Instant event: log a single closed timestamp (start == stop) so it
         # never looks like an open session to the device, scheduler, or UI.
         db.create_record(start_epoch=ts, stop_epoch=ts, activity=activity, device_id="web")
@@ -1019,9 +1019,9 @@ async def ui_create(
     tz = cfg.get("timezone") or "UTC"
     activity = config.canonical_activity(activity) or "feeding"
 
-    # Milk and Solid food derive Start from a fixed duration. Sleep accepts an
-    # explicit HH:MM duration. Poopoo and Supplement are independent point
-    # records. Etc accepts explicit Start and End fields.
+    # Milk and Solid food derive Start from a fixed duration. Sleep starts an
+    # open session; completed HH:MM submissions remain compatible. Poopoo and
+    # Supplement are point records. Etc accepts explicit Start and End fields.
     if end_time.strip():
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
@@ -1042,14 +1042,22 @@ async def ui_create(
             start_epoch = end_epoch
             stop_epoch = end_epoch
     else:
-        start_epoch = combine_date_time(date, start_time, tz)
+        try:
+            start_epoch = combine_date_time(date, start_time, tz)
+        except ValueError:
+            raise HTTPException(400, "valid date and start_time required")
         if start_epoch is None:
-            raise HTTPException(400, "date and end_time required")
-        if activity not in config.timed_activities(cfg):
+            raise HTTPException(400, "date and start_time required")
+        if activity != "sleep" and activity not in config.timed_activities(cfg):
             stop_epoch = start_epoch  # instant event: a single closed timestamp
         else:
             stop_epoch = combine_date_time(date, stop_time, tz) if stop_time.strip() else None
             stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch, activity)
+    if activity == "sleep" and stop_epoch is None:
+        if start_epoch > int(time.time()):
+            raise HTTPException(400, "sleep start time cannot be in the future")
+        if db.get_active("sleep"):
+            return RedirectResponse("/", status_code=303)
     if activity == "poopoo":
         notes = _poopoo_notes(
             cfg,
@@ -1093,7 +1101,22 @@ async def ui_bulk_save(request: Request):
             form.get(f"activity_{rid}") or "feeding"
         ) or "feeding"
         existing = existing_by_id.get(rid)
-        if activity in {"feeding", "solid_food"}:
+        if existing is None:
+            continue
+        end_time_activity = activity in {"feeding", "solid_food", "poopoo", "supplement"}
+        original_date = filter_localdate_input(
+            (existing["stop_epoch"] or existing["start_epoch"])
+            if end_time_activity else existing["start_epoch"], tz,
+        )
+        times_unchanged = (
+            activity == existing["activity"]
+            and date == original_date
+            and stop_time == filter_localtime_only(existing["stop_epoch"], tz, True)
+            and (end_time_activity or start_time == filter_localtime_only(existing["start_epoch"], tz, True))
+        )
+        if times_unchanged:
+            start_epoch, stop_epoch = existing["start_epoch"], existing["stop_epoch"]
+        elif activity in {"feeding", "solid_food"}:
             end_epoch = combine_date_time(date, stop_time or start_time, tz)
             if end_epoch is None:
                 continue
@@ -1116,8 +1139,10 @@ async def ui_bulk_save(request: Request):
             else:
                 stop_epoch = combine_date_time(date, stop_time, tz) if stop_time else None
                 stop_epoch = _normalize_stop_epoch(start_epoch, stop_epoch, activity)
-        if start_epoch is None or (existing is None):
+        if start_epoch is None:
             continue
+        if activity == "sleep" and stop_epoch is None and start_epoch > int(time.time()):
+            raise HTTPException(400, "sleep start time cannot be in the future")
         raw_amount = form.get(f"amount_{rid}")
         if raw_amount is None:
             legacy_key = "volume_g" if activity == "solid_food" else "volume_ml"

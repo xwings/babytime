@@ -12,14 +12,15 @@ def _enforce_auto_stop(cfg: dict) -> None:
         minutes = 15
     if minutes <= 0:
         return
-    active = db.get_active()
+    # Sleep runs until manually stopped and must not hide another due timer.
+    capped_activities = (config.timed_activities(cfg) | {"feeding"}) - {"sleep"}
+    active = max(
+        (record for activity in capped_activities if (record := db.get_active(activity))),
+        key=lambda record: record["start_epoch"],
+        default=None,
+    )
     if not active:
         return
-    if (
-        active["activity"] != "feeding"
-        and active["activity"] not in config.timed_activities(cfg)
-    ):
-        return  # instant events are never open; nothing to cap
     cap = int(active["start_epoch"]) + minutes * 60
     if int(time.time()) >= cap:
         # A long cap can push the close past midnight; store it day by day.
@@ -29,14 +30,14 @@ def _enforce_auto_stop(cfg: dict) -> None:
             active["activity"],
             cfg.get("timezone") or "UTC",
         )
-        if db.stop_active(stop_epoch=segments[0][1]):
+        if db.stop_active(stop_epoch=segments[0][1], activity=active["activity"]):
             db.clone_segments(active["id"], segments[1:])
             print(f"[scheduler] auto-stopped session {active['id']} at {minutes}min cap")
 
 
 async def scheduler_loop() -> None:
-    """Periodic auto-stop loop: wakes every 60 s and caps any active session
-    that has outrun `auto_stop_minutes`. Cancellable via CancelledError."""
+    """Wake every 60 s and cap the newest eligible non-sleep session that has
+    outrun `auto_stop_minutes`. Cancellable via CancelledError."""
     try:
         while True:
             await asyncio.sleep(60)

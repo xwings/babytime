@@ -57,10 +57,11 @@ and firmware owners before changing state payloads.
 | --- | --- | --- |
 | Gateway setup | `python3 -m venv .venv`, then `.venv/bin/pip install -r requirements.txt` in `gateway/` | Python 3.12 image baseline; dependencies installed. |
 | Python syntax | `python3 -m compileall -q gateway/app skill/scripts` at root | Exit 0 proves parsing, not behavior. |
+| Gateway record tests | `PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v` at root | Gateway dependencies; disposable SQLite and controlled clock; Sleep and timeline edits. |
 | Firmware build | `make build DEVICE=dnesp32s3b`; `make build DEVICE=esp32p4_7b` at root | PlatformIO, toolchain downloads and local `config.h`; each reports SUCCESS. Override `PIO` if needed. |
 | Runtime / UI / storage | Owner Verification sections below | Disposable state; API/client, browser and hardware checks prove different behavior. |
 
-No committed test suite or CI exists. No lint/type-check command is
+Gateway records have a committed unittest suite; no CI exists. No lint/type-check command is
 configured. Hardware behavior and fresh-clone firmware builds are not
 certified; see owning gaps. Root [Makefile](Makefile) is firmware-only.
 

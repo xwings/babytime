@@ -97,9 +97,10 @@ Agent-facing:
   explicit `stop` wins); the stored Start is recalculated from the configured
   duration. Use `volume_ml` for Milk and `volume_g` for Solid food. Other timed
   activities keep their start/stop bounds; a supplied stop must be within 30
-  minutes of start.
+  minutes of start, or 24 hours for Sleep.
 - `PATCH /api/records/{id}` / `DELETE /api/records/{id}` — edit / remove.
-  Edits that leave a record longer than 30 minutes are rejected.
+  Explicit time edits allow up to 24 hours for Sleep and 30 minutes for
+  other timed spans.
 - `GET /api/day_notes` — `{date: note}` map of all per-day notes.
 - `PUT /api/day_notes/{date}` — `{note: "..."}` upserts one day's note
   (blank note clears it). `date` must be `YYYY-MM-DD`.
@@ -107,22 +108,26 @@ Agent-facing:
 
 UI/admin:
 
-- `GET /` — web UI: records table with inline edit, plus a phone-sized intake
-  dialog opened from the Milk or Solid food button with compact −/amount/+
-  controls using ml for Milk and g for Solid food, and
-  Date and End fields, per-date day-note field, and configuration form. Date
+- `GET /` — web UI: daily timelines with the newest moments at the top.
+  Each entry shows its time, activity icon, amount or duration, and notes;
+  tap it to edit or delete in a popup. Day notes have a separate popup.
+  Exact timestamps are preserved when only notes or amounts change.
+  The Milk and Solid food buttons open a phone-sized intake dialog with
+  compact −/amount/+ controls, ml for Milk or g for Solid food, and Date/End
+  fields. Preferences are available on the Configuration tab. Date
   and End refresh to the current gateway time whenever the dialog opens;
   Start is calculated on save. Milk and Solid food rows are grouped by End
   date and expose Start as read-only.
 - `POST /records`, `POST /records/save`, `POST /records/delete` — form
-  actions. Timed records must stop within 30 minutes of their start.
+  actions. Explicit timed spans allow 30 minutes, or 24 hours for Sleep.
+  Sleep button sessions stay open until manually stopped.
   `POST /records/save` persists both record edits and day notes.
 - `POST /config` — saves the form.
 
 ## Day notes
 
-Each calendar date can carry one free-text note. Edit it inline in the date
-group's header on the web UI and click **Save**, or write it over the JSON API
+Each calendar date can carry one free-text note. Tap **Day note** beside the
+date, edit it in the popup and click **Save changes**, or write it over the JSON API
 (`PUT /api/day_notes/{date}`) — that's the path a remote agent uses to record
 a daily summary.
 
@@ -132,6 +137,10 @@ a daily summary.
 web or ESP32 feeding gets `Start = End - auto_stop_minutes`. The background
 loop also checks once a minute and stops an active session that has run longer
 than that cap (default 15; `0` disables the cap and produces point feedings).
+Sleep is exempt: tap Sleep, adjust Date/Start if needed, and choose Start sleep.
+Tap the running Sleep card to stop. When stopped, an overnight sleep is split
+into daily records ending at 23:59:59 and resuming at 00:00:00 in the configured
+timezone.
 
 ## Config keys
 
@@ -139,7 +148,7 @@ than that cap (default 15; `0` disables the cap and produces point feedings).
 | --- | --- | --- |
 | `activity_types` | `feeding,solid_food,sleep,poopoo,supplement,etc` | comma-separated; Milk (`feeding`) and Solid food are always first. Legacy `subpliment` is normalized to `supplement` |
 | `timed_activities` | `sleep,etc` | comma-separated session types. Etc uses a dedicated Notes + Start/End dialog rather than a running activity-bar timer. Milk, Solid food, Poopoo, and Supplement use their own dialogs |
-| `auto_stop_minutes` | `15` | feeding duration (`Start = End - minutes`) and auto-stop cap for active sessions; `0` produces point feedings and disables auto-stop |
+| `auto_stop_minutes` | `15` | feeding duration (`Start = End - minutes`) and auto-stop cap for active sessions except Sleep; `0` produces point feedings and disables auto-stop |
 | `feeding_alert_minutes` | `120` | after the last completed feeding is this many minutes old, `/api/state` reports `feeding_alert.due=true`, the web Milk card shows an amber reminder, and the device display blinks a red background. `0` disables |
 | `default_volume_ml` | `` | pre-fills the web milk dialog and is attached to a feeding logged from an ESP32 button |
 | `default_language` | `en` | UI language (`en`/`zh`) for browsers without a `lang` cookie; the per-browser switch still overrides it |
@@ -148,6 +157,6 @@ than that cap (default 15; `0` disables the cap and produces point feedings).
 | `poopoo_texture_options` | `soft,hard` | configurable texture choices shown in the Poopoo dialog |
 | `supplement_options` | `AD,D3` | configurable choices shown in the Supplement dialog and stored in record Notes |
 | `timezone` | `UTC` | IANA name, e.g. `Asia/Shanghai` |
-| `ui_show_count` | `10` | dates per page on the web UI (records grouped by date; rows from the last 24h are pre-checked) |
+| `ui_show_count` | `10` | dates per page on the web UI; each day starts expanded with entries in descending time order |
 | `trusted_networks` | `10.0.0.0/8` | comma-separated CIDR blocks whose clients skip auth when `GATEWAY_TOKEN` is set; everyone else must present the token. Unparseable entries are ignored |
 | `trusted_proxies` | `` | comma-separated CIDR blocks of reverse proxies whose `X-Forwarded-For` is believed; empty means the header is ignored. Set this to your proxy's source IP so the real client IP drives the trust/auth decision |

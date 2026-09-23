@@ -59,8 +59,13 @@ retain legacy field compatibility explicitly rather than assuming parity.
   from `auto_stop_minutes`. Poopoo/Supplement record writes use equal bounds.
   Intake columns are type-specific (`volume_ml` versus `volume_g`).
 - Normalized explicit spans cap at 30 minutes, except sleep at 24 hours;
-  earlier stop is interpreted as next day. Browser sleep accepts positive
-  `HH:MM` duration up to 23:59; Etc accepts Start/End. Fixed-duration intake
+  earlier stop is interpreted as next day. Browser sleep starts with Date
+  and adjustable Start, stays open until `/ui/activity` stops it, and ignores
+  the saved timed flag. `/records` rejects malformed/future open starts and
+  redirects repeated open starts without creating duplicates. `/records/save`
+  also rejects future Start edits while Sleep is open. Legacy completed
+  sleep submissions still accept positive `HH:MM` duration up to 23:59;
+  Etc accepts Start/End. Fixed-duration intake
   and device start/stop paths do not all apply the same duration guard.
 - Closed spans pass through `midnight_segments`: sleep becomes separate
   rows ending at 23:59:59 and starting at 00:00; other types clamp to the
@@ -76,6 +81,12 @@ retain legacy field compatibility explicitly rather than assuming parity.
   `_record_date_epoch` groups completed Milk/Food/Sleep/Poopoo/Supplement by End, others
   by Start. `ui_home` paginates dates, not records. Missing IDs return 404;
   malformed date/string timestamps are rejected. Empty day note deletes it.
+- `ui_home` sorts dates descending and each timeline by displayed time:
+  intake/point End, session Start, with ID as tie-breaker. JSON list ordering
+  is unchanged. Popup editors reuse `/records/save` and `/records/delete`
+  with one `record_id`; legacy bulk forms remain accepted. Exact unchanged
+  Date/Start/End/activity preserve original epochs on notes/amount edits,
+  including midnight seconds and intake bounds after duration config changes.
 - CLI uses global `--host`/`--token` flags before subcommands, Bearer auth,
   15-second request timeout and nonzero exits on HTTP/network errors.
   `update` forwards only supplied flags. `list --activity` filters after
@@ -102,7 +113,12 @@ snapshot; no frontend dependencies or new runtime packages are required.
 
 ## Verification
 
-Run root setup/syntax commands. Local runtime from `gateway/`, using
+Run root setup/syntax commands, then from root run
+`PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v`.
+`gateway/tests/test_sleep.py` covers adjusted/duplicate starts, invalid starts,
+manual stops, local-midnight splits, legacy duration posts and cap exclusions
+using disposable SQLite and a controlled clock. It also covers timeline ordering
+and exact timestamp preservation for popup note/amount edits. Local runtime from `gateway/`, using
 throwaway state and a loopback listener:
 
 ```sh
@@ -128,10 +144,11 @@ an HTTP smoke alone do not establish security or all validation paths.
 
 ## Known Gaps
 
-No committed API tests. Input amount ranges and several form failures lack
+Committed handler tests cover Sleep and timeline editing; other API behavior relies on
+disposable checks. Input amount ranges and several form failures lack
 consistent client validation; record lists/day grouping read all rows in
-some paths. Re-splitting a sleep does not remove previous siblings; minute
-precision edits can shave 59 seconds from a midnight-clamped row. Form
+some paths. Re-splitting a sleep does not remove previous siblings; legacy
+minute-only form edits can shave 59 seconds from a midnight-clamped row. Form
 writes have no CSRF token and auth is gateway-wide, with no roles/rate limit.
 The proxy trust configuration and credential-bearing shortcut URL require
 careful review when changed. These are existing limitations, not new scope.

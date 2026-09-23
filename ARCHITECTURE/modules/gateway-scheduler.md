@@ -33,15 +33,15 @@ print-based diagnostics, not structured logging.
 
 - Sleep happens before each check. `auto_stop_minutes` parses as integer,
   defaults to 15 on invalid input, and disables enforcement at <=0.
-- `db.get_active()` selects only the newest open record across activities.
-  Legacy feeding is eligible; other activities must occur in
-  `config.timed_activities(cfg)`. An ineligible latest record prevents that
-  iteration from checking older ones.
+- Selects the newest open record among legacy feeding and configured timed
+  activities, excluding Sleep. Sleep stays open until manually stopped and
+  cannot block another activity's cap. Only one eligible record is checked
+  per iteration.
 - A due session closes at `start + minutes*60`, not the tick's current time.
   The write may occur roughly one tick later; stored duration is capped.
-- `midnight_segments` processes the cap before writing: sleep splits and
-  other activities clamp to the first day. `stop_active` closes the newest
-  active row and `clone_segments` writes additional rows, dropping intake
+- `midnight_segments` processes the cap before writing; eligible non-sleep
+  activities clamp to the first day. `stop_active` closes the newest
+  active row of the selected activity and `clone_segments` writes additional rows, dropping intake
   amounts. No notification side effect occurs.
 - Failure prints `[scheduler] error: ...` and keeps the loop alive; a
   successful cap prints its record ID and configured minutes. FastAPI
@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory() as d:
     os.environ['GATEWAY_DB_PATH'] = d + '/db'
     from app import db, scheduler
     db.init()
-    rid = db.create_record(100, activity='sleep')
+    rid = db.create_record(100, activity='feeding')
     cfg = {'auto_stop_minutes': '1', 'timed_activities': 'sleep', 'timezone': 'UTC'}
     with patch.object(scheduler.time, 'time', return_value=159):
         scheduler._enforce_auto_stop(cfg)
@@ -96,8 +96,9 @@ and shutdown; no real-session mutation is needed for this smoke.
 
 ## Known Gaps
 
-No committed scheduler tests. Older active sessions can remain open while a
-newer one is active/ineligible; an all-active scan is a proposal requiring
-multi-activity regression coverage. Stop and clone calls are separate
+`gateway/tests/test_sleep.py` verifies sleep cap exclusion and concurrent
+feeding capping (run via the API owner's unittest command). Older eligible
+sessions can remain open while a newer eligible one is active; checking all
+due records in each tick remains outside this contract. Stop and clone calls are separate
 transactions and lookup/write is not atomic. The 60-second cadence delays
 visible closure; changing that is a behavior decision, not a docs fix.

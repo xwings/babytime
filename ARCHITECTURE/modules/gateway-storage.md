@@ -58,7 +58,7 @@ Use config parsing helpers instead of assuming user-edited values are valid.
   Supplement and includes configured `etc`; UI may still use a dialog.
 - Poopoo amount/color/texture and Supplement choices are ordered, deduplicated
   comma/newline lists. Invalid CIDRs are ignored. `auto_stop_minutes` is both
-  intake duration and session cap; `feeding_alert_minutes=0` disables alerts.
+  intake duration and non-sleep session cap; `feeding_alert_minutes=0` disables alerts.
 
 ## Dependencies and Boundaries
 

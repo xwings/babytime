@@ -38,12 +38,13 @@
       <span class="activity-name">{{ al(a) }}</span>
       {% if s %}
       <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
+      {% if activity_key == 'sleep' %}<span class="activity-hint">{{ t('activity_stop_btn') }}</span>{% endif %}
       {% elif activity_key == 'feeding' and last_fed %}
       <span class="activity-alert">{{ t('feeding_alert_due') }}</span>
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
       {% else %}
-      <span class="activity-hint">{{ t('activity_log_btn') if activity_key in ['feeding', 'solid_food', 'sleep', 'poopoo', 'supplement', 'etc'] or a not in timed else t('activity_start_btn') }}</span>
+      <span class="activity-hint">{{ t('activity_start_btn') if activity_key == 'sleep' or (a in timed and not always_popup) else t('activity_log_btn') }}</span>
       {% endif %}
     </button>
   </form>
@@ -238,21 +239,6 @@
                   aria-label="{{ t('amount_increase') }}">+</button>
         </span>
       </label>
-      <label class="duration-field is-hidden" data-sleep-dialog-field>
-        <span>{{ t('duration_hhmm') }}</span>
-        <span class="duration-stepper">
-          <button type="button" data-duration-step="-15"
-                  aria-label="{{ t('duration_decrease') }}">−</button>
-          <span class="duration-value">
-            <input type="text" name="duration" inputmode="numeric" autocomplete="off"
-                   class="duration-input" placeholder="HH:MM"
-                   pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]"
-                   data-duration-invalid="{{ t('duration_hhmm_invalid') }}" disabled>
-          </span>
-          <button type="button" data-duration-step="15"
-                  aria-label="{{ t('duration_increase') }}">+</button>
-        </span>
-      </label>
       <div class="poopoo-fields is-hidden" data-poopoo-dialog-field>
         {% for group, label in [
           ('amount', t('poopoo_amount')),
@@ -304,14 +290,15 @@
         <label class="is-hidden" data-etc-start-time-field>{{ t('col_start') }}
           <input type="time" lang="en-US" name="start_time" value="{{ now_time }}" required disabled>
         </label>
-        <label>{{ t('col_end_time') }}
+        <label data-record-end-time-field>{{ t('col_end_time') }}
           <input type="time" lang="en-US" name="end_time" value="{{ now_time }}" required>
         </label>
       </div>
     </div>
     <div class="record-dialog-actions">
       <button type="button" class="ghost" data-close-record-dialog>{{ t('add_cancel') }}</button>
-      <button type="submit">{{ t('add_btn') }}</button>
+      <button type="submit" data-add-label="{{ t('add_btn') }}"
+              data-sleep-start-label="{{ t('sleep_start_btn') }}">{{ t('add_btn') }}</button>
     </div>
   </form>
 </dialog>
@@ -322,17 +309,18 @@
     const form = dialog?.querySelector('.record-dialog-form');
     const activity = form?.querySelector('input[name="activity"]');
     const intakeField = form?.querySelector('[data-intake-dialog-field]');
-    const sleepField = form?.querySelector('[data-sleep-dialog-field]');
     const poopooField = form?.querySelector('[data-poopoo-dialog-field]');
     const supplementField = form?.querySelector('[data-supplement-dialog-field]');
     const etcField = form?.querySelector('[data-etc-dialog-field]');
     const etcStartField = form?.querySelector('[data-etc-start-time-field]');
     const etcStart = etcStartField?.querySelector('input[name="start_time"]');
+    const endTimeField = form?.querySelector('[data-record-end-time-field]');
+    const endTime = endTimeField?.querySelector('input[name="end_time"]');
+    const submit = form?.querySelector('button[type="submit"]');
     const timeFields = form?.querySelector('[data-record-time-fields]');
     const amount = form?.querySelector('input[name="amount"]');
     const amountLabel = intakeField?.querySelector('[data-intake-amount-label]');
     const amountUnit = intakeField?.querySelector('[data-intake-amount-unit]');
-    const duration = form?.querySelector('input[name="duration"]');
     const poopooInputs = poopooField?.querySelectorAll('input, textarea') || [];
     const supplementInputs = supplementField?.querySelectorAll('input') || [];
     const etcInputs = etcField?.querySelectorAll('input, textarea') || [];
@@ -368,12 +356,17 @@
       const isEtc = mode === 'etc';
       if (activity) activity.value = mode;
       intakeField?.classList.toggle('is-hidden', !isIntake);
-      sleepField?.classList.toggle('is-hidden', !isSleep);
       poopooField?.classList.toggle('is-hidden', !isPoopoo);
       supplementField?.classList.toggle('is-hidden', !isSupplement);
       etcField?.classList.toggle('is-hidden', !isEtc);
-      etcStartField?.classList.toggle('is-hidden', !isEtc);
+      etcStartField?.classList.toggle('is-hidden', !(isEtc || isSleep));
+      endTimeField?.classList.toggle('is-hidden', isSleep);
       timeFields?.classList.toggle('has-start-time', isEtc);
+      if (submit) submit.textContent = isSleep ? submit.dataset.sleepStartLabel : submit.dataset.addLabel;
+      if (endTime) {
+        endTime.disabled = isSleep;
+        endTime.required = !isSleep;
+      }
       if (amount) {
         amount.disabled = !isIntake;
         amount.required = isIntake;
@@ -389,17 +382,12 @@
           ? intakeField.dataset.gUnit
           : intakeField.dataset.mlUnit;
       }
-      if (duration) {
-        duration.disabled = !isSleep;
-        duration.required = isSleep;
-        duration.setCustomValidity('');
-      }
       poopooInputs.forEach(input => { input.disabled = !isPoopoo; });
       supplementInputs.forEach(input => { input.disabled = !isSupplement; });
       etcInputs.forEach(input => { input.disabled = !isEtc; });
       if (etcStart) {
-        etcStart.disabled = !isEtc;
-        etcStart.required = isEtc;
+        etcStart.disabled = !(isEtc || isSleep);
+        etcStart.required = isEtc || isSleep;
       }
     }
 
@@ -413,7 +401,7 @@
       const firstInput = mode === 'feeding' || mode === 'solid_food'
         ? amount
         : mode === 'sleep'
-          ? duration
+          ? etcStart
           : mode === 'poopoo'
             ? poopooField?.querySelector('input, textarea')
             : mode === 'supplement'
@@ -427,29 +415,6 @@
       if (!opener) return;
       event.preventDefault();
       openDialog(opener.dataset.openRecordDialog || 'feeding');
-    });
-    form?.addEventListener('submit', event => {
-      if (activity?.value !== 'sleep' || !duration) return;
-      const valid = /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(duration.value) &&
-        duration.value !== '00:00';
-      duration.setCustomValidity(valid ? '' : (duration.dataset.durationInvalid || 'Use HH:MM'));
-      if (!valid) {
-        event.preventDefault();
-        duration.reportValidity();
-      }
-    });
-    duration?.addEventListener('input', () => duration.setCustomValidity(''));
-    form?.querySelectorAll('[data-duration-step]').forEach(button => {
-      button.addEventListener('click', () => {
-        const match = duration.value.match(/^([0-9]{2}):([0-5][0-9])$/);
-        const current = match ? parseInt(match[1], 10) * 60 + parseInt(match[2], 10) : 0;
-        const step = parseInt(button.dataset.durationStep || '0', 10) || 0;
-        const stepped = current + step;
-        const next = Math.min(23 * 60 + 59, stepped > 0 ? stepped : (current || 15));
-        duration.value = twoDigits(Math.floor(next / 60)) + ':' + twoDigits(next % 60);
-        duration.setCustomValidity('');
-        duration.focus();
-      });
     });
     form?.querySelectorAll('[data-amount-step]').forEach(button => {
       button.addEventListener('click', () => {
@@ -468,242 +433,263 @@
   })();
 </script>
 
-<section class="records">
-  <form method="post" id="records-form">
-    <div class="records-head">
-      <div>
-        <p class="eyebrow">{{ t('records_eyebrow') }}</p>
-        <h2>{{ t('journal_heading') }}</h2>
-        <p class="section-caption">{{ t('records_heading', n=total_records, d=total_dates, plural='' if total_dates == 1 else 's') }}</p>
-      </div>
-      <div class="bulk-actions">
-        <button type="button" id="check-all-btn" class="ghost">{{ t('records_select_all') }}</button>
-        <button type="submit" formaction="/records/save">{{ t('records_save') }}</button>
-        <button type="submit" formaction="/records/delete" class="danger"
-                onclick="return confirm('{{ t('records_delete_confirm') }}')">{{ t('records_delete') }}</button>
-      </div>
+<section class="records" aria-labelledby="journal-heading">
+  <div class="records-head">
+    <div>
+      <p class="eyebrow">{{ t('records_eyebrow') }}</p>
+      <h2 id="journal-heading">{{ t('journal_heading') }}</h2>
+      <p class="section-caption">{{ t('timeline_hint') }}</p>
     </div>
+  </div>
 
-    {% for g in groups %}
-    <div class="date-group{% if g.date != now_date %} collapsed{% endif %}" data-date="{{ g.date }}">
-      <div class="date-header">
-        <button type="button" class="fold-toggle" aria-label="{{ t('records_toggle_aria') }} {{ g.date }}" aria-expanded="{{ 'true' if g.date == now_date else 'false' }}">
-          <span class="chevron">▾</span>
-        </button>
-        <span class="date-label">{{ t('today') if g.date == now_date else g.date }}{% if g.date == now_date %}<span class="date-subtitle">{{ g.date }}</span>{% endif %}</span>
-        <div class="day-summary">
-          <span class="summary-chip milk" title="{{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }}"><span class="sr-only">{{ al('feeding') }}: </span>{{ icon('feeding') }}{{ g.total_ml }} {{ t('col_ml') }}<span class="sr-only"> · {{ t('date_count', n=g.milk_count, plural='' if g.milk_count == 1 else 's') }}</span></span>
-          <span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }}"><span class="sr-only">{{ al('solid_food') }}: </span>{{ icon('solid_food') }}{{ g.total_g }} {{ t('col_g') }}<span class="sr-only"> · {{ t('date_count', n=g.food_count, plural='' if g.food_count == 1 else 's') }}</span></span>
-          <span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', hours=g.sleep_hours, minutes=g.sleep_minutes) }}"><span class="sr-only">{{ al('sleep') }}: </span>{{ icon('sleep') }}{{ g.sleep_hours }}{{ t('unit_hour') }} {{ g.sleep_minutes }}{{ t('unit_minute') }}<span class="sr-only"> · {{ t('date_count', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's') }}</span></span>
-          <span class="summary-chip diaper" title="{{ t('date_poopoo_summary', n=g.poopoo, plural='' if g.poopoo == 1 else 's') }}">{{ icon('poopoo') }}{{ t('date_poopoo_count', n=g.poopoo) }}</span>
-        </div>
-      </div>
-      <div class="day-note-block">
-        <label class="day-note-label" for="day_note_{{ g.date }}">{{ t('day_note_today') if g.date == now_date else t('col_day_note') }}</label>
-        <textarea class="day-note" id="day_note_{{ g.date }}" name="day_note_{{ g.date }}"
-                  rows="2" placeholder="{{ t('day_note_placeholder') }}">{{ g.note }}</textarea>
-      </div>
-      <table class="records-table">
-        <thead>
-          <tr>
-            <th><span class="sr-only">{{ t('select_record') }}</span></th>
-            <th>{{ t('col_start') }}</th>
-            <th>{{ t('col_end_time') }}</th>
-            <th>{{ t('col_duration') }}</th>
-            <th>{{ t('col_amount') }}</th>
-            <th>{{ t('col_activity') }}</th>
-            <th>{{ t('col_notes') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in g.records %}
-          {% set is_point_record = r.stop_epoch is not none and r.stop_epoch == r.start_epoch %}
-          <tr>
-            <td>
-              <input type="checkbox" name="record_id" value="{{ r.id }}" class="row-check" aria-label="{{ t('select_record') }} {{ r.id }}">
-              <input type="hidden" name="date_{{ r.id }}"
-                     value="{{ ((r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'solid_food', 'poopoo', 'supplement'] else r.start_epoch) | localdate_input(tz) }}">
-            </td>
-            <td data-label="{{ t('col_start') }}">
-              {% if is_point_record or r.activity in ['poopoo', 'supplement'] %}
-              <span class="instant-dash">—</span>
-              {% else %}
-              <input type="time" lang="en-US" name="start_time_{{ r.id }}" aria-label="{{ t('col_start') }}"
-                     value="{{ r.start_epoch | localtime_only(tz) }}" required
-                     {% if r.activity in ['feeding', 'solid_food'] %}readonly{% endif %}>
+  {% for g in groups %}
+  <section class="date-group" data-date="{{ g.date }}" aria-labelledby="day-{{ g.date }}">
+    <div class="date-header">
+      <button type="button" class="fold-toggle" aria-expanded="true" aria-controls="timeline-{{ g.date }}">
+        <span class="date-label" id="day-{{ g.date }}">{{ t('today') if g.date == now_date else g.date }}{% if g.date == now_date %}<span class="date-subtitle">{{ g.date }}</span>{% endif %}</span>
+        <span class="chevron" aria-hidden="true">▾</span>
+      </button>
+      <button type="button" class="timeline-day-note" data-day-note='{{ {"date": g.date, "note": g.note} | tojson }}'
+              aria-haspopup="dialog" aria-label="{{ t('edit_day_note') }} · {{ g.date }}">{{ icon('journal') }}{{ t('col_day_note') }}</button>
+    </div>
+    <div class="day-summary">
+      {% if g.milk_count %}<span class="summary-chip milk" title="{{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }}">{{ icon('feeding') }}{{ al('feeding') }} {{ g.milk_count }}{{ t('unit_times') }} · {{ g.total_ml }} {{ t('col_ml') }}</span>{% endif %}
+      {% if g.food_count %}<span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }}">{{ icon('solid_food') }}{{ al('solid_food') }} {{ g.food_count }}{{ t('unit_times') }} · {{ g.total_g }} {{ t('col_g') }}</span>{% endif %}
+      {% if g.sleep_count %}<span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', hours=g.sleep_hours | int, minutes=g.sleep_minutes | int) }}">{{ icon('sleep') }}{{ al('sleep') }} {{ g.sleep_count }}{{ t('unit_times') }} · {{ g.sleep_hours | int }}{{ t('unit_hour') }} {{ g.sleep_minutes | int }}{{ t('unit_minute') }}</span>{% endif %}
+      {% if g.poopoo %}<span class="summary-chip diaper">{{ icon('poopoo') }}{{ t('date_poopoo_count', n=g.poopoo) }}</span>{% endif %}
+    </div>
+    {% if g.note %}<p class="day-note-preview">{{ g.note }}</p>{% endif %}
+    <ol class="day-timeline" id="timeline-{{ g.date }}">
+      {% for r in g.records %}
+      {% set intake = r.activity in ['feeding', 'solid_food'] %}
+      {% set point = r.activity in ['poopoo', 'supplement'] or (r.stop_epoch is not none and r.stop_epoch == r.start_epoch) %}
+      {% set amount = r.volume_ml if r.activity == 'feeding' else r.volume_g %}
+      {% set elapsed = ((r.stop_epoch - r.start_epoch) // 60) if r.stop_epoch is not none else 0 %}
+      {% set edit_date = (r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'solid_food', 'poopoo', 'supplement'] else r.start_epoch %}
+      <li class="timeline-item" data-activity="{{ r.activity }}">
+        <button type="button" class="timeline-entry" aria-haspopup="dialog"
+                data-record='{{ {"id": r.id, "activity": r.activity, "date": edit_date | localdate_input(tz), "start_time": r.start_epoch | localtime_only(tz, true), "stop_time": r.stop_epoch | localtime_only(tz, true), "amount": amount if intake and amount is not none else "", "notes": r.notes or ""} | tojson }}'>
+          <time class="timeline-time">{{ r.timeline_epoch | localtime_only(tz) }}</time>
+          <span class="timeline-marker" aria-hidden="true"></span>
+          <span class="timeline-content">
+            <span class="timeline-line">
+              <span class="timeline-activity">{{ icon(r.activity) }}<span>{{ al(r.activity) }}</span></span>
+              {% if intake and amount is not none %}
+              <span class="timeline-value">{{ amount }} <span>{{ t('col_g') if r.activity == 'solid_food' else t('col_ml') }}</span></span>
+              {% elif r.stop_epoch is none %}
+              <span class="timeline-running">{{ t('record_running') }}</span>
+              {% elif not point and not intake %}
+              <span class="timeline-value">{% if elapsed >= 60 %}{{ elapsed // 60 }}{{ t('unit_hour') }} {% endif %}{{ elapsed % 60 }}{{ t('unit_minute') }}</span>
               {% endif %}
-            </td>
-            <td data-label="{{ t('col_end_time') }}">
-              <input type="time" lang="en-US" name="stop_time_{{ r.id }}" aria-label="{{ t('col_end_time') }}"
-                     value="{{ ((r.stop_epoch or r.start_epoch) | localtime_only(tz)) if (r.stop_epoch or r.activity not in timed) else '' }}">
-            </td>
-            <td data-label="{{ t('col_duration') }}">{{ (r.start_epoch | duration(r.stop_epoch) or '—') if (r.activity in timed or r.activity in ['feeding', 'solid_food', 'sleep']) and not is_point_record else '—' }}</td>
-            <td data-label="{{ t('col_amount') }}">
-              {% set has_amount = r.activity in ['feeding', 'solid_food'] %}
-              <span class="record-amount-field">
-                <input type="number" name="amount_{{ r.id }}" aria-label="{{ t('col_amount') }}" min="0" step="1"
-                       class="ml-input amount-input"
-                       value="{{ r.volume_ml if r.activity == 'feeding' and r.volume_ml is not none else (r.volume_g if r.activity == 'solid_food' and r.volume_g is not none else '') }}"
-                       {% if not has_amount %}disabled{% endif %}>
-                <span class="record-amount-unit{% if not has_amount %} is-hidden{% endif %}"
-                      data-ml-unit="{{ t('col_ml') }}"
-                      data-g-unit="{{ t('col_g') }}">{{ t('col_g') if r.activity == 'solid_food' else t('col_ml') }}</span>
-              </span>
-            </td>
-            <td data-label="{{ t('col_activity') }}">
-              <select name="activity_{{ r.id }}" aria-label="{{ t('col_activity') }}" class="activity-select">
-                {% for a in activities %}
-                <option value="{{ a }}" data-timed="{{ '1' if a in timed else '0' }}" {% if a == r.activity %}selected{% endif %}>{{ al(a) }}</option>
-                {% endfor %}
-                {% if r.activity and r.activity not in activities %}
-                <option value="{{ r.activity }}" selected>{{ al(r.activity) }}</option>
-                {% endif %}
-              </select>
-            </td>
-            <td data-label="{{ t('col_notes') }}">
-              <input type="text" name="notes_{{ r.id }}" aria-label="{{ t('col_notes') }}" class="notes-input"
-                     value="{{ r.notes | default('') }}"
-                     placeholder="{{ t('col_notes') }}">
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="empty">
-      <span class="empty-icon">{{ icon('journal') }}</span>
-      <h3>{{ t('no_records') }}</h3>
-      <p>{{ t('empty_hint') }}</p>
-      <button type="button" data-open-record-dialog="feeding">{{ icon('plus') }}{{ t('first_record') }}</button>
-    </div>
-    {% endfor %}
-  </form>
+            </span>
+            {% if not intake and not point %}
+            <span class="timeline-detail">{{ r.start_epoch | localtime_only(tz) }} – {{ (r.stop_epoch | localtime_only(tz)) if r.stop_epoch is not none else t('record_now') }}</span>
+            {% endif %}
+            {% if r.notes %}<span class="timeline-notes">{{ r.notes }}</span>{% endif %}
+          </span>
+          <span class="timeline-open" aria-hidden="true">›</span>
+        </button>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% else %}
+  <div class="empty">
+    <span class="empty-icon">{{ icon('journal') }}</span>
+    <h3>{{ t('no_records') }}</h3>
+    <p>{{ t('empty_hint') }}</p>
+    <button type="button" data-open-record-dialog="feeding">{{ icon('plus') }}{{ t('first_record') }}</button>
+  </div>
+  {% endfor %}
 
   {% if total_pages > 1 %}
-  <nav class="pagination">
-    {% if page > 1 %}
-      <a href="?page={{ page - 1 }}">{{ t('pagination_prev') }}</a>
-    {% else %}
-      <span class="disabled">{{ t('pagination_prev') }}</span>
-    {% endif %}
+  <nav class="pagination" aria-label="{{ t('tab_records') }}">
+    {% if page > 1 %}<a href="?page={{ page - 1 }}">{{ t('pagination_prev') }}</a>{% else %}<span class="disabled">{{ t('pagination_prev') }}</span>{% endif %}
     <span>{{ t('pagination_page', page=page, total=total_pages) }}</span>
-    {% if page < total_pages %}
-      <a href="?page={{ page + 1 }}">{{ t('pagination_next') }}</a>
-    {% else %}
-      <span class="disabled">{{ t('pagination_next') }}</span>
-    {% endif %}
+    {% if page < total_pages %}<a href="?page={{ page + 1 }}">{{ t('pagination_next') }}</a>{% else %}<span class="disabled">{{ t('pagination_next') }}</span>{% endif %}
   </nav>
   {% endif %}
 </section>
 
+<dialog id="edit-record-dialog" class="record-dialog" aria-labelledby="edit-record-title">
+  <form method="post" action="/records/save" class="record-dialog-form" id="edit-record-form">
+    <div class="record-dialog-head">
+      <h2 id="edit-record-title">{{ t('edit_record') }}</h2>
+      <button type="button" class="dialog-close" data-close-editor aria-label="{{ t('add_cancel') }}">×</button>
+    </div>
+    <div class="record-dialog-body">
+      <input type="hidden" name="record_id">
+      <label>{{ t('col_activity') }}
+        <select data-edit-field="activity">
+          {% for a in activities %}<option value="{{ a }}" data-timed="{{ '1' if a in timed else '0' }}">{{ al(a) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>{{ t('col_date') }}<input type="date" data-edit-field="date" required></label>
+      <div class="record-time-fields">
+        <label data-edit-start>{{ t('col_start') }}<input type="time" step="1" data-edit-field="start_time"></label>
+        <label>{{ t('col_end_time') }}<input type="time" step="1" data-edit-field="stop_time"></label>
+      </div>
+      <p class="editor-hint is-hidden" data-open-record-hint>{{ t('record_open_hint') }}</p>
+      <label data-edit-amount><span data-edit-amount-label>{{ t('col_amount') }}</span>
+        <input type="number" min="0" step="1" inputmode="numeric" data-edit-field="amount">
+      </label>
+      <label>{{ t('col_notes') }}<textarea rows="3" data-edit-field="notes" placeholder="{{ t('poopoo_extra_notes_placeholder') }}"></textarea></label>
+      <p class="editor-error is-hidden" role="alert" data-editor-error></p>
+    </div>
+    <div class="record-dialog-actions edit-record-actions">
+      <button type="submit">{{ t('records_save') }}</button>
+      <button type="button" class="ghost" data-close-editor>{{ t('add_cancel') }}</button>
+      <button type="submit" class="danger" formaction="/records/delete" formnovalidate data-delete-record="1">{{ t('records_delete') }}</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="day-note-dialog" class="record-dialog" aria-labelledby="day-note-title">
+  <form method="post" action="/records/save" class="record-dialog-form" id="day-note-form">
+    <div class="record-dialog-head">
+      <h2 id="day-note-title">{{ t('col_day_note') }}</h2>
+      <button type="button" class="dialog-close" data-close-editor aria-label="{{ t('add_cancel') }}">×</button>
+    </div>
+    <div class="record-dialog-body">
+      <label><span data-day-note-date></span><textarea rows="5" data-day-note-input placeholder="{{ t('day_note_placeholder') }}"></textarea></label>
+      <p class="editor-error is-hidden" role="alert" data-editor-error></p>
+    </div>
+    <div class="record-dialog-actions">
+      <button type="button" class="ghost" data-close-editor>{{ t('add_cancel') }}</button>
+      <button type="submit">{{ t('records_save') }}</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
   (function () {
-    const MAX_DURATION_MINUTES = {{ max_record_duration_minutes | tojson }};
-    const DURATION_INVALID = {{ t('record_duration_invalid', minutes=max_record_duration_minutes) | tojson }};
+    const dialog = document.getElementById('edit-record-dialog');
+    const form = document.getElementById('edit-record-form');
+    const fields = Object.fromEntries(Array.from(form.querySelectorAll('[data-edit-field]'), el => [el.dataset.editField, el]));
+    const dayDialog = document.getElementById('day-note-dialog');
+    const dayForm = document.getElementById('day-note-form');
+    const deleteConfirm = {{ t('record_delete_confirm') | tojson }};
+    const saveError = {{ t('record_save_error') | tojson }};
+    const milkAmount = {{ t('milk_amount') | tojson }} + ' ({{ t("col_ml") }})';
+    const foodAmount = {{ t('solid_food_amount') | tojson }} + ' ({{ t("col_g") }})';
+    const durationError = {{ t('record_duration_invalid', minutes=max_record_duration_minutes) | tojson }};
 
-    function minutesFromTime(value) {
-      const parts = String(value || '').split(':');
-      if (parts.length < 2) return null;
-      const hours = parseInt(parts[0], 10);
-      const minutes = parseInt(parts[1], 10);
-      if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
-      return hours * 60 + minutes;
+    function syncFields() {
+      const activity = fields.activity.value;
+      const intake = activity === 'feeding' || activity === 'solid_food';
+      const timed = ['sleep', 'etc'].includes(activity) || fields.activity.selectedOptions[0]?.dataset.timed === '1';
+      const point = !intake && !timed;
+      const startLabel = form.querySelector('[data-edit-start]');
+      startLabel.classList.toggle('is-hidden', point);
+      fields.start_time.disabled = point;
+      fields.start_time.required = timed;
+      fields.start_time.readOnly = intake;
+      fields.stop_time.required = intake || point;
+      form.querySelector('[data-edit-amount]').classList.toggle('is-hidden', !intake);
+      fields.amount.disabled = !intake;
+      form.querySelector('[data-edit-amount-label]').textContent = activity === 'solid_food' ? foodAmount : milkAmount;
+      form.querySelector('[data-open-record-hint]').classList.toggle('is-hidden', !timed);
+      if (point && !fields.stop_time.value) fields.stop_time.value = fields.start_time.value;
+      fields.stop_time.setCustomValidity('');
     }
 
-    function durationMinutes(startValue, stopValue) {
-      const start = minutesFromTime(startValue);
-      const stop = minutesFromTime(stopValue);
-      if (start === null || stop === null) return null;
-      let duration = stop - start;
-      if (duration < 0) duration += 24 * 60;
-      return duration;
+    function clearError(editorForm) {
+      const error = editorForm.querySelector('[data-editor-error]');
+      error.textContent = '';
+      error.classList.add('is-hidden');
     }
 
-    function clearValidityOnInput(input) {
-      input?.addEventListener('input', () => input.setCustomValidity(''), { once: true });
-    }
+    document.querySelectorAll('.timeline-entry').forEach(button => {
+      button.addEventListener('click', () => {
+        const original = JSON.parse(button.dataset.record);
+        form.reset();
+        clearError(form);
+        form.querySelector('[name="record_id"]').value = original.id;
+        fields.activity.querySelector('[data-legacy-option]')?.remove();
+        if (!Array.from(fields.activity.options).some(option => option.value === original.activity)) {
+          const option = new Option(original.activity, original.activity);
+          option.dataset.legacyOption = '1';
+          option.dataset.timed = original.start_time !== original.stop_time ? '1' : '0';
+          fields.activity.add(option);
+        }
+        Object.entries(fields).forEach(([name, input]) => {
+          input.name = name + '_' + original.id;
+          input.value = original[name];
+        });
+        syncFields();
+        dialog.showModal();
+      });
+    });
+    fields.activity.addEventListener('change', syncFields);
+    form.addEventListener('input', () => fields.stop_time.setCustomValidity(''));
 
-    function validateDuration(startInput, stopInput) {
-      if (!stopInput || !stopInput.value) return true;
-      const duration = durationMinutes(startInput?.value, stopInput.value);
-      if (duration === null || duration <= MAX_DURATION_MINUTES) return true;
-      stopInput.setCustomValidity(DURATION_INVALID);
-      stopInput.reportValidity();
-      clearValidityOnInput(stopInput);
-      return false;
-    }
-
-    document.querySelectorAll('.date-group').forEach(group => {
-      const fold = group.querySelector('.fold-toggle');
-      fold?.addEventListener('click', () => {
-        const collapsed = group.classList.toggle('collapsed');
-        fold.setAttribute('aria-expanded', String(!collapsed));
+    document.querySelectorAll('[data-day-note]').forEach(button => {
+      button.addEventListener('click', () => {
+        const day = JSON.parse(button.dataset.dayNote);
+        const input = dayForm.querySelector('[data-day-note-input]');
+        input.name = 'day_note_' + day.date;
+        input.value = day.note;
+        dayForm.querySelector('[data-day-note-date]').textContent = day.date;
+        clearError(dayForm);
+        dayDialog.showModal();
+        input.focus();
       });
     });
 
-    // Milk owns ml, Solid food owns g, and both have a derived read-only Start.
-    document.querySelectorAll('.activity-select').forEach(sel => {
-      const row = sel.closest('tr');
-      const amount = row?.querySelector('.amount-input');
-      const unit = row?.querySelector('.record-amount-unit');
-      const start = row?.querySelector('input[name^="start_time_"]');
-      if (!amount) return;
-      function sync() {
-        const milk = sel.value === 'feeding';
-        const solidFood = sel.value === 'solid_food';
-        const hasAmount = milk || solidFood;
-        amount.disabled = !hasAmount;
-        if (start) start.readOnly = hasAmount;
-        if (unit) {
-          unit.textContent = solidFood ? unit.dataset.gUnit : unit.dataset.mlUnit;
-          unit.classList.toggle('is-hidden', !hasAmount);
+    for (const editor of [dialog, dayDialog]) {
+      const editorForm = editor.querySelector('form');
+      editor.querySelectorAll('[data-close-editor]').forEach(button => button.addEventListener('click', () => editor.close()));
+      editor.addEventListener('click', event => { if (event.target === editor && !editorForm.dataset.saving) editor.close(); });
+      editor.addEventListener('cancel', event => { if (editorForm.dataset.saving) event.preventDefault(); });
+      editorForm.addEventListener('submit', async event => {
+        event.preventDefault();
+        if (editorForm.dataset.saving) return;
+        const deleting = event.submitter?.dataset.deleteRecord === '1';
+        if (deleting && !window.confirm(deleteConfirm)) return;
+        if (!deleting && editorForm === form) {
+          const capped = !['feeding', 'solid_food', 'sleep'].includes(fields.activity.value) &&
+            fields.activity.selectedOptions[0]?.dataset.timed === '1';
+          if (capped && fields.start_time.value && fields.stop_time.value) {
+            const seconds = value => value.split(':').reduce((total, part, index) => total + Number(part) * [3600, 60, 1][index], 0);
+            let duration = seconds(fields.stop_time.value) - seconds(fields.start_time.value);
+            if (duration < 0) duration += 86400;
+            if (duration > {{ max_record_duration_minutes }} * 60) {
+              fields.stop_time.setCustomValidity(durationError);
+              fields.stop_time.reportValidity();
+              return;
+            }
+          }
         }
-        if (hasAmount) {
-          amount.placeholder = '';
-        } else {
-          amount.value = '';
-          amount.placeholder = '--';
+        clearError(editorForm);
+        const data = new FormData(editorForm);
+        editorForm.dataset.saving = '1';
+        editorForm.setAttribute('aria-busy', 'true');
+        const buttons = editorForm.querySelectorAll('button');
+        buttons.forEach(button => { button.disabled = true; });
+        try {
+          const response = await fetch(deleting ? '/records/delete' : '/records/save', {
+            method: 'POST', body: data, credentials: 'same-origin'
+          });
+          if (!response.ok) throw new Error('save failed');
+          window.location.reload();
+        } catch (error) {
+          const message = editorForm.querySelector('[data-editor-error]');
+          message.textContent = saveError;
+          message.classList.remove('is-hidden');
+        } finally {
+          delete editorForm.dataset.saving;
+          editorForm.removeAttribute('aria-busy');
+          buttons.forEach(button => { button.disabled = false; });
         }
-      }
-      sel.addEventListener('change', sync);
-      sync();
-    });
-
-    document.getElementById('check-all-btn')?.addEventListener('click', () => {
-      const all = document.querySelectorAll('.row-check');
-      const target = !Array.from(all).every(c => c.checked);
-      all.forEach(c => { c.checked = target; });
-    });
-
-    document.getElementById('records-form')?.addEventListener('submit', event => {
-      const action = event.submitter?.getAttribute('formaction') || '';
-      if (action.includes('/records/delete')) return;
-      for (const row of document.querySelectorAll('.records-table tbody tr')) {
-        const checked = row.querySelector('.row-check')?.checked;
-        const select = row.querySelector('.activity-select');
-        const cappedTimed = !['feeding', 'solid_food', 'sleep'].includes(select?.value) &&
-          select?.selectedOptions?.[0]?.dataset.timed === '1';
-        if (!checked || !cappedTimed) continue;
-        if (!validateDuration(
-          row.querySelector('input[name^="start_time_"]'),
-          row.querySelector('input[name^="stop_time_"]')
-        )) {
-          event.preventDefault();
-          return;
-        }
-      }
-    });
-
-    // Editing any field in a record auto-selects that row, so the edit is
-    // included when Save persists only the checked rows. The checkbox itself
-    // is excluded (so it can still be unticked); day-note edits live outside a
-    // <tr> and are saved separately, so they don't trigger this.
-    document.getElementById('records-form')?.addEventListener('input', (e) => {
-      const field = e.target;
-      if (field.classList.contains('row-check')) return;
-      const check = field.closest('tr')?.querySelector('.row-check');
-      if (check) check.checked = true;
+      });
+    }
+    document.querySelectorAll('.date-group').forEach(group => {
+      const button = group.querySelector('.fold-toggle');
+      button.addEventListener('click', () => {
+        const collapsed = group.classList.toggle('collapsed');
+        button.setAttribute('aria-expanded', String(!collapsed));
+        group.querySelector('.day-timeline').hidden = collapsed;
+      });
     });
   })();
 </script>
