@@ -40,6 +40,7 @@ class SleepTests(unittest.TestCase):
             "stop_time": "", "duration": "", "amount": "", "volume_ml": "",
             "activity": "sleep", "notes": "", "poopoo_amount": "",
             "poopoo_color": "", "poopoo_texture": "", "supplement_type": "",
+            "feeding_type": "",
             **fields,
         }))
 
@@ -169,7 +170,8 @@ class SleepTests(unittest.TestCase):
             with self.subTest(activity=activity, stop_time=stop_time):
                 start = self.epoch("2026-09-23", start_time)
                 stop = self.epoch("2026-09-23", stop_time) if stop_time else None
-                rid = db.create_record(start, stop, activity=activity)
+                feeding_type = "water" if activity == "feeding" else None
+                rid = db.create_record(start, stop, activity=activity, feeding_type=feeding_type)
                 response = asyncio.run(main.ui_bulk_save(self.form_request({
                     "record_id": str(rid), f"date_{rid}": "2026-09-23",
                     f"start_time_{rid}": start_time, f"stop_time_{rid}": stop_time,
@@ -180,6 +182,7 @@ class SleepTests(unittest.TestCase):
                 row = db.list_records(ids=[rid])[0]
                 self.assertEqual((row["start_epoch"], row["stop_epoch"]), (start, stop))
                 self.assertEqual(row["notes"], "updated note")
+                self.assertEqual(row["feeding_type"], feeding_type)
                 if amount:
                     self.assertEqual(row["volume_ml" if activity == "feeding" else "volume_g"], int(amount))
         self.assertEqual(len(db.list_records()), len(cases))

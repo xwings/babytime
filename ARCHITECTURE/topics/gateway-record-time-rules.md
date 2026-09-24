@@ -18,7 +18,8 @@ Read when: changing timestamps, intake derivation, sleep sessions, midnight spli
   `max(0, end − auto_stop_minutes*60)` and keeps the first midnight segment,
   so an intake at 00:05 is stored 23:50–23:59:59 and grouped on the previous
   day. Poopoo/Supplement are point rows with equal bounds. `volume_ml` is
-  Milk-only and `volume_g` Food-only.
+  formula/water/legacy-Milk only (breastfeeding stores no ml); `volume_g` Food-only.
+  All three feeding categories retain the same end-time rules.
 - Explicit spans: normalized spans cap at 30 minutes except sleep (24 h);
   an earlier stop is read as the next day. Legacy completed sleep accepts
   `HH:MM` `duration` up to 23:59; Etc takes Start/End.
@@ -42,13 +43,16 @@ Read when: changing timestamps, intake derivation, sleep sessions, midnight spli
   activity is active; `stop` closes the newest via `_stop_session` with no
   duration guard; `log` records a feeding End (normalizing a legacy open
   feeding), always a point row for poopoo/supplement, and close-or-point
-  for other timed types. Device rows receive `default_volume_ml`.
+  for other timed types. New formula device rows receive `default_volume_ml`; water/breastfeeding do not.
+  Missing category uses the configured default for new rows; closing an existing
+  row preserves its category unless explicitly supplied.
 - Grouping and order: `_record_date_epoch` (canonical names) groups
   completed Milk/Food/Sleep/Poopoo/Supplement by End and others by Start.
   `ui_home` sorts dates descending and entries by `timeline_epoch` (raw
   names: intake/point End, session Start, id tie-break); JSON list order is
   unchanged. `GET /api/records?date=` returns oldest-first rows, the day
-  note and milk/food/poopoo/sleep totals; `feeds` counts truthy `volume_ml`.
+  note and milk/food/poopoo/sleep totals; water is excluded from milk totals
+  and Last fed/reminders; `feeds` counts truthy `volume_ml`.
 - Preservation: `/records/save` with unchanged exact Date/Start/End/activity
   keeps the original epochs on notes/amount edits, including midnight
   seconds and intake bounds after duration config changes.

@@ -60,7 +60,7 @@ before changing state payloads.
 | --- | --- | --- |
 | Gateway setup | `python3 -m venv .venv`, then `.venv/bin/pip install -r requirements.txt` in `gateway/` | Python 3.12+; pinned dependencies installed. |
 | Python syntax | `python3 -m compileall -q gateway/app skill/scripts` at root | Exit 0 proves parsing only. |
-| Gateway tests | `PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v` at root | `gateway/tests/test_sleep.py`, 9 cases OK; disposable SQLite and patched clock. |
+| Gateway tests | `PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v` at root | 15 cases; disposable SQLite/config and patched clock. |
 | Firmware build | `make build DEVICE=dnesp32s3b`; `make build DEVICE=esp32p4_7b` at root | PlatformIO, toolchain downloads and a local `config.h`; each reports SUCCESS. Override `PIO` if needed. |
 | Runtime / UI / storage | Owner Verification sections and their topics | Disposable state; API/CLI smoke, browser and hardware checks prove different behavior. |
 
@@ -74,7 +74,7 @@ refresh. Root [Makefile](Makefile) is firmware-only.
 | --- | --- | --- |
 | `firmware/src/{main.cpp,state.h,views.*}`, `firmware/include/config*`; state, views, HTTP/NTP | Firmware application and private configuration | [Firmware app](ARCHITECTURE/modules/firmware-app.md) |
 | `firmware/src/hal/`, `firmware/{platformio.ini,partitions.csv}`, `Makefile`; boards, pins, builds | Hardware and toolchain | [Firmware HAL](ARCHITECTURE/modules/firmware-hal.md) |
-| `gateway/app/{main.py,util.py}`, `gateway/{requirements.txt,Dockerfile,docker-compose.yml}`, `skill/`; routes, auth, time, HTTP client | Gateway API and client compatibility | [Gateway API](ARCHITECTURE/modules/gateway-api.md) |
+| `gateway/app/{main.py,util.py}`, `gateway/{requirements.txt,Dockerfile,docker-compose.yml}`, `skill/`, `gateway/tests/`; routes, auth, time, HTTP client | Gateway API and client compatibility | [Gateway API](ARCHITECTURE/modules/gateway-api.md) |
 | `gateway/app/{db.py,config.py}`; schema, settings, migrations | Persistence and configuration | [Gateway storage](ARCHITECTURE/modules/gateway-storage.md) |
 | `gateway/app/scheduler.py`; background auto-stop | Scheduler | [Gateway scheduler](ARCHITECTURE/modules/gateway-scheduler.md) |
 | `gateway/app/{templates/,static/,i18n.py}`; layout, controls, translation | Browser UI | [Gateway UI](ARCHITECTURE/modules/gateway-ui.md) |

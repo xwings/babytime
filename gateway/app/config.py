@@ -13,6 +13,7 @@ DEFAULTS: dict = {
     "auto_stop_minutes": "15",
     "feeding_alert_minutes": "120",
     "default_volume_ml": "",
+    "default_feeding_type": "formula",
     "default_language": "en",
     "poopoo_amount_options": "many,less",
     "poopoo_color_options": "yellow,green",
@@ -29,6 +30,8 @@ POOPOO_OPTION_KEYS = {
     "color": "poopoo_color_options",
     "texture": "poopoo_texture_options",
 }
+
+FEEDING_TYPES = ("formula", "breastfeeding", "water")
 
 _BUILTIN_ACTIVITY_ALIASES = {
     "feeding": "feeding",
@@ -109,6 +112,11 @@ def canonical_activity(name: str) -> str:
     value = (name or "").strip()
     folded = value.casefold()
     return _BUILTIN_ACTIVITY_ALIASES.get(folded, value)
+
+
+def default_feeding_type(cfg: dict) -> str:
+    value = cfg.get("default_feeding_type")
+    return value if value in FEEDING_TYPES else "formula"
 
 
 def activity_list(cfg: dict) -> list:

@@ -9,8 +9,8 @@ Read when: changing `gateway/app/db.py`, `gateway/app/config.py`, schemas, activ
 
 ## Responsibility and Status
 
-Implemented persistence; status **in progress** for verification coverage
-(no dedicated storage tests; `config.py` is untested). Owns SQLite
+Persistence; status **in progress** for verification coverage
+(feeding migration/config tests; other storage paths lack dedicated tests). Owns SQLite
 records/day notes and JSON configuration. HTTP validation and calendar
 splitting belong to the API; no durable event queue lives here.
 
@@ -18,17 +18,15 @@ splitting belong to the API; no durable event queue lives here.
 
 | Path / symbol | Role |
 | --- | --- |
-| `gateway/app/db.py`: `init`, `get_active`, `stop_active`, `clone_segments`, `feeding_totals` | Schema creation, additive `volume_g` migration, record/session/day-note CRUD and feeding aggregates. |
+| `gateway/app/db.py`: `init`, `get_active`, `stop_active`, `clone_segments`, `feeding_totals` | Schema creation, additive intake/category migrations, record/session/day-note CRUD and feeding aggregates. |
 | `gateway/app/config.py`: `DEFAULTS`, `load`, `update`, `activity_list`, `int_value` | Defaults, cached atomic JSON settings, alias normalization, option/CIDR/int parsing, legacy migration. |
 | `gateway/docker-compose.yml`, `gateway/Dockerfile` | Source of persistence env names; runtime owner is [API](gateway-api.md). |
 
 ## Local Conventions
 
-The [root baseline](../../ARCHITECTURE.md#code-conventions) suffices. Observed:
-module-private lock/cache, `sqlite3.Row` results returned as dicts,
-parameterized SQL and an allowlisted update column set. JSON setting values
-are coerced to strings (`_coerce`: bool → "1"/"0", None → ""). Parse
-user-edited values through the config helpers, never raw.
+Follow the [root baseline](../../ARCHITECTURE.md#code-conventions): private
+lock/cache, `sqlite3.Row` dicts, parameterized SQL and allowlisted updates.
+`_coerce` makes settings strings (bool → "1"/"0", None → ""). Use config parsers.
 
 ## Contracts and Invariants
 
@@ -42,13 +40,13 @@ user-edited values through the config helpers, never raw.
   creation; `_lock` serializes helper bodies and each write commits.
 - Schema: `records(id PK AUTOINCREMENT, start_epoch NOT NULL, stop_epoch,
   volume_ml, volume_g, notes, activity DEFAULT 'feeding', device_id DEFAULT
-  '', created_at)` with the single index `idx_records_start(start_epoch
+  '', feeding_type, created_at)` with the single index `idx_records_start(start_epoch
   DESC)`; `day_notes(date PK, note, updated_at)`. `init` runs `CREATE IF
-  NOT EXISTS`, then probes `table_info` to add `volume_g`; no version table
+  NOT EXISTS`, then probes `table_info` to add `volume_g` and nullable `feeding_type`; no version table
   exists. A legacy `config` table is read by `legacy_config_rows` and never
   dropped.
 - Helpers: `create_record(start, stop=None, volume_ml, volume_g, notes,
-  activity='feeding', device_id='') -> id`; `get_active(activity=None)`
+  activity='feeding', device_id='', feeding_type=None) -> id`; `get_active(activity=None)`
   newest open row, optionally of one activity; `stop_active(stop,
   activity=None) -> bool` closes the newest open row; `update_record(rid,
   **fields)` silently drops unknown keys; `delete_record`;
@@ -56,12 +54,11 @@ user-edited values through the config helpers, never raw.
   `COALESCE(stop, start) DESC`, ignores the other filters when `ids` is
   given and applies `offset` only with `limit`; `count_records` has no
   callers; `get_day_notes(dates)`, `set_day_note`.
-- `stop_epoch=NULL` means open. One-active-per-type is a caller
-  convention, **not** a uniqueness constraint. `clone_segments` copies
-  activity/notes/device but neither intake column and returns early on an
+- `stop_epoch=NULL` means open. One-active-per-type is not a database constraint. `clone_segments` copies
+  activity/category/notes/device but neither intake column and returns early on an
   empty list or missing id.
 - `feeding_totals` counts `volume_ml IS NOT NULL` rows (zero included) in a
-  half-open End range; API day summaries use truthy volume for `feeds`, so
+  half-open End range, excluding `feeding_type='water'`; API day summaries use truthy volume for `feeds`, so
   the two counters differ at zero.
 - `set_day_note` trims and deletes blank entries (upsert refreshes
   `updated_at`); date validation belongs to the HTTP boundary.
@@ -73,7 +70,7 @@ user-edited values through the config helpers, never raw.
   `migrate_from` seeds `{**DEFAULTS, **legacy}` once, when the file is absent.
 - `DEFAULTS`: `activity_types` feeding,solid_food,sleep,poopoo,supplement,etc;
   `timed_activities` sleep,etc; `auto_stop_minutes` 15; `feeding_alert_minutes`
-  120; `default_volume_ml` ""; `default_language` en; `poopoo_amount_options`
+  120; `default_volume_ml` ""; `default_feeding_type` formula; `default_language` en; `poopoo_amount_options`
   many,less; `poopoo_color_options` yellow,green; `poopoo_texture_options`
   soft,hard; `supplement_options` AD,D3; `timezone` UTC; `ui_show_count` 10;
   `trusted_networks` 10.0.0.0/8; `trusted_proxies` "".
@@ -81,6 +78,8 @@ user-edited values through the config helpers, never raw.
   `subpliment`). `activity_list` always starts with `feeding`, `solid_food`
   and keeps custom names. `timed_activities` drops Milk/Food/Poopoo/Supplement,
   adds `etc` whenever it is a configured type, and never removes `sleep`.
+- `FEEDING_TYPES` is formula,breastfeeding,water; `default_feeding_type(cfg)`
+  falls back to formula for invalid saved values. Legacy record categories stay NULL.
 - Poopoo/Supplement options are ordered, deduplicated comma/newline lists
   (`poopoo_options` keyed by `POOPOO_OPTION_KEYS`). Invalid CIDRs are dropped.
   `int_value(cfg, key, default, minimum)` clamps; `feeding_alert_minutes`
@@ -94,7 +93,7 @@ Stdlib-only persistence. [API](gateway-api.md) and
 [Scheduler](gateway-scheduler.md) consume helpers; read those owners when
 changing call semantics, transactions or time fields. Read
 [UI](gateway-ui.md) when changing settings/options rendered in forms.
-No route imports or browser concerns belong in storage.
+No route imports belong here.
 
 ## Change Guide
 
@@ -109,8 +108,7 @@ No route imports or browser concerns belong in storage.
 Run the root syntax check and unittest command: `gateway/tests/test_sleep.py`
 exercises `init`, `create_record`, `get_active`, `stop_active`,
 `clone_segments`, `list_records(ids=)` and `update_record` through HTTP
-handlers with `db._DB_PATH`/`db._conn` patched. This isolated stdlib smoke
-runs from root (passed in this refresh):
+handlers with `db._DB_PATH`/`db._conn` patched. Isolated stdlib smoke from root:
 
 ```sh
 PYTHONPATH=gateway python3 - <<'PY'
@@ -134,17 +132,15 @@ print('storage smoke passed')
 PY
 ```
 
-Untested: the `volume_g` migration on an old schema, legacy config
-migration, `feeding_totals`, `COALESCE` ordering, `delete_record`, the
-update allowlist and all `config.py` parsing. Schema changes need an
-old-schema fixture.
+`gateway/tests/test_feeding.py` covers old-schema intake/category migration,
+config persistence/defaults, category CRUD and water exclusion from totals.
+Legacy config migration, ordering, deletion and other parsing remain untested.
 
 ## Known Gaps
 
-No dedicated storage or config tests. Multi-helper changes (split rows,
+Multi-helper changes (split rows,
 bulk edits) are not one transaction. Locks/cache are process-local;
 multi-worker coordination and concurrent first connection creation are
 unverified. The fixed `.tmp` JSON path is not a multi-process write
 protocol. Parsing tolerates errors, so bad timezone/CIDR input silently
-changes behavior. `count_records` is dead code. Intake range validation
-remains an API gap.
+changes behavior. Intake validation remains an API gap.

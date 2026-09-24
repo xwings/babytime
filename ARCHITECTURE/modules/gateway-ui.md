@@ -11,8 +11,8 @@ Read when: changing `gateway/app/templates/`, `gateway/app/static/`, `gateway/ap
 
 Implemented server-rendered Records/Configuration interface: six default
 activity cards, a quick-log dialog, date summaries and flat daily timelines
-with popup editing. Status **in progress**: no committed browser suite and
-no browser check ran in this refresh. Owns presentation and browser state,
+with popup editing. Status **in progress**: no committed browser suite;
+Chromium checks cover feeding add/edit/defaults and responsive EN/ZH flows. Owns presentation and browser state,
 not persistence or time normalization. No bundler, remote fonts or
 packages are used.
 
@@ -31,8 +31,7 @@ packages are used.
 Follow [root conventions](../../ARCHITECTURE.md#code-conventions). Templates
 use `t`, `al`, `pol`; `al` resolves `act_<name>` in the language, then EN,
 then the raw name, so custom names keep their text. Serialize translated
-JavaScript values with `tojson` (two `col_ml`/`col_g` interpolations in
-`index.html` still rely on HTML escaping; fix when touched). `window.I18N`
+JavaScript values with `tojson`. `window.I18N`
 initializes in the head; other strings reach JS through `data-*`
 attributes and `tojson` constants, with hard-coded English fallbacks.
 Icons are `aria-hidden`; controls keep text or accessible names. CSS tokens
@@ -47,7 +46,7 @@ are canonical; bump the stylesheet `?v=` query on CSS edits.
 - Language: `GET /lang/{code}` stores a cookie; any cookie beats
   `default_language`, and unknown values normalize to `en` without
   rejection. Supported set is EN/ZH; `t()` falls back language → EN → key.
-  Nothing enforces EN/ZH pairing; both tables currently hold 113 keys, and
+  Nothing enforces EN/ZH pairing; both tables keep paired keys, and
   `col_stop`, `milk_decrease`, `milk_increase` are unused.
 - Field names, `data-*` hooks, browser-called endpoints, `/config` inputs
   and `ui_home` context keys are contracts listed in the
@@ -60,7 +59,11 @@ are canonical; bump the stylesheet `?v=` query on CSS edits.
   stops regardless of its timed flag. Custom timed types toggle
   `/ui/activity`; other custom types log points. Busy guards block
   duplicate submits and reset on `pageshow`.
-- Dialog modes: Milk/Food need an amount (±10 stepper, ml/g); Sleep posts
+- Button 1 shows the configured feeding default and opens formula milk,
+  breastfeeding and water choices; default formula. Each open resets the choice.
+  Timeline/editor retain the saved category; legacy NULL still displays Milk.
+- Dialog modes: Formula/Water/Food need an amount (±10 stepper, ml/ml/g);
+  breastfeeding hides/disables amount. Only formula pre-fills default milk ml. Sleep posts
   Date plus adjustable Start with End hidden and disabled; Poopoo selects
   configured amount/color/texture; Supplement one option; Etc Start/End.
   Disabled controls are not submitted. Date/time defaults advance from
@@ -103,7 +106,7 @@ and custom labels.
 | Layout / icons / breakpoints | Templates, icon macro, CSS, `?v=` query | Empty/populated EN/ZH at phone/tablet/desktop; keyboard/focus and long labels. |
 | Dialog / record edits | Mode toggles, validators, handlers | Six default flows; units, popup save/delete, day notes, exact timestamps; API owner. |
 | Timer / reminder | State polling, timer formatting, I18N order | Chinese units, remote feeding update, due/disabled alerts, recovery. |
-| Settings / localization | Config controls, translation maps | Form contract topic; add/remove activities/options, save/reload, cookie precedence, EN/ZH parity. |
+| Settings / localization | Config controls, translation maps | Form contract topic; add/remove activities/options, save/reload, feeding default/type persistence, cookie precedence, EN/ZH parity. |
 
 ## Verification
 
@@ -113,12 +116,13 @@ HTML contains `day-timeline` and `edit-record-dialog` and no `row-check`.
 Browser behavior is checked with the
 [manual gateway checks](../topics/gateway-manual-checks.md) (read when
 verifying template, CSS, JavaScript or translation edits). No frontend
-build, lint or browser suite exists; no browser check ran in this refresh.
+build, lint or browser suite exists. Chromium checks pass for category/default
+round-trips, null-volume edits and water reminder exclusion (including open Water).
 
 ## Known Gaps
 
 No push channel; only Milk state refreshes without reload. No persisted
 fold state or unsaved-edit recovery. JavaScript and native `<dialog>` are
 required for the quick-log flow; older-browser fallback is incomplete.
-Chinese units must be initialized before timer closures are created. EN/ZH
-parity, Safari/iOS and assistive-technology behavior are unverified.
+Chinese units must be initialized before timer closures are created.
+Safari/iOS and assistive-technology behavior are unverified.

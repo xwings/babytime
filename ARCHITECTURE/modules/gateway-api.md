@@ -70,6 +70,10 @@ paths are not identical: keep legacy fields explicitly.
   `today_feeds`/`today_ml`, eight mixed `history` rows, `server_epoch`,
   `feeding_duration_minutes` and `feeding_alert{due, elapsed_seconds,
   threshold_minutes, message}`; firmware and browser decode it.
+- `feeding_type` on records/events is formula,breastfeeding,water; omitted
+  creates use `default_feeding_type`, edits preserve it (including legacy NULL).
+  Other activities clear it; breastfeeding has no ml. Water is excluded from
+  milk totals/Last fed. Invalid types/default config selections return 400.
 - Poopoo/Supplement notes serialize as `Amount: x; Color: y; Texture: z;
   Extra notes: …` and `Supplement: x; Extra notes: …`; a configured option
   group without a valid selection is 400. `/config` rebuilds
@@ -89,10 +93,8 @@ paths are not identical: keep legacy fields explicitly.
 Read [Storage](gateway-storage.md) for schema/settings changes,
 [Scheduler](gateway-scheduler.md) for lifespan/cap changes,
 [UI](gateway-ui.md) for template context/form/i18n changes, and
-[Firmware app](firmware-app.md) for device payload changes. Read both
-storage and scheduler when changing midnight behavior. The CLI must keep
-using HTTP. Dependency pins live in the root snapshot; no frontend
-dependencies or new runtime packages are required.
+[Firmware app](firmware-app.md) for device payload changes. Read storage and scheduler for midnight changes. The CLI uses HTTP;
+dependency pins live in the root snapshot.
 
 ## Change Guide
 
@@ -106,18 +108,19 @@ dependencies or new runtime packages are required.
 ## Verification
 
 Run the root syntax check and unittest command. `gateway/tests/test_sleep.py`
-(9 cases, passing in this refresh) covers adjusted/duplicate starts,
+covers adjusted/duplicate starts,
 invalid and future starts, manual stops, local-midnight splits, legacy
 duration posts, cap exclusion, future Start edits, timeline ordering and
 exact timestamp preservation with disposable SQLite and a patched clock.
-For route, auth, CLI or time changes run the
+`gateway/tests/test_feeding.py` covers category/default round-trips, migration,
+validation, device defaults and water exclusion. For route, auth, CLI or time changes run the
 [manual gateway checks](../topics/gateway-manual-checks.md) (read when
 verifying behavior against a running gateway); its API/CLI sequence passed
 in this refresh.
 
 ## Known Gaps
 
-Committed tests cover Sleep, one cap and timeline editing; other handlers
+Tests cover Sleep, feeding categories/defaults and timeline edits; other paths
 rely on manual checks. Time-handling defects are listed in the record time
 rules topic. Amount ranges and some form failures lack validation; some
 list/grouping paths read all rows. No CSRF token; auth is gateway-wide with

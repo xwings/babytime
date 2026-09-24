@@ -17,8 +17,11 @@
   <span class="section-caption">{{ t('quick_log_hint') }}</span>
 </div>
 
+{% set active_feeding = active_map.get('feeding') %}
 <section aria-label="{{ t('quick_log') }}" class="activity-bar {{ 'feeding-alert' if feeding_alert.due else '' }}"
          data-feeding-alert-minutes="{{ feeding_alert.threshold_minutes }}"
+         data-last-fed-epoch="{{ last_fed.stop_epoch if last_fed else '' }}"
+         data-milk-active="{{ '1' if active_feeding and active_feeding.feeding_type != 'water' else '0' }}"
          data-last-fed-label="{{ t('last_fed') }}"
          data-feeding-alert-label="{{ t('feeding_alert_due') }}"
          data-activity-start-label="{{ t('activity_start_btn') }}"
@@ -35,8 +38,9 @@
             {% if opens_record_dialog %}data-open-record-dialog="{{ activity_key }}"{% endif %}
             class="activity-btn {{ 'running' if s else 'idle' }} {{ 'feeding-due' if activity_key == 'feeding' and feeding_alert.due else '' }}">
       <span class="activity-icon">{{ icon(activity_key) }}</span>
-      <span class="activity-name">{{ al(a) }}</span>
+      <span class="activity-name">{{ t('feeding_type_' + default_feeding_type) if activity_key == 'feeding' else al(a) }}</span>
       {% if s %}
+      {% if activity_key == 'feeding' and s.feeding_type == 'water' and last_fed %}<span class="activity-alert">{{ t('feeding_alert_due') }}</span>{% endif %}
       <span class="activity-timer live-elapsed" data-since="{{ s.start_epoch }}">…</span>
       {% if activity_key == 'sleep' %}<span class="activity-hint">{{ t('activity_stop_btn') }}</span>{% endif %}
       {% elif activity_key == 'feeding' and last_fed %}
@@ -93,6 +97,8 @@
       const last = state.last_feeding && hasNumber(state.last_feeding.stop_epoch)
         ? state.last_feeding
         : null;
+      bar.dataset.lastFedEpoch = last ? String(last.stop_epoch) : '';
+      bar.dataset.milkActive = active && active.feeding_type !== 'water' ? '1' : '0';
 
       const activityIcon = feeding.querySelector('.activity-icon');
       feeding.replaceChildren(...(activityIcon ? [activityIcon] : []), span('activity-name', feedingName));
@@ -101,6 +107,9 @@
         delete feeding.dataset.openRecordDialog;
         feeding.classList.add('running');
         feeding.classList.remove('idle', 'feeding-due');
+        if (active.feeding_type === 'water' && last) {
+          feeding.appendChild(span('activity-alert', bar.dataset.feedingAlertLabel || 'Time to feed?'));
+        }
         feeding.appendChild(timerSpan('', active.start_epoch));
       } else {
         feeding.type = 'button';
@@ -152,12 +161,10 @@
         if (!Number.isFinite(since)) return;
         el.textContent = fmt(now - since) + (el.dataset.suffix || '');
       });
-      const lastFed = feeding?.querySelector('.feeding-last-elapsed');
       const threshold = parseInt(bar?.dataset.feedingAlertMinutes || '0', 10);
-      const since = parseInt(lastFed?.dataset.since || '', 10);
+      const since = parseInt(bar?.dataset.lastFedEpoch || '', 10);
       const due = Boolean(
-        bar && feeding && lastFed &&
-        feeding.classList.contains('idle') &&
+        bar && feeding && bar.dataset.milkActive !== '1' &&
         Number.isFinite(threshold) && threshold > 0 &&
         Number.isFinite(since) &&
         now - since >= threshold * 60
@@ -220,8 +227,16 @@
     </div>
     <div class="record-dialog-body">
       <input type="hidden" name="activity" value="feeding">
+      <label data-feeding-type-field>{{ t('feeding_type') }}
+        <select name="feeding_type" required>
+          {% for feeding_type in feeding_types %}
+          <option value="{{ feeding_type }}" {% if feeding_type == default_feeding_type %}selected{% endif %}>{{ t('feeding_type_' + feeding_type) }}</option>
+          {% endfor %}
+        </select>
+      </label>
       <label class="milk-volume-field" data-intake-dialog-field
              data-milk-label="{{ t('milk_amount') }}"
+             data-water-label="{{ t('water_amount') }}"
              data-solid-food-label="{{ t('solid_food_amount') }}"
              data-ml-unit="{{ t('col_ml') }}"
              data-g-unit="{{ t('col_g') }}">
@@ -308,6 +323,9 @@
     const dialog = document.getElementById('add-record-dialog');
     const form = dialog?.querySelector('.record-dialog-form');
     const activity = form?.querySelector('input[name="activity"]');
+    const feedingTypeField = form?.querySelector('[data-feeding-type-field]');
+    const feedingType = feedingTypeField?.querySelector('select');
+    const defaultFeedingType = {{ default_feeding_type | tojson }};
     const intakeField = form?.querySelector('[data-intake-dialog-field]');
     const poopooField = form?.querySelector('[data-poopoo-dialog-field]');
     const supplementField = form?.querySelector('[data-supplement-dialog-field]');
@@ -349,13 +367,15 @@
     function setDialogMode(mode) {
       const isFeeding = mode === 'feeding';
       const isSolidFood = mode === 'solid_food';
-      const isIntake = isFeeding || isSolidFood;
+      const needsAmount = isSolidFood || (isFeeding && feedingType.value !== 'breastfeeding');
       const isSleep = mode === 'sleep';
       const isPoopoo = mode === 'poopoo';
       const isSupplement = mode === 'supplement';
       const isEtc = mode === 'etc';
       if (activity) activity.value = mode;
-      intakeField?.classList.toggle('is-hidden', !isIntake);
+      feedingTypeField?.classList.toggle('is-hidden', !isFeeding);
+      if (feedingType) feedingType.disabled = !isFeeding;
+      intakeField?.classList.toggle('is-hidden', !needsAmount);
       poopooField?.classList.toggle('is-hidden', !isPoopoo);
       supplementField?.classList.toggle('is-hidden', !isSupplement);
       etcField?.classList.toggle('is-hidden', !isEtc);
@@ -368,14 +388,16 @@
         endTime.required = !isSleep;
       }
       if (amount) {
-        amount.disabled = !isIntake;
-        amount.required = isIntake;
-        if (isSolidFood) amount.value = '';
+        amount.disabled = !needsAmount;
+        amount.required = needsAmount;
+        amount.value = isFeeding && feedingType.value === 'formula' ? amount.defaultValue : '';
       }
       if (amountLabel && intakeField) {
         amountLabel.textContent = isSolidFood
           ? intakeField.dataset.solidFoodLabel
-          : intakeField.dataset.milkLabel;
+          : feedingType.value === 'water'
+            ? intakeField.dataset.waterLabel
+            : intakeField.dataset.milkLabel;
       }
       if (amountUnit && intakeField) {
         amountUnit.textContent = isSolidFood
@@ -394,22 +416,26 @@
     function openDialog(mode) {
       if (!dialog || !form) return;
       form.reset();
+      feedingType.value = defaultFeedingType;
       setDialogMode(mode);
       refreshDateTime();
       if (typeof dialog.showModal === 'function') dialog.showModal();
       else dialog.setAttribute('open', '');
-      const firstInput = mode === 'feeding' || mode === 'solid_food'
-        ? amount
-        : mode === 'sleep'
-          ? etcStart
-          : mode === 'poopoo'
-            ? poopooField?.querySelector('input, textarea')
-            : mode === 'supplement'
-              ? supplementField?.querySelector('input')
-              : etcField?.querySelector('textarea');
+      const firstInput = mode === 'feeding'
+        ? feedingType
+        : mode === 'solid_food'
+          ? amount
+          : mode === 'sleep'
+            ? etcStart
+            : mode === 'poopoo'
+              ? poopooField?.querySelector('input, textarea')
+              : mode === 'supplement'
+                ? supplementField?.querySelector('input')
+                : etcField?.querySelector('textarea');
       firstInput?.focus();
     }
 
+    feedingType?.addEventListener('change', () => setDialogMode(activity.value));
     document.addEventListener('click', event => {
       const opener = event.target.closest('[data-open-record-dialog]');
       if (!opener) return;
@@ -468,12 +494,12 @@
       {% set edit_date = (r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'solid_food', 'poopoo', 'supplement'] else r.start_epoch %}
       <li class="timeline-item" data-activity="{{ r.activity }}">
         <button type="button" class="timeline-entry" aria-haspopup="dialog"
-                data-record='{{ {"id": r.id, "activity": r.activity, "date": edit_date | localdate_input(tz), "start_time": r.start_epoch | localtime_only(tz, true), "stop_time": r.stop_epoch | localtime_only(tz, true), "amount": amount if intake and amount is not none else "", "notes": r.notes or ""} | tojson }}'>
+                data-record='{{ {"id": r.id, "activity": r.activity, "feeding_type": r.feeding_type or "", "date": edit_date | localdate_input(tz), "start_time": r.start_epoch | localtime_only(tz, true), "stop_time": r.stop_epoch | localtime_only(tz, true), "amount": amount if intake and amount is not none else "", "notes": r.notes or ""} | tojson }}'>
           <time class="timeline-time">{{ r.timeline_epoch | localtime_only(tz) }}</time>
           <span class="timeline-marker" aria-hidden="true"></span>
           <span class="timeline-content">
             <span class="timeline-line">
-              <span class="timeline-activity">{{ icon(r.activity) }}<span>{{ al(r.activity) }}</span></span>
+              <span class="timeline-activity">{{ icon(r.activity) }}<span>{{ t('feeding_type_' + r.feeding_type) if r.activity == 'feeding' and r.feeding_type else al(r.activity) }}</span></span>
               {% if intake and amount is not none %}
               <span class="timeline-value">{{ amount }} <span>{{ t('col_g') if r.activity == 'solid_food' else t('col_ml') }}</span></span>
               {% elif r.stop_epoch is none %}
@@ -524,6 +550,14 @@
           {% for a in activities %}<option value="{{ a }}" data-timed="{{ '1' if a in timed else '0' }}">{{ al(a) }}</option>{% endfor %}
         </select>
       </label>
+      <label data-edit-feeding-type>{{ t('feeding_type') }}
+        <select data-edit-field="feeding_type">
+          <option value="" data-legacy-feeding-option>{{ al('feeding') }}</option>
+          {% for feeding_type in feeding_types %}
+          <option value="{{ feeding_type }}">{{ t('feeding_type_' + feeding_type) }}</option>
+          {% endfor %}
+        </select>
+      </label>
       <label>{{ t('col_date') }}<input type="date" data-edit-field="date" required></label>
       <div class="record-time-fields">
         <label data-edit-start>{{ t('col_start') }}<input type="time" step="1" data-edit-field="start_time"></label>
@@ -570,13 +604,17 @@
     const dayForm = document.getElementById('day-note-form');
     const deleteConfirm = {{ t('record_delete_confirm') | tojson }};
     const saveError = {{ t('record_save_error') | tojson }};
-    const milkAmount = {{ t('milk_amount') | tojson }} + ' ({{ t("col_ml") }})';
-    const foodAmount = {{ t('solid_food_amount') | tojson }} + ' ({{ t("col_g") }})';
+    const milkAmount = {{ (t('milk_amount') + ' (' + t('col_ml') + ')') | tojson }};
+    const waterAmount = {{ (t('water_amount') + ' (' + t('col_ml') + ')') | tojson }};
+    const foodAmount = {{ (t('solid_food_amount') + ' (' + t('col_g') + ')') | tojson }};
+    const defaultFeedingType = {{ default_feeding_type | tojson }};
     const durationError = {{ t('record_duration_invalid', minutes=max_record_duration_minutes) | tojson }};
 
     function syncFields() {
       const activity = fields.activity.value;
+      const feeding = activity === 'feeding';
       const intake = activity === 'feeding' || activity === 'solid_food';
+      const needsAmount = intake && !(feeding && fields.feeding_type.value === 'breastfeeding');
       const timed = ['sleep', 'etc'].includes(activity) || fields.activity.selectedOptions[0]?.dataset.timed === '1';
       const point = !intake && !timed;
       const startLabel = form.querySelector('[data-edit-start]');
@@ -585,9 +623,13 @@
       fields.start_time.required = timed;
       fields.start_time.readOnly = intake;
       fields.stop_time.required = intake || point;
-      form.querySelector('[data-edit-amount]').classList.toggle('is-hidden', !intake);
-      fields.amount.disabled = !intake;
-      form.querySelector('[data-edit-amount-label]').textContent = activity === 'solid_food' ? foodAmount : milkAmount;
+      form.querySelector('[data-edit-feeding-type]').classList.toggle('is-hidden', !feeding);
+      fields.feeding_type.disabled = !feeding;
+      form.querySelector('[data-edit-amount]').classList.toggle('is-hidden', !needsAmount);
+      fields.amount.disabled = !needsAmount;
+      form.querySelector('[data-edit-amount-label]').textContent = activity === 'solid_food'
+        ? foodAmount
+        : fields.feeding_type.value === 'water' ? waterAmount : milkAmount;
       form.querySelector('[data-open-record-hint]').classList.toggle('is-hidden', !timed);
       if (point && !fields.stop_time.value) fields.stop_time.value = fields.start_time.value;
       fields.stop_time.setCustomValidity('');
@@ -616,11 +658,17 @@
           input.name = name + '_' + original.id;
           input.value = original[name];
         });
+        const legacyFeeding = original.activity === 'feeding' && !original.feeding_type;
+        const legacyOption = fields.feeding_type.querySelector('[data-legacy-feeding-option]');
+        legacyOption.hidden = !legacyFeeding;
+        legacyOption.disabled = !legacyFeeding;
+        fields.feeding_type.value = original.feeding_type || (legacyFeeding ? '' : defaultFeedingType);
         syncFields();
         dialog.showModal();
       });
     });
     fields.activity.addEventListener('change', syncFields);
+    fields.feeding_type.addEventListener('change', syncFields);
     form.addEventListener('input', () => fields.stop_time.setCustomValidity(''));
 
     document.querySelectorAll('[data-day-note]').forEach(button => {
@@ -796,6 +844,13 @@
         </div>
       </div>
     </fieldset>
+    <label>{{ t('config_default_feeding_type') }}
+      <select name="default_feeding_type">
+        {% for feeding_type in feeding_types %}
+        <option value="{{ feeding_type }}" {% if feeding_type == default_feeding_type %}selected{% endif %}>{{ t('feeding_type_' + feeding_type) }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <label>{{ t('config_default_language') }}
       <select name="default_language">
         {% for code, label in languages %}

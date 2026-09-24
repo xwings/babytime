@@ -32,6 +32,7 @@ def init() -> None:
                 volume_g INTEGER,
                 notes TEXT,
                 activity TEXT NOT NULL DEFAULT 'feeding',
+                feeding_type TEXT,
                 device_id TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
             );
@@ -49,6 +50,8 @@ def init() -> None:
         }
         if "volume_g" not in columns:
             conn.execute("ALTER TABLE records ADD COLUMN volume_g INTEGER")
+        if "feeding_type" not in columns:
+            conn.execute("ALTER TABLE records ADD COLUMN feeding_type TEXT")
         conn.commit()
 
 
@@ -120,14 +123,15 @@ def create_record(
     notes: Optional[str] = None,
     activity: str = "feeding",
     device_id: str = "",
+    feeding_type: Optional[str] = None,
 ) -> int:
     conn = get_conn()
     with _lock:
         cur = conn.execute(
             "INSERT INTO records "
-            "(start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id),
+            "(start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id, feeding_type) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id, feeding_type),
         )
         conn.commit()
         return cur.lastrowid
@@ -150,9 +154,9 @@ def clone_segments(rid: int, segments: list) -> None:
         for start_epoch, stop_epoch in segments:
             conn.execute(
                 "INSERT INTO records "
-                "(start_epoch, stop_epoch, notes, activity, device_id) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (start_epoch, stop_epoch, row["notes"], row["activity"], row["device_id"]),
+                "(start_epoch, stop_epoch, notes, activity, device_id, feeding_type) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (start_epoch, stop_epoch, row["notes"], row["activity"], row["device_id"], row["feeding_type"]),
             )
         conn.commit()
 
@@ -165,6 +169,7 @@ def update_record(rid: int, **fields) -> None:
         "volume_g",
         "notes",
         "activity",
+        "feeding_type",
         "device_id",
     }
     sets = []
@@ -238,6 +243,7 @@ def feeding_totals(start_epoch: int, stop_epoch: int) -> dict:
         row = conn.execute(
             "SELECT COUNT(*) AS feeds, COALESCE(SUM(volume_ml), 0) AS ml "
             "FROM records WHERE activity='feeding' AND volume_ml IS NOT NULL "
+            "AND (feeding_type IS NULL OR feeding_type != 'water') "
             "AND COALESCE(stop_epoch, start_epoch) >= ? "
             "AND COALESCE(stop_epoch, start_epoch) < ?",
             (start_epoch, stop_epoch),
