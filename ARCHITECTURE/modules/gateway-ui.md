@@ -81,9 +81,11 @@ are canonical; bump the stylesheet `?v=` query on CSS edits.
   styling without flashing. At the server-supplied next midnight, a tick
   clears the old Poopoo count and requests fresh state once; normal polling
   retries failures. The initial HTML also supplies the server clock offset.
-- Clock times, live counters, timeline durations and sleep totals display
+- Clock times, live counters and timeline durations display
   zero-padded `HH:MM` in EN/ZH, omitting seconds; duration hours do not wrap
-  at 24. Time inputs use minute precision. The editor retains exact times
+  at 24. Daily sleep summary chips and tooltips display `HH hours MM min`
+  in EN and `HH 小时 MM 分钟` in ZH, retaining zero padding. Time inputs
+  use minute precision. The editor retains exact times
   in its payload and submits the original seconds for unchanged inputs,
   preserving timestamps when only notes or amounts change.
 - Timelines: dates and entries descend by `timeline_epoch`; today renders

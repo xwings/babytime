@@ -527,7 +527,8 @@
     <div class="day-summary">
       <span class="summary-chip milk" title="{{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }}">{{ icon('feeding') }}{{ al('feeding') }} {{ g.milk_count }}{{ t('unit_times') }} · {{ g.total_ml }} {{ t('col_ml') }}</span>
       <span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }}">{{ icon('solid_food') }}{{ al('solid_food') }} {{ g.food_count }}{{ t('unit_times') }} · {{ g.total_g }} {{ t('col_g') }}</span>
-      <span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', duration=g.sleep_duration) }}">{{ icon('sleep') }}{{ al('sleep') }} {{ g.sleep_count }}{{ t('unit_times') }} · {{ g.sleep_duration }}</span>
+      {% set sleep_duration = t('date_sleep_duration', hours=g.sleep_hours, minutes=g.sleep_minutes) %}
+      <span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', duration=sleep_duration) }}">{{ icon('sleep') }}{{ al('sleep') }} {{ g.sleep_count }}{{ t('unit_times') }} · {{ sleep_duration }}</span>
       <span class="summary-chip diaper" title="{{ t('date_poopoo_summary', n=g.poopoo, plural='' if g.poopoo == 1 else 's') }}">{{ icon('poopoo') }}{{ t('date_poopoo_count', n=g.poopoo) }}</span>
     </div>
     {% if g.note %}<p class="day-note-preview">{{ g.note }}</p>{% endif %}

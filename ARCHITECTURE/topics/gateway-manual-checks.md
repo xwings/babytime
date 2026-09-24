@@ -41,8 +41,10 @@ Browser checks for template, CSS, JavaScript or translation edits, at
 2. Save all six quick-log modes, tap timeline entries to edit or delete,
    save/clear entry and day notes, change language, config and options.
    Only the selected entry mutates; timestamps, totals and ml/g survive
-   reload. Check HH:MM clock times, durations, totals and input values in
-   EN/ZH; notes/amount-only edits must preserve stored seconds, including
+   reload. Check HH:MM clock times, timeline durations and input values in
+   EN/ZH; daily sleep summary chips and tooltips show `HH hours MM min`
+   in EN and `HH 小时 MM 分钟` in ZH, including zero totals.
+   Notes/amount-only edits must preserve stored seconds, including
    midnight `23:59:59`. Check displayed-time sorting, removed
    custom types, cancelled dialogs, invalid saves and fetch failure/retry.
 3. Start/stop a custom timed activity and observe a remote Milk state

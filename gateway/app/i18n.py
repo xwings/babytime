@@ -88,6 +88,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "date_food_summary": "{n} time{plural} {amount} g food",
         "date_poopoo_summary": "{n} time{plural} poopoo",
         "date_sleep_summary": "{n} time{plural} {duration} sleep",
+        "date_sleep_duration": "{hours} hours {minutes} min",
         "col_day_note": "Day note",
         "day_note_placeholder": "Note for this day…",
         # Add-record
@@ -215,6 +216,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "date_food_summary": "辅食 {n} 次 {amount} 克",
         "date_poopoo_summary": "便便 {n} 次",
         "date_sleep_summary": "睡眠 {n} 次 {duration}",
+        "date_sleep_duration": "{hours} 小时 {minutes} 分钟",
         "col_day_note": "每日备注",
         "day_note_placeholder": "当天备注…",
         # Add-record
