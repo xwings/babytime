@@ -143,10 +143,15 @@ class SleepTests(unittest.TestCase):
         self.assertEqual(rows[1]["stop_epoch"], self.epoch("2026-09-24", "07:00"))
 
     def test_timeline_orders_sleep_by_start_and_intake_by_end(self):
+        self.cfg["activity_types"] = "Walk,etc,supplement,solid_food,poopoo,sleep,feeding,Play"
         sleep = db.create_record(self.epoch("2026-09-23", "10:28"), self.epoch("2026-09-23", "11:39"), activity="sleep")
         milk = db.create_record(self.epoch("2026-09-23", "10:55"), self.epoch("2026-09-23", "11:10"), volume_ml=90, activity="feeding")
         food = db.create_record(self.epoch("2026-09-23", "10:20"), self.epoch("2026-09-23", "10:35"), volume_g=30, activity="solid_food")
         response = asyncio.run(main.ui_home(Request({"type": "http", "headers": []})))
+        self.assertEqual(response.context["button_activities"], [
+            "feeding", "sleep", "poopoo", "solid_food", "supplement", "etc", "Walk", "Play",
+        ])
+        self.assertEqual(response.context["activities"], config.activity_list(self.cfg))
         rows = response.context["groups"][0]["records"]
         self.assertEqual([row["id"] for row in rows], [milk, food, sleep])
         self.assertEqual([row["timeline_epoch"] for row in rows], [
@@ -157,6 +162,59 @@ class SleepTests(unittest.TestCase):
         self.assertIn('class="day-timeline"', html)
         self.assertIn('id="edit-record-dialog"', html)
         self.assertNotIn('class="row-check"', html)
+
+    def test_sleep_card_tracks_last_completed_and_current_sleep(self):
+        state = main.state_payload()
+        self.assertIsNone(state["active_sleep"])
+        self.assertIsNone(state["last_sleep"])
+        db.create_record(self.now - 7200, self.now - 5400, activity="sleep")
+        last = db.create_record(self.now - 3600, self.now - 1800, activity="sleep")
+        for offset in range(9):
+            db.create_record(self.now - offset, self.now - offset, activity="poopoo")
+        state = main.state_payload()
+        self.assertEqual(state["last_sleep"]["id"], last)
+        self.assertEqual(len(state["history"]), 8)
+        self.assertTrue(all(r["activity"] == "poopoo" for r in state["history"]))
+        self.start_sleep()
+        active = db.get_active("sleep")
+        state = main.state_payload()
+        home = asyncio.run(main.ui_home(Request({"type": "http", "headers": []})))
+        self.assertEqual(state["active_sleep"]["id"], active["id"])
+        self.assertEqual(state["last_sleep"]["id"], last)
+        self.assertEqual(home.context["active_sleep"]["id"], active["id"])
+        self.assertEqual(home.context["last_sleep"]["id"], last)
+        asyncio.run(main.ui_activity_toggle(activity="sleep"))
+        state = main.state_payload()
+        self.assertIsNone(state["active_sleep"])
+        self.assertEqual(state["last_sleep"]["id"], active["id"])
+        self.assertEqual(state["last_sleep"]["stop_epoch"], self.now)
+
+    def test_poopoo_card_uses_local_midnight_including_dst(self):
+        for timezone, date, next_date, hours in (
+            ("Asia/Shanghai", "2026-09-24", "2026-09-25", 24),
+            ("America/New_York", "2026-03-08", "2026-03-09", 23),
+            ("America/New_York", "2026-11-01", "2026-11-02", 25),
+        ):
+            with self.subTest(timezone=timezone, date=date):
+                for row in db.list_records():
+                    db.delete_record(row["id"])
+                self.cfg["timezone"] = timezone
+                start = self.epoch(date, "00:00")
+                end = self.epoch(next_date, "00:00")
+                self.now = start
+                self.assertEqual(main.state_payload()["today_poopoo"], 0)
+                for epoch in (start - 1, start, end - 1, end):
+                    db.create_record(epoch, epoch, activity="poopoo")
+                db.create_record(start, start, activity="supplement")
+                state = main.state_payload()
+                home = asyncio.run(main.ui_home(Request({"type": "http", "headers": []})))
+                self.assertEqual(state["today_poopoo"], 2)
+                self.assertEqual(home.context["today_poopoo"], 2)
+                self.assertEqual(state["day_end_epoch"], end)
+                self.assertEqual(home.context["day_end_epoch"], end)
+                self.assertEqual(end - start, hours * 3600)
+                self.now = end
+                self.assertEqual(main.state_payload()["today_poopoo"], 1)
 
     def test_popup_notes_and_amount_edits_preserve_exact_times(self):
         self.cfg["auto_stop_minutes"] = "30"

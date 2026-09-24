@@ -23,10 +23,14 @@
          data-last-fed-epoch="{{ last_fed.stop_epoch if last_fed else '' }}"
          data-milk-active="{{ '1' if active_feeding and active_feeding.feeding_type != 'water' else '0' }}"
          data-last-fed-label="{{ t('last_fed') }}"
+         data-last-sleep-label="{{ t('last_sleep') }}"
+         data-server-epoch="{{ server_epoch }}"
+         data-day-end-epoch="{{ day_end_epoch }}"
          data-feeding-alert-label="{{ t('feeding_alert_due') }}"
          data-activity-start-label="{{ t('activity_start_btn') }}"
+         data-activity-stop-label="{{ t('activity_stop_btn') }}"
          data-activity-log-label="{{ t('activity_log_btn') }}">
-  {% for a in activities %}
+  {% for a in button_activities %}
   {% set activity_key = a | trim | lower %}
   {% set always_popup = activity_key in ['solid_food', 'poopoo', 'supplement', 'etc'] %}
   {% set s = none if always_popup else active_map.get(a) %}
@@ -47,6 +51,14 @@
       <span class="activity-alert">{{ t('feeding_alert_due') }}</span>
       <span class="activity-sub">{{ t('last_fed') }}</span>
       <span class="activity-timer live-elapsed feeding-last-elapsed" data-since="{{ last_fed.stop_epoch }}">…</span>
+      {% elif activity_key == 'sleep' and last_sleep %}
+      <span class="activity-sub">{{ t('last_sleep') }}</span>
+      <span class="activity-timer live-elapsed sleep-last-elapsed" data-since="{{ last_sleep.stop_epoch }}">…</span>
+      <span class="activity-hint">{{ t('activity_start_btn') }}</span>
+      {% elif activity_key == 'poopoo' %}
+      <span class="activity-sub">{{ t('today') }}</span>
+      <span class="activity-timer"><span data-poopoo-count>{{ today_poopoo }}</span>{{ t('unit_times') }}</span>
+      <span class="activity-hint">{{ t('activity_log_btn') }}</span>
       {% else %}
       <span class="activity-hint">{{ t('activity_start_btn') if activity_key == 'sleep' or (a in timed and not always_popup) else t('activity_log_btn') }}</span>
       {% endif %}
@@ -57,11 +69,13 @@
 
 <script>
   (function () {
-    const U = (window.I18N || { unit_hour: 'h', unit_minute: 'm', unit_second: 's' });
     const bar = document.querySelector('.activity-bar');
     const feeding = document.querySelector('.activity-btn[data-activity="feeding"]');
     const feedingName = feeding?.querySelector('.activity-name')?.textContent || 'Milk';
-    let serverOffsetSeconds = 0;
+    const sleep = document.querySelector('.activity-btn[data-activity="sleep"]');
+    const sleepName = sleep?.querySelector('.activity-name')?.textContent || 'Sleep';
+    const poopooCount = document.querySelector('[data-poopoo-count]');
+    let serverOffsetSeconds = Number(bar.dataset.serverEpoch) - Math.floor(Date.now() / 1000);
     let syncInFlight = false;
 
     function span(className, text) {
@@ -84,9 +98,6 @@
     function renderFeeding(state) {
       if (!bar || !feeding || !state) return;
       const alert = state.feeding_alert || {};
-      if (hasNumber(state.server_epoch)) {
-        serverOffsetSeconds = Number(state.server_epoch) - Math.floor(Date.now() / 1000);
-      }
       if (hasNumber(alert.threshold_minutes)) {
         bar.dataset.feedingAlertMinutes = String(alert.threshold_minutes);
       }
@@ -124,12 +135,34 @@
           feeding.appendChild(span('activity-hint', bar.dataset.activityLogLabel || 'Tap to log'));
         }
       }
+    }
 
-      tick();
+    function renderSleep(state) {
+      if (!sleep) return;
+      const active = state.active_sleep;
+      const last = state.last_sleep;
+      const activityIcon = sleep.querySelector('.activity-icon');
+      sleep.replaceChildren(...(activityIcon ? [activityIcon] : []), span('activity-name', sleepName));
+      sleep.classList.toggle('running', Boolean(active));
+      sleep.classList.toggle('idle', !active);
+      if (active) {
+        sleep.type = 'submit';
+        delete sleep.dataset.openRecordDialog;
+        sleep.appendChild(timerSpan('', active.start_epoch));
+        sleep.appendChild(span('activity-hint', bar.dataset.activityStopLabel));
+      } else {
+        sleep.type = 'button';
+        sleep.dataset.openRecordDialog = 'sleep';
+        if (last) {
+          sleep.appendChild(span('activity-sub', bar.dataset.lastSleepLabel));
+          sleep.appendChild(timerSpan('sleep-last-elapsed', last.stop_epoch));
+        }
+        sleep.appendChild(span('activity-hint', bar.dataset.activityStartLabel));
+      }
     }
 
     async function syncState() {
-      if (!bar || !feeding || syncInFlight) return;
+      if (!bar || syncInFlight) return;
       syncInFlight = true;
       try {
         const res = await fetch('/api/state', {
@@ -137,7 +170,17 @@
           credentials: 'same-origin',
           cache: 'no-store'
         });
-        if (res.ok) renderFeeding(await res.json());
+        if (res.ok) {
+          const state = await res.json();
+          if (hasNumber(state.server_epoch)) {
+            serverOffsetSeconds = Number(state.server_epoch) - Math.floor(Date.now() / 1000);
+          }
+          if (hasNumber(state.day_end_epoch)) bar.dataset.dayEndEpoch = String(state.day_end_epoch);
+          if (poopooCount && hasNumber(state.today_poopoo)) poopooCount.textContent = state.today_poopoo;
+          renderFeeding(state);
+          renderSleep(state);
+          tick();
+        }
       } catch (e) {
         // Keep the last rendered state; the next poll or refresh can recover.
       } finally {
@@ -149,13 +192,16 @@
       if (s < 0) s = 0;
       const h = Math.floor(s / 3600);
       const m = Math.floor((s % 3600) / 60);
-      const sec = s % 60;
-      if (h > 0) return h + U.unit_hour + ' ' + m + U.unit_minute;
-      if (m > 0) return m + U.unit_minute + ' ' + String(sec).padStart(2, '0') + U.unit_second;
-      return sec + U.unit_second;
+      return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
     }
     function tick() {
       const now = Math.floor(Date.now() / 1000) + serverOffsetSeconds;
+      const dayEnd = Number(bar?.dataset.dayEndEpoch);
+      if (dayEnd && now >= dayEnd) {
+        delete bar.dataset.dayEndEpoch;
+        if (poopooCount) poopooCount.textContent = '0';
+        syncState();
+      }
       document.querySelectorAll('.live-elapsed').forEach(el => {
         const since = parseInt(el.dataset.since, 10);
         if (!Number.isFinite(since)) return;
@@ -303,10 +349,10 @@
           <input type="date" name="date" value="{{ now_date }}" required>
         </label>
         <label class="is-hidden" data-etc-start-time-field>{{ t('col_start') }}
-          <input type="time" lang="en-US" name="start_time" value="{{ now_time }}" required disabled>
+          <input type="time" lang="en-US" step="60" name="start_time" value="{{ now_time }}" required disabled>
         </label>
         <label data-record-end-time-field>{{ t('col_end_time') }}
-          <input type="time" lang="en-US" name="end_time" value="{{ now_time }}" required>
+          <input type="time" lang="en-US" step="60" name="end_time" value="{{ now_time }}" required>
         </label>
       </div>
     </div>
@@ -481,7 +527,7 @@
     <div class="day-summary">
       <span class="summary-chip milk" title="{{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }}">{{ icon('feeding') }}{{ al('feeding') }} {{ g.milk_count }}{{ t('unit_times') }} · {{ g.total_ml }} {{ t('col_ml') }}</span>
       <span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }}">{{ icon('solid_food') }}{{ al('solid_food') }} {{ g.food_count }}{{ t('unit_times') }} · {{ g.total_g }} {{ t('col_g') }}</span>
-      <span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', hours=g.sleep_hours | int, minutes=g.sleep_minutes | int) }}">{{ icon('sleep') }}{{ al('sleep') }} {{ g.sleep_count }}{{ t('unit_times') }} · {{ g.sleep_hours | int }}{{ t('unit_hour') }} {{ g.sleep_minutes | int }}{{ t('unit_minute') }}</span>
+      <span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', duration=g.sleep_duration) }}">{{ icon('sleep') }}{{ al('sleep') }} {{ g.sleep_count }}{{ t('unit_times') }} · {{ g.sleep_duration }}</span>
       <span class="summary-chip diaper" title="{{ t('date_poopoo_summary', n=g.poopoo, plural='' if g.poopoo == 1 else 's') }}">{{ icon('poopoo') }}{{ t('date_poopoo_count', n=g.poopoo) }}</span>
     </div>
     {% if g.note %}<p class="day-note-preview">{{ g.note }}</p>{% endif %}
@@ -505,7 +551,7 @@
               {% elif r.stop_epoch is none %}
               <span class="timeline-running">{{ t('record_running') }}</span>
               {% elif not point and not intake %}
-              <span class="timeline-value">{% if elapsed >= 60 %}{{ elapsed // 60 }}{{ t('unit_hour') }} {% endif %}{{ elapsed % 60 }}{{ t('unit_minute') }}</span>
+              <span class="timeline-value">{{ '%02d:%02d' | format(elapsed // 60, elapsed % 60) }}</span>
               {% endif %}
             </span>
             {% if not intake and not point %}
@@ -560,8 +606,8 @@
       </label>
       <label>{{ t('col_date') }}<input type="date" data-edit-field="date" required></label>
       <div class="record-time-fields">
-        <label data-edit-start>{{ t('col_start') }}<input type="time" step="1" data-edit-field="start_time"></label>
-        <label>{{ t('col_end_time') }}<input type="time" step="1" data-edit-field="stop_time"></label>
+        <label data-edit-start>{{ t('col_start') }}<input type="time" step="60" data-edit-field="start_time"></label>
+        <label>{{ t('col_end_time') }}<input type="time" step="60" data-edit-field="stop_time"></label>
       </div>
       <p class="editor-hint is-hidden" data-open-record-hint>{{ t('record_open_hint') }}</p>
       <label data-edit-amount><span data-edit-amount-label>{{ t('col_amount') }}</span>
@@ -656,7 +702,12 @@
         }
         Object.entries(fields).forEach(([name, input]) => {
           input.name = name + '_' + original.id;
-          input.value = original[name];
+          if (input.type === 'time') {
+            input.dataset.originalTime = original[name];
+            input.value = original[name].slice(0, 5);
+          } else {
+            input.value = original[name];
+          }
         });
         const legacyFeeding = original.activity === 'feeding' && !original.feeding_type;
         const legacyOption = fields.feeding_type.querySelector('[data-legacy-feeding-option]');
@@ -694,12 +745,20 @@
         if (editorForm.dataset.saving) return;
         const deleting = event.submitter?.dataset.deleteRecord === '1';
         if (deleting && !window.confirm(deleteConfirm)) return;
+        const data = new FormData(editorForm);
         if (!deleting && editorForm === form) {
+          // Keep stored seconds when only notes, amounts or other fields change.
+          for (const input of [fields.start_time, fields.stop_time]) {
+            const original = input.dataset.originalTime;
+            if (data.has(input.name) && input.value === original.slice(0, 5)) {
+              data.set(input.name, original);
+            }
+          }
           const capped = !['feeding', 'solid_food', 'sleep'].includes(fields.activity.value) &&
             fields.activity.selectedOptions[0]?.dataset.timed === '1';
           if (capped && fields.start_time.value && fields.stop_time.value) {
             const seconds = value => value.split(':').reduce((total, part, index) => total + Number(part) * [3600, 60, 1][index], 0);
-            let duration = seconds(fields.stop_time.value) - seconds(fields.start_time.value);
+            let duration = seconds(data.get(fields.stop_time.name)) - seconds(data.get(fields.start_time.name));
             if (duration < 0) duration += 86400;
             if (duration > {{ max_record_duration_minutes }} * 60) {
               fields.stop_time.setCustomValidity(durationError);
@@ -709,7 +768,6 @@
           }
         }
         clearError(editorForm);
-        const data = new FormData(editorForm);
         editorForm.dataset.saving = '1';
         editorForm.setAttribute('aria-busy', 'true');
         const buttons = editorForm.querySelectorAll('button');

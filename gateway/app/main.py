@@ -462,23 +462,45 @@ def _feeding_alert_payload(
     }
 
 
+def _activity_card_state(records: list[dict], now: datetime) -> dict:
+    """Sleep state and today's Poopoo count for initial render and polling."""
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = day_start + timedelta(days=1)
+    start_epoch, end_epoch = int(day_start.timestamp()), int(day_end.timestamp())
+    return {
+        "active_sleep": next((r for r in records
+                              if r["activity"] == "sleep" and r["stop_epoch"] is None), None),
+        "last_sleep": next((r for r in records
+                            if r["activity"] == "sleep" and r["stop_epoch"] is not None), None),
+        "today_poopoo": sum(
+            1 for r in records
+            if r["activity"] == "poopoo"
+            and start_epoch <= _record_date_epoch(r) < end_epoch
+        ),
+        "day_end_epoch": end_epoch,
+    }
+
+
 def state_payload() -> dict:
     cfg = config.load()
     tz = zoneinfo(cfg.get("timezone") or "UTC")
-    day_start = datetime.now(tz=tz).replace(hour=0, minute=0, second=0, microsecond=0)
-    day_end = (day_start + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    today = db.feeding_totals(int(day_start.timestamp()), int(day_end.timestamp()))
-    feeding_history = db.list_records(activity="feeding")
-    active = db.get_active("feeding")
-    last = next((r for r in feeding_history
-                 if r.get("stop_epoch") and r.get("feeding_type") != "water"), None)
     server_epoch = int(time.time())
+    now = datetime.fromtimestamp(server_epoch, tz=tz)
+    records = db.list_records()
+    cards = _activity_card_state(records, now)
+    day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today = db.feeding_totals(int(day_start.timestamp()), cards["day_end_epoch"])
+    active = db.get_active("feeding")
+    last = next((r for r in records
+                 if r["activity"] == "feeding" and r.get("stop_epoch")
+                 and r.get("feeding_type") != "water"), None)
     return {
+        **cards,
         "active": active,
         "last_feeding": last,
         "today_feeds": today["feeds"],
         "today_ml": today["ml"],
-        "history": db.list_records(limit=8),
+        "history": records[:8],
         "server_epoch": server_epoch,
         "feeding_duration_minutes": config.feeding_duration_minutes(cfg),
         "feeding_alert": _feeding_alert_payload(cfg, active, last, server_epoch),
@@ -901,6 +923,10 @@ async def ui_home(
     ]
 
     activities = config.activity_list(cfg)
+    button_order = ["feeding", "sleep", "poopoo", "solid_food", "supplement", "etc"]
+    button_activities = [a for a in button_order if a in activities] + [
+        a for a in activities if a not in button_order
+    ]
     timed = config.timed_activities(cfg)
     # Surface normal Sleep timers and legacy open Milk sessions so they can
     # be closed. Solid food, Poopoo, Supplement, and Etc open their dialogs.
@@ -917,13 +943,15 @@ async def ui_home(
          and r.get("feeding_type") != "water"),
         None,
     )
+    server_epoch = int(time.time())
+    now = datetime.fromtimestamp(server_epoch, tz=tz)
     feeding_alert = _feeding_alert_payload(
         cfg,
         active_map.get("feeding"),
         last_fed,
+        server_epoch,
     )
 
-    now = datetime.now(tz=tz)
     lang = i18n.read_lang(request, cfg.get("default_language"))
     return templates.TemplateResponse(
         "index.html",
@@ -936,6 +964,9 @@ async def ui_home(
             "pol": (lambda name: i18n.poopoo_option_label(name, lang)),
             "groups": groups,
             "activities": activities,
+            "button_activities": button_activities,
+            **_activity_card_state(all_records, now),
+            "server_epoch": server_epoch,
             "languages": i18n.language_options(),
             "timed": sorted(timed),
             "active_map": active_map,

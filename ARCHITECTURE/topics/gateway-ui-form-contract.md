@@ -11,7 +11,9 @@ Read when: changing form field names, `data-*` hooks, browser-called endpoints, 
 
 - Browser endpoints: fetch `GET /api/state` (consumes `server_epoch`,
   `active.start_epoch`, `last_feeding.stop_epoch`,
-  `feeding_alert.threshold_minutes`, `active.feeding_type`;
+  `feeding_alert.threshold_minutes`, `active.feeding_type`,
+  `active_sleep.start_epoch`, `last_sleep.stop_epoch`, `today_poopoo`,
+  `day_end_epoch`;
   `feeding_alert.message` is unused) and
   fetch `POST /records/save` and `/records/delete` with FormData; native
   `POST /ui/activity` (`activity`, canonical key for built-ins, raw name for
@@ -28,7 +30,10 @@ Read when: changing form field names, `data-*` hooks, browser-called endpoints, 
   `start_time_ID`, `stop_time_ID`, `amount_ID`, `feeding_type_ID`, `notes_ID`, `day_note_DATE`;
   legacy `volume_ml_ID`/`volume_g_ID` accepted. The edit dialog renames
   `data-edit-field` inputs to `*_ID` on open and fills them from the
-  entry's `data-record` JSON; `step="1"` keeps seconds. `/records/delete`
+  entry's `data-record` JSON. Time controls use `step="60"` and show `HH:MM`;
+  `data-original-time` retains exact `HH:MM:SS` values. Unchanged enabled
+  time inputs submit those original values via FormData, keeping stored
+  seconds on notes/amount edits; changed times submit `HH:MM`. `/records/delete`
   posts `record_id` with `formnovalidate`.
 - `/config` fields: `activity_name_N`, `activity_timed_N`,
   `poopoo_options_present` plus `poopoo_{amount|color|texture}_options_item_N`
@@ -39,20 +44,26 @@ Read when: changing form field names, `data-*` hooks, browser-called endpoints, 
   markers preserve intent when an option list is emptied.
 - `ui_home` context: `request`, `lang`, `html_lang`, `t`, `al`, `pol`,
   `groups`, `activities`, `languages`, `timed`, `active_map`, `last_fed`,
+  `button_activities` (preferred built-in card order, then custom types),
+  `active_sleep`, `last_sleep`, `today_poopoo`, `day_end_epoch`, `server_epoch`,
   `feeding_alert` (`due`, `threshold_minutes`), `config`, `feeding_types`,
   `default_feeding_type`, `poopoo_options`,
   `supplement_options`, `tz`, `now_date`, `now_time`, `page`, `total_pages`,
   `dates_per_page` (unused), `max_record_duration_minutes`,
   `config_keys_simple`. Group keys: `date`, `records`, `note`, `milk_count`,
   `total_ml`, `food_count`, `total_g`, `sleep_count`, `sleep_hours`,
-  `sleep_minutes`, `poopoo`. Record keys: `id`, `activity`, `start_epoch`,
+  `sleep_minutes`, `sleep_duration`, `poopoo`. Record keys: `id`, `activity`, `start_epoch`,
   `stop_epoch`, `volume_ml`, `volume_g`, `feeding_type`, `notes`, `timeline_epoch`.
   `active_map` excludes solid_food/poopoo/supplement/etc.
 - Reminder ticks use `.activity-bar` data `last-fed-epoch` and `milk-active`;
   active Water retains its close button without suppressing milk reminders.
+- `.activity-bar` data `server-epoch` seeds the clock offset; `day-end-epoch`
+  triggers a Poopoo count reset and state refresh at local midnight.
+  `[data-poopoo-count]` holds the daily count; `last-sleep-label` and
+  `activity-start-label`/`activity-stop-label` localize the polled Sleep card.
 - Jinja filters: `localdate_input(tz)`, `localtime_only(tz, exact_seconds)`;
   `localtime` is registered but unused. Translated strings reach JS through
-  `window.I18N`, `data-*` attributes on `.activity-bar`,
+  `data-*` attributes on `.activity-bar`,
   `[data-intake-dialog-field]` and the submit button, and `tojson` constants.
 
 ## Change and Verify

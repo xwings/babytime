@@ -20,8 +20,8 @@ packages are used.
 
 | Path / symbol | Role |
 | --- | --- |
-| `gateway/app/templates/base.html` | Head (`window.I18N`, stylesheet `?v=` cache-bust), skip link, language links, ARIA tabs with `hashchange`, main/footer. |
-| `gateway/app/templates/index.html`: `renderFeeding`, `setDialogMode`, `syncFields` | Activity bar, quick-log dialog, timelines, record/day-note dialogs, configuration form and inline JavaScript. |
+| `gateway/app/templates/base.html` | Head (stylesheet `?v=` cache-bust), skip link, language links, ARIA tabs with `hashchange`, main/footer. |
+| `gateway/app/templates/index.html`: `renderFeeding`, `renderSleep`, `setDialogMode`, `syncFields` | Activity bar, quick-log dialog, timelines, record/day-note dialogs, configuration form and inline JavaScript. |
 | `gateway/app/templates/icons.html`: `icon(name)` | Decorative inline SVG macro; imported in both templates because Jinja macros are not inherited. |
 | `gateway/app/static/style.css` | Tokens, layout, `[data-activity]` colors, breakpoints and reduced-motion rules. |
 | `gateway/app/i18n.py`: `TRANSLATIONS`, `t`, `activity_label`, `poopoo_option_label`, `read_lang` | EN/ZH strings, label helpers (`al`/`pol` in templates), cookie/default precedence. |
@@ -31,8 +31,7 @@ packages are used.
 Follow [root conventions](../../ARCHITECTURE.md#code-conventions). Templates
 use `t`, `al`, `pol`; `al` resolves `act_<name>` in the language, then EN,
 then the raw name, so custom names keep their text. Serialize translated
-JavaScript values with `tojson`. `window.I18N`
-initializes in the head; other strings reach JS through `data-*`
+JavaScript values with `tojson`. Strings reach JS through `data-*`
 attributes and `tojson` constants, with hard-coded English fallbacks.
 Icons are `aria-hidden`; controls keep text or accessible names. CSS tokens
 are canonical; bump the stylesheet `?v=` query on CSS edits.
@@ -52,7 +51,10 @@ are canonical; bump the stylesheet `?v=` query on CSS edits.
   and `ui_home` context keys are contracts listed in the
   [UI form contract](../topics/gateway-ui-form-contract.md); read it before
   changing any of them and change API handlers in the same edit.
-- Activity cards derive from configured types; icons key on the lowercased
+- Activity cards derive from configured types, displayed in Milk, Sleep,
+  Poopoo, Solid food, Supplement, Etc order, then custom types in their
+  configured order. Settings and API activity lists retain their own order.
+  Icons key on the lowercased
   name, with `etc`/custom names falling back to a sparkle; colors come
   from `[data-activity]`. Idle Milk/Sleep and all Food/Poopoo/Supplement/Etc
   open the shared dialog; open Milk/Sleep close by submit; Sleep starts and
@@ -69,10 +71,21 @@ are canonical; bump the stylesheet `?v=` query on CSS edits.
   Disabled controls are not submitted. Date/time defaults advance from
   rendered gateway wall time on each open. Native `<dialog>` supplies modal
   focus; Cancel, Escape and backdrop dismiss.
+- Idle Sleep shows time since the latest completed sleep ended; active
+  Sleep shows elapsed time since Start and keeps the stop action. With no
+  history it shows the start hint. Poopoo shows Today's count, including 0,
+  from 00:00 in the saved gateway timezone.
 - Counters tick every second; `/api/state` polls every 30 s and on
-  load/focus/visible, re-rendering **Milk state only** and correcting the
+  load/focus/visible, refreshing Milk, Sleep and the Poopoo count and correcting the
   clock offset; failed fetches keep rendered state. Due feeding uses amber
-  styling without flashing.
+  styling without flashing. At the server-supplied next midnight, a tick
+  clears the old Poopoo count and requests fresh state once; normal polling
+  retries failures. The initial HTML also supplies the server clock offset.
+- Clock times, live counters, timeline durations and sleep totals display
+  zero-padded `HH:MM` in EN/ZH, omitting seconds; duration hours do not wrap
+  at 24. Time inputs use minute precision. The editor retains exact times
+  in its payload and submits the original seconds for unchanged inputs,
+  preserving timestamps when only notes or amounts change.
 - Timelines: dates and entries descend by `timeline_epoch`; today renders
   expanded, other dates `collapsed` with `<ol hidden>` and
   `aria-expanded=false`; summary chips for Milk, Food, Sleep and Poopoo
@@ -105,7 +118,7 @@ and custom labels.
 | --- | --- | --- |
 | Layout / icons / breakpoints | Templates, icon macro, CSS, `?v=` query | Empty/populated EN/ZH at phone/tablet/desktop; keyboard/focus and long labels. |
 | Dialog / record edits | Mode toggles, validators, handlers | Six default flows; units, popup save/delete, day notes, exact timestamps; API owner. |
-| Timer / reminder | State polling, timer formatting, I18N order | Chinese units, remote feeding update, due/disabled alerts, recovery. |
+| Timer / reminder | State polling, HH:MM timer formatting | EN/ZH minute precision, remote feeding update, due/disabled alerts, recovery. |
 | Settings / localization | Config controls, translation maps | Form contract topic; add/remove activities/options, save/reload, feeding default/type persistence, cookie precedence, EN/ZH parity. |
 
 ## Verification
@@ -121,8 +134,7 @@ round-trips, null-volume edits and water reminder exclusion (including open Wate
 
 ## Known Gaps
 
-No push channel; only Milk state refreshes without reload. No persisted
+No push channel; only Milk/Sleep cards and the Poopoo count refresh without reload. No persisted
 fold state or unsaved-edit recovery. JavaScript and native `<dialog>` are
 required for the quick-log flow; older-browser fallback is incomplete.
-Chinese units must be initialized before timer closures are created.
 Safari/iOS and assistive-technology behavior are unverified.

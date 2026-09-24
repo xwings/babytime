@@ -58,6 +58,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_config": "Configuration",
         # Live activity panel
         "last_fed": "Last fed:",
+        "last_sleep": "Last sleep:",
         "feeding_alert_due": "Time to feed?",
         "activity_start_btn": "tap to start",
         "activity_stop_btn": "tap to stop",
@@ -86,7 +87,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "date_milk_summary": "{n} time{plural} {amount} ml milk",
         "date_food_summary": "{n} time{plural} {amount} g food",
         "date_poopoo_summary": "{n} time{plural} poopoo",
-        "date_sleep_summary": "{n} time{plural} {hours} hours {minutes} min sleep",
+        "date_sleep_summary": "{n} time{plural} {duration} sleep",
         "col_day_note": "Day note",
         "day_note_placeholder": "Note for this day…",
         # Add-record
@@ -151,10 +152,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_remove_option": "Remove item",
         "config_supplement_options": "Supplement options",
         "config_supplement_options_hint": "Add or remove the choices shown in the Supplement popup.",
-        # Time units (read by the live-elapsed JS in index.html)
-        "unit_hour": "h",
-        "unit_minute": "m",
-        "unit_second": "s",
     },
     "zh": {
         "app_tagline": "用心记录每个小瞬间",
@@ -188,6 +185,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tab_config": "设置",
         # Live activity panel
         "last_fed": "上次喂食:",
+        "last_sleep": "上次睡眠:",
         "feeding_alert_due": "该喂奶了?",
         "activity_start_btn": "点击开始",
         "activity_stop_btn": "点击停止",
@@ -216,7 +214,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "date_milk_summary": "奶 {n} 次 {amount} 毫升",
         "date_food_summary": "辅食 {n} 次 {amount} 克",
         "date_poopoo_summary": "便便 {n} 次",
-        "date_sleep_summary": "睡眠 {n} 次 {hours} 小时 {minutes} 分钟",
+        "date_sleep_summary": "睡眠 {n} 次 {duration}",
         "col_day_note": "每日备注",
         "day_note_placeholder": "当天备注…",
         # Add-record
@@ -281,10 +279,6 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "config_remove_option": "删除选项",
         "config_supplement_options": "补充剂选项",
         "config_supplement_options_hint": "添加或删除补充剂弹窗中显示的选项。",
-        # Time units
-        "unit_hour": "时",
-        "unit_minute": "分",
-        "unit_second": "秒",
     },
 }
 

@@ -60,7 +60,7 @@ before changing state payloads.
 | --- | --- | --- |
 | Gateway setup | `python3 -m venv .venv`, then `.venv/bin/pip install -r requirements.txt` in `gateway/` | Python 3.12+; pinned dependencies installed. |
 | Python syntax | `python3 -m compileall -q gateway/app skill/scripts` at root | Exit 0 proves parsing only. |
-| Gateway tests | `PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v` at root | 15 cases; disposable SQLite/config and patched clock. |
+| Gateway tests | `PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v` at root | 17 cases; disposable SQLite/config and patched clock. |
 | Firmware build | `make build DEVICE=dnesp32s3b`; `make build DEVICE=esp32p4_7b` at root | PlatformIO, toolchain downloads and a local `config.h`; each reports SUCCESS. Override `PIO` if needed. |
 | Runtime / UI / storage | Owner Verification sections and their topics | Disposable state; API/CLI smoke, browser and hardware checks prove different behavior. |
 

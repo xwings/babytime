@@ -18,7 +18,7 @@ HTTP CLI. Persistence, scheduling and presentation are partner owners.
 
 | Path / symbol | Role |
 | --- | --- |
-| `gateway/app/main.py`: `require_auth`, `browser_api_key_link`, `state_payload`, `ui_home`, `RecordIn` | Auth boundary, key-link middleware, device snapshot, browser context, input models (`EventIn`, `DayNoteIn`); route decorators locate endpoints. |
+| `gateway/app/main.py`: `require_auth`, `browser_api_key_link`, `_activity_card_state`, `state_payload`, `ui_home`, `RecordIn` | Auth boundary, key-link middleware, shared card summaries, device snapshot, browser context, input models (`EventIn`, `DayNoteIn`); route decorators locate endpoints. |
 | `gateway/app/main.py`: `_to_epoch`, `_feeding_bounds`, `_segments`, `_stop_session`, `_record_date_epoch` | Time parsing, intake derivation, midnight wrapper, session close and day grouping. |
 | `gateway/app/util.py`: `SPLIT_ACTIVITIES`, `zoneinfo`, `local_midnight_after`, `midnight_segments` | Split-rule switch and local-day segmentation shared with the scheduler. |
 | `gateway/{requirements.txt,Dockerfile,docker-compose.yml}` | Dependency pins; uvicorn command with `GATEWAY_BIND_HOST/PORT` and `--no-proxy-headers`; env/persistence contract. |
@@ -69,7 +69,13 @@ paths are not identical: keep legacy fields explicitly.
 - `/api/state` holds feeding-only `active` and `last_feeding`,
   `today_feeds`/`today_ml`, eight mixed `history` rows, `server_epoch`,
   `feeding_duration_minutes` and `feeding_alert{due, elapsed_seconds,
-  threshold_minutes, message}`; firmware and browser decode it.
+  threshold_minutes, message}`; firmware and browser decode it. Additive
+  browser fields: `active_sleep`, `last_sleep` (newest open/completed Sleep
+  records or null), `today_poopoo` (count in the saved timezone's half-open
+  midnight-to-midnight interval), `day_end_epoch` (next local midnight).
+  `_activity_card_state` supplies the same values to `ui_home`; one server
+  epoch anchors each response's clock and calendar. Firmware reads its
+  existing named fields and ignores these additions.
 - `feeding_type` on records/events is formula,breastfeeding,water; omitted
   creates use `default_feeding_type`, edits preserve it (including legacy NULL).
   Other activities clear it; breastfeeding has no ml. Water is excluded from
@@ -112,6 +118,8 @@ covers adjusted/duplicate starts,
 invalid and future starts, manual stops, local-midnight splits, legacy
 duration posts, cap exclusion, future Start edits, timeline ordering and
 exact timestamp preservation with disposable SQLite and a patched clock.
+It also covers Sleep card transitions, button order/custom activities,
+Poopoo day boundaries and 23/25-hour daylight-saving days.
 `gateway/tests/test_feeding.py` covers category/default round-trips, migration,
 validation, device defaults and water exclusion. For route, auth, CLI or time changes run the
 [manual gateway checks](../topics/gateway-manual-checks.md) (read when

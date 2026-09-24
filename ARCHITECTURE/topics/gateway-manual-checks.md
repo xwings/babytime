@@ -41,15 +41,25 @@ Browser checks for template, CSS, JavaScript or translation edits, at
 2. Save all six quick-log modes, tap timeline entries to edit or delete,
    save/clear entry and day notes, change language, config and options.
    Only the selected entry mutates; timestamps, totals and ml/g survive
-   reload. Check displayed-time sorting, exact midnight seconds, removed
+   reload. Check HH:MM clock times, durations, totals and input values in
+   EN/ZH; notes/amount-only edits must preserve stored seconds, including
+   midnight `23:59:59`. Check displayed-time sorting, removed
    custom types, cancelled dialogs, invalid saves and fetch failure/retry.
 3. Start/stop a custom timed activity and observe a remote Milk state
-   update; counters keep localized units. Compare due Milk styling with
+   update; counters show HH:MM at 00:00, 00:59 and 01:00 and beyond 24 hours.
+   Compare due Milk styling with
    alerts disabled. Start Sleep with an adjusted Start, cancel/reopen,
    reload and stop it: Start stays editable, End stays blank while open,
    a cross-midnight stop splits and the timer cap leaves it open.
 4. Navigate tabs, dialogs and folds by keyboard; observe focus and ARIA
    state, long custom names, responsive labels and reduced-motion mode.
+5. Confirm card order Milk, Sleep, Poopoo, Solid food, Supplement, Etc,
+   followed by configured custom activities. Idle Sleep shows HH:MM since
+   its latest End; a remote start switches to elapsed Start and a stop
+   action, and a remote stop restores the idle timer. Poopoo shows today's
+   count (including 0), refreshes after remote edits, and resets at saved-
+   timezone 00:00 with the page open. Check records immediately before/at
+   midnight and retry after a failed midnight refresh.
 
 ## Change and Verify
 
