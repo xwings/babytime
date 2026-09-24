@@ -89,7 +89,8 @@ are canonical; bump the stylesheet `?v=` query on CSS edits.
 - Timelines: dates and entries descend by `timeline_epoch`; today renders
   expanded, other dates `collapsed` with `<ol hidden>` and
   `aria-expanded=false`; summary chips for Milk, Food, Sleep and Poopoo
-  always render, including zero totals; fold state is not persisted. Each
+  always render, including zero totals; fold state is not persisted. Fold
+  controls have a 48 px minimum height and a framed 40 px chevron. Each
   entry is a button carrying a `data-record` payload that opens
   `#edit-record-dialog`; Save posts to `/records/save`; Delete posts to
   `/records/delete` without validation. Intake Start is read-only, End
