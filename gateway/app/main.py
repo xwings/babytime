@@ -162,8 +162,32 @@ def _record_feeding_type(
             return existing.get("feeding_type")
         return config.default_feeding_type(cfg)
     if value not in config.FEEDING_TYPES:
-        raise HTTPException(400, "feeding_type must be formula, breastfeeding, or water")
+        raise HTTPException(400, "feeding_type must be formula or breastfeeding")
     return value
+
+
+def _record_categories(
+    activity: str, feeding_type: Optional[str], solid_food_type: Optional[str],
+    cfg: dict, existing: Optional[dict] = None,
+) -> tuple[str, Optional[str], Optional[str]]:
+    """Normalize legacy water writes and validate the selected food type."""
+    if activity == "feeding" and (
+        feeding_type == "water"
+        or (not feeding_type and existing and existing["activity"] == "feeding"
+            and existing.get("feeding_type") == "water")
+    ):
+        activity, solid_food_type = "solid_food", "water"
+    feeding_type = _record_feeding_type(activity, feeding_type, cfg, existing)
+    if activity != "solid_food":
+        return activity, feeding_type, None
+    previous = (
+        existing.get("solid_food_type")
+        if existing and existing["activity"] == "solid_food" else None
+    )
+    choice = previous if solid_food_type is None else solid_food_type.strip() or None
+    if choice and choice != "water" and choice != previous and choice not in config.solid_food_options(cfg):
+        raise HTTPException(400, "solid_food_type must be water or a configured food type")
+    return activity, feeding_type, choice
 
 
 def _segments(
@@ -518,6 +542,7 @@ class EventIn(BaseModel):
     activity: str = "feeding"
     timestamp_epoch: Optional[int] = None
     feeding_type: Optional[str] = None
+    solid_food_type: Optional[str] = None
 
 
 @app.post("/api/events")
@@ -528,8 +553,18 @@ async def api_post_event(event: EventIn):
     cfg = config.load()
     activity = config.canonical_activity(event.activity) or "feeding"
     active = db.get_active(activity)
-    feeding_type = _record_feeding_type(activity, event.feeding_type, cfg, active)
-    default_ml = cfg.get("default_volume_ml") if feeding_type != "water" else None
+    activity, feeding_type, solid_food_type = _record_categories(
+        activity, event.feeding_type, event.solid_food_type, cfg, active,
+    )
+    if solid_food_type == "water":
+        if event.type != "log":
+            raise HTTPException(400, "water requires a log event")
+        db.create_record(
+            start_epoch=ts, stop_epoch=ts, activity=activity,
+            solid_food_type=solid_food_type, device_id=event.device_id,
+        )
+        return state_payload()
+    default_ml = cfg.get("default_volume_ml")
     if event.type == "start":
         if active is None:
             db.create_record(
@@ -537,6 +572,7 @@ async def api_post_event(event: EventIn):
                 activity=activity,
                 device_id=event.device_id,
                 feeding_type=feeding_type,
+                solid_food_type=solid_food_type,
                 volume_ml=_feeding_volume(activity, default_ml, feeding_type),
             )
     elif event.type == "stop":
@@ -552,6 +588,8 @@ async def api_post_event(event: EventIn):
                     volume_ml=_feeding_volume(activity, active["volume_ml"], feeding_type),
                 )
         else:
+            if active and activity == "solid_food":
+                db.update_record(active["id"], solid_food_type=solid_food_type)
             _stop_session(activity, ts, cfg)
     else:
         # Current devices send one `log` event when a feed has finished. If
@@ -587,6 +625,8 @@ async def api_post_event(event: EventIn):
                 device_id=event.device_id,
             )
         elif active:
+            if activity == "solid_food":
+                db.update_record(active["id"], solid_food_type=solid_food_type)
             _stop_session(activity, ts, cfg)
         else:
             db.create_record(
@@ -594,6 +634,7 @@ async def api_post_event(event: EventIn):
                 stop_epoch=ts,
                 activity=activity,
                 device_id=event.device_id,
+                solid_food_type=solid_food_type,
                 volume_ml=_feeding_volume(activity, cfg.get("default_volume_ml")),
             )
     return state_payload()
@@ -651,11 +692,18 @@ def _daily_activity_summary(records: list[dict]) -> dict:
             for r, activity in zip(records, activities)
             if activity == "feeding" and r.get("feeding_type") != "water"
         ),
-        "food_count": activities.count("solid_food"),
+        "food_count": sum(
+            1 for r, activity in zip(records, activities)
+            if activity == "solid_food" and r.get("solid_food_type") != "water"
+        ),
+        "water_count": sum(
+            1 for r, activity in zip(records, activities)
+            if activity == "solid_food" and r.get("solid_food_type") == "water"
+        ),
         "total_g": sum(
             (r["volume_g"] or 0)
             for r, activity in zip(records, activities)
-            if activity == "solid_food"
+            if activity == "solid_food" and r.get("solid_food_type") != "water"
         ),
         "poopoo": activities.count("poopoo"),
         "sleep_count": activities.count("sleep"),
@@ -689,6 +737,7 @@ class RecordIn(BaseModel):
     volume_g: Optional[int] = None
     activity: str = "feeding"
     feeding_type: Optional[str] = None
+    solid_food_type: Optional[str] = None
     notes: Optional[str] = None
     device_id: str = "agent"
 
@@ -705,11 +754,15 @@ async def api_create_record(body: RecordIn):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
     activity = config.canonical_activity(body.activity) or "feeding"
-    feeding_type = _record_feeding_type(activity, body.feeding_type, cfg)
+    activity, feeding_type, solid_food_type = _record_categories(
+        activity, body.feeding_type, body.solid_food_type, cfg,
+    )
     start = _to_epoch(body.start, tz)
     if start is None:
         raise HTTPException(400, "start is required")
-    if activity in {"feeding", "solid_food"}:
+    if solid_food_type == "water":
+        start = stop = _to_epoch(body.stop, tz) or start
+    elif activity in {"feeding", "solid_food"}:
         # A supplied stop is explicit End; otherwise the older single `start`
         # field is interpreted as End. Start is derived from configured duration.
         end = _to_epoch(body.stop, tz) or start
@@ -724,9 +777,10 @@ async def api_create_record(body: RecordIn):
     rid = _create_segments(
         _segments(start, stop, activity, cfg),
         volume_ml=_feeding_volume(activity, body.volume_ml, feeding_type),
-        volume_g=_solid_food_weight(activity, body.volume_g),
+        volume_g=_solid_food_weight(activity, body.volume_g, solid_food_type),
         activity=activity,
         feeding_type=feeding_type,
+        solid_food_type=solid_food_type,
         notes=body.notes or None,
         device_id=body.device_id or "agent",
     )
@@ -755,10 +809,16 @@ async def api_update_record(rid: int, body: RecordIn):
     effective_activity = fields.get("activity") or config.canonical_activity(
         existing["activity"]
     )
-    feeding_type = _record_feeding_type(
-        effective_activity, provided.get("feeding_type"), cfg, existing,
+    effective_activity, feeding_type, solid_food_type = _record_categories(
+        effective_activity, provided.get("feeding_type"),
+        (provided["solid_food_type"] or "") if "solid_food_type" in provided else None,
+        cfg, existing,
     )
+    activity_changed = effective_activity != config.canonical_activity(existing["activity"])
+    if "activity" in provided or activity_changed:
+        fields["activity"] = effective_activity
     fields["feeding_type"] = feeding_type
+    fields["solid_food_type"] = solid_food_type
     if effective_activity == "feeding":
         fields["volume_g"] = None
         if feeding_type == "breastfeeding":
@@ -771,9 +831,11 @@ async def api_update_record(rid: int, body: RecordIn):
             fields["volume_ml"] = None
     elif effective_activity == "solid_food":
         fields["volume_ml"] = None
-        if "volume_g" in provided:
+        if solid_food_type == "water":
+            fields["volume_g"] = None
+        elif "volume_g" in provided:
             fields["volume_g"] = _solid_food_weight(
-                effective_activity, provided["volume_g"]
+                effective_activity, provided["volume_g"], solid_food_type,
             )
         elif "activity" in provided:
             fields["volume_g"] = None
@@ -783,6 +845,8 @@ async def api_update_record(rid: int, body: RecordIn):
 
     time_or_activity_changed = (
         "activity" in provided or "start_epoch" in fields or "stop_epoch" in fields
+        or activity_changed
+        or (solid_food_type == "water") != (existing.get("solid_food_type") == "water")
     )
     tail: list = []
     if effective_activity in {
@@ -797,7 +861,7 @@ async def api_update_record(rid: int, body: RecordIn):
             or existing.get("stop_epoch")
             or existing["start_epoch"]
         )
-        if effective_activity in {"feeding", "solid_food"}:
+        if effective_activity in {"feeding", "solid_food"} and solid_food_type != "water":
             fields["start_epoch"], fields["stop_epoch"] = _feeding_bounds(end_epoch, cfg)
         else:
             fields["start_epoch"] = fields["stop_epoch"] = end_epoch
@@ -965,6 +1029,9 @@ async def ui_home(
             "groups": groups,
             "activities": activities,
             "button_activities": button_activities,
+            "summary_activities": [
+                a for a in button_order if a in {"feeding", "sleep", "poopoo", "solid_food"}
+            ],
             **_activity_card_state(all_records, now),
             "server_epoch": server_epoch,
             "languages": i18n.language_options(),
@@ -977,6 +1044,7 @@ async def ui_home(
             "default_feeding_type": config.default_feeding_type(cfg),
             "poopoo_options": config.poopoo_options(cfg),
             "supplement_options": config.supplement_options(cfg),
+            "solid_food_options": config.solid_food_options(cfg),
             "tz": tz_name,
             "now_date": now.strftime("%Y-%m-%d"),
             "now_time": now.strftime("%H:%M"),
@@ -1000,20 +1068,22 @@ async def ui_home(
 def _feeding_volume(
     activity: str, raw_ml, feeding_type: Optional[str] = None,
 ) -> Optional[int]:
-    """Measured ml applies to formula, water and unclassified legacy milk.
+    """Measured ml applies to formula and unclassified legacy milk.
 
     Accepts a raw form string or an int/None so browser and JSON writes share
     the same normalization rule.
     """
-    if activity != "feeding" or feeding_type == "breastfeeding" or raw_ml is None:
+    if activity != "feeding" or feeding_type in {"breastfeeding", "water"} or raw_ml is None:
         return None
     s = str(raw_ml).strip()
     return int(s) if s else None
 
 
-def _solid_food_weight(activity: str, raw_g) -> Optional[int]:
+def _solid_food_weight(
+    activity: str, raw_g, solid_food_type: Optional[str] = None,
+) -> Optional[int]:
     """Gram amount is only meaningful for Solid food records."""
-    if activity != "solid_food" or raw_g is None:
+    if activity != "solid_food" or solid_food_type == "water" or raw_g is None:
         return None
     value = str(raw_g).strip()
     return int(value) if value else None
@@ -1021,11 +1091,12 @@ def _solid_food_weight(activity: str, raw_g) -> Optional[int]:
 
 def _intake_amounts(
     activity: str, raw_amount, feeding_type: Optional[str] = None,
+    solid_food_type: Optional[str] = None,
 ) -> tuple[Optional[int], Optional[int]]:
     """Map the UI's shared amount input to its unit-specific DB column."""
     return (
         _feeding_volume(activity, raw_amount, feeding_type),
-        _solid_food_weight(activity, raw_amount),
+        _solid_food_weight(activity, raw_amount, solid_food_type),
     )
 
 
@@ -1055,7 +1126,7 @@ async def ui_activity_toggle(activity: str = Form("feeding")):
                 feeding_type=feeding_type,
                 volume_ml=_feeding_volume(
                     activity,
-                    cfg.get("default_volume_ml") if feeding_type != "water" else None,
+                    cfg.get("default_volume_ml"),
                     feeding_type,
                 ),
             )
@@ -1098,11 +1169,14 @@ async def ui_create(
     poopoo_texture: str = Form(""),
     supplement_type: str = Form(""),
     feeding_type: str = Form(""),
+    solid_food_type: str = Form(""),
 ):
     cfg = config.load()
     tz = cfg.get("timezone") or "UTC"
     activity = config.canonical_activity(activity) or "feeding"
-    feeding_type = _record_feeding_type(activity, feeding_type, cfg)
+    activity, feeding_type, solid_food_type = _record_categories(
+        activity, feeding_type, solid_food_type, cfg,
+    )
 
     # Milk and Solid food derive Start from a fixed duration. Sleep starts an
     # open session; completed HH:MM submissions remain compatible. Poopoo and
@@ -1111,7 +1185,9 @@ async def ui_create(
         end_epoch = combine_date_time(date, end_time, tz)
         if end_epoch is None:
             raise HTTPException(400, "date and end_time required")
-        if activity in {"feeding", "solid_food"}:
+        if solid_food_type == "water":
+            start_epoch = stop_epoch = end_epoch
+        elif activity in {"feeding", "solid_food"}:
             start_epoch, stop_epoch = _feeding_bounds(end_epoch, cfg)
         elif activity in {"poopoo", "supplement"}:
             start_epoch = stop_epoch = end_epoch
@@ -1154,7 +1230,7 @@ async def ui_create(
     elif activity == "supplement":
         notes = _supplement_notes(cfg, supplement_type, notes)
     raw_amount = amount if amount.strip() else volume_ml
-    stored_ml, stored_g = _intake_amounts(activity, raw_amount, feeding_type)
+    stored_ml, stored_g = _intake_amounts(activity, raw_amount, feeding_type, solid_food_type)
     # A sleep entered across midnight is stored as one row per day; every
     # other activity is trimmed to the day it started on.
     _create_segments(
@@ -1163,6 +1239,7 @@ async def ui_create(
         volume_g=stored_g,
         activity=activity,
         feeding_type=feeding_type,
+        solid_food_type=solid_food_type,
         notes=notes.strip() or None,
         device_id="web",
     )
@@ -1189,8 +1266,9 @@ async def ui_bulk_save(request: Request):
         existing = existing_by_id.get(rid)
         if existing is None:
             continue
-        feeding_type = _record_feeding_type(
-            activity, form.get(f"feeding_type_{rid}"), cfg, existing,
+        activity, feeding_type, solid_food_type = _record_categories(
+            activity, form.get(f"feeding_type_{rid}"), form.get(f"solid_food_type_{rid}"),
+            cfg, existing,
         )
         end_time_activity = activity in {"feeding", "solid_food", "poopoo", "supplement"}
         original_date = filter_localdate_input(
@@ -1199,12 +1277,15 @@ async def ui_bulk_save(request: Request):
         )
         times_unchanged = (
             activity == existing["activity"]
+            and (solid_food_type == "water") == (existing.get("solid_food_type") == "water")
             and date == original_date
             and stop_time == filter_localtime_only(existing["stop_epoch"], tz, True)
             and (end_time_activity or start_time == filter_localtime_only(existing["start_epoch"], tz, True))
         )
         if times_unchanged:
             start_epoch, stop_epoch = existing["start_epoch"], existing["stop_epoch"]
+        elif solid_food_type == "water":
+            start_epoch = stop_epoch = combine_date_time(date, stop_time or start_time, tz)
         elif activity in {"feeding", "solid_food"}:
             end_epoch = combine_date_time(date, stop_time or start_time, tz)
             if end_epoch is None:
@@ -1236,7 +1317,7 @@ async def ui_bulk_save(request: Request):
         if raw_amount is None:
             legacy_key = "volume_g" if activity == "solid_food" else "volume_ml"
             raw_amount = form.get(f"{legacy_key}_{rid}") or ""
-        volume_ml, volume_g = _intake_amounts(activity, raw_amount, feeding_type)
+        volume_ml, volume_g = _intake_amounts(activity, raw_amount, feeding_type, solid_food_type)
         _update_segments(
             rid,
             _segments(start_epoch, stop_epoch, activity, cfg),
@@ -1244,6 +1325,7 @@ async def ui_bulk_save(request: Request):
             volume_g=volume_g,
             activity=activity,
             feeding_type=feeding_type,
+            solid_food_type=solid_food_type,
             notes=(form.get(f"notes_{rid}") or "").strip() or None,
         )
     for key, value in form.multi_items():
@@ -1273,6 +1355,8 @@ async def ui_save_config(request: Request):
     poopoo_options_present = False
     supplement_rows: list[str] = []
     supplement_options_present = False
+    solid_food_rows: list[str] = []
+    solid_food_options_present = False
     for key, value in form.multi_items():
         if key.startswith("activity_name_"):
             rows.append((key[len("activity_name_"):], str(value).strip()))
@@ -1282,6 +1366,16 @@ async def ui_save_config(request: Request):
             poopoo_options_present = True
         elif key == "supplement_options_present":
             supplement_options_present = True
+        elif key == "solid_food_options_present":
+            solid_food_options_present = True
+        elif key.startswith("solid_food_options_item_"):
+            option = str(value).strip()
+            if "," in option or "\n" in option or "\r" in option:
+                raise HTTPException(400, "solid food options cannot contain commas or newlines")
+            if option.casefold() == "water":
+                raise HTTPException(400, "water is a built-in solid food choice")
+            if option:
+                solid_food_rows.append(option)
         elif key.startswith("supplement_options_item_"):
             option = str(value).strip()
             if "," in option:
@@ -1323,8 +1417,10 @@ async def ui_save_config(request: Request):
             items[key] = ",".join(dict.fromkeys(values))
     if supplement_options_present:
         items["supplement_options"] = ",".join(dict.fromkeys(supplement_rows))
+    if solid_food_options_present:
+        items["solid_food_options"] = ",".join(dict.fromkeys(solid_food_rows))
     if "default_feeding_type" in items and items["default_feeding_type"] not in config.FEEDING_TYPES:
-        raise HTTPException(400, "default_feeding_type must be formula, breastfeeding, or water")
+        raise HTTPException(400, "default_feeding_type must be formula or breastfeeding")
     config.update(items)
     return RedirectResponse("/#config", status_code=303)
 

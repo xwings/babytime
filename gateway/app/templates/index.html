@@ -280,9 +280,17 @@
           {% endfor %}
         </select>
       </label>
+      <label class="is-hidden" data-solid-food-type-field>{{ t('solid_food_type') }}
+        <select name="solid_food_type" disabled>
+          <option value="">{{ t('solid_food_generic') }}</option>
+          {% for option in solid_food_options %}
+          <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+          <option value="water">{{ t('water') }}</option>
+        </select>
+      </label>
       <label class="milk-volume-field" data-intake-dialog-field
              data-milk-label="{{ t('milk_amount') }}"
-             data-water-label="{{ t('water_amount') }}"
              data-solid-food-label="{{ t('solid_food_amount') }}"
              data-ml-unit="{{ t('col_ml') }}"
              data-g-unit="{{ t('col_g') }}">
@@ -371,6 +379,8 @@
     const activity = form?.querySelector('input[name="activity"]');
     const feedingTypeField = form?.querySelector('[data-feeding-type-field]');
     const feedingType = feedingTypeField?.querySelector('select');
+    const solidFoodTypeField = form?.querySelector('[data-solid-food-type-field]');
+    const solidFoodType = solidFoodTypeField?.querySelector('select');
     const defaultFeedingType = {{ default_feeding_type | tojson }};
     const intakeField = form?.querySelector('[data-intake-dialog-field]');
     const poopooField = form?.querySelector('[data-poopoo-dialog-field]');
@@ -413,7 +423,8 @@
     function setDialogMode(mode) {
       const isFeeding = mode === 'feeding';
       const isSolidFood = mode === 'solid_food';
-      const needsAmount = isSolidFood || (isFeeding && feedingType.value !== 'breastfeeding');
+      const needsAmount = (isSolidFood && solidFoodType.value !== 'water') ||
+        (isFeeding && feedingType.value !== 'breastfeeding');
       const isSleep = mode === 'sleep';
       const isPoopoo = mode === 'poopoo';
       const isSupplement = mode === 'supplement';
@@ -421,6 +432,8 @@
       if (activity) activity.value = mode;
       feedingTypeField?.classList.toggle('is-hidden', !isFeeding);
       if (feedingType) feedingType.disabled = !isFeeding;
+      solidFoodTypeField?.classList.toggle('is-hidden', !isSolidFood);
+      if (solidFoodType) solidFoodType.disabled = !isSolidFood;
       intakeField?.classList.toggle('is-hidden', !needsAmount);
       poopooField?.classList.toggle('is-hidden', !isPoopoo);
       supplementField?.classList.toggle('is-hidden', !isSupplement);
@@ -441,9 +454,7 @@
       if (amountLabel && intakeField) {
         amountLabel.textContent = isSolidFood
           ? intakeField.dataset.solidFoodLabel
-          : feedingType.value === 'water'
-            ? intakeField.dataset.waterLabel
-            : intakeField.dataset.milkLabel;
+          : intakeField.dataset.milkLabel;
       }
       if (amountUnit && intakeField) {
         amountUnit.textContent = isSolidFood
@@ -470,7 +481,7 @@
       const firstInput = mode === 'feeding'
         ? feedingType
         : mode === 'solid_food'
-          ? amount
+          ? solidFoodType
           : mode === 'sleep'
             ? etcStart
             : mode === 'poopoo'
@@ -482,6 +493,7 @@
     }
 
     feedingType?.addEventListener('change', () => setDialogMode(activity.value));
+    solidFoodType?.addEventListener('change', () => setDialogMode(activity.value));
     document.addEventListener('click', event => {
       const opener = event.target.closest('[data-open-record-dialog]');
       if (!opener) return;
@@ -525,15 +537,23 @@
               aria-haspopup="dialog" aria-label="{{ t('edit_day_note') }} · {{ g.date }}">{{ icon('journal') }}{{ t('col_day_note') }}</button>
     </div>
     <div class="day-summary">
+      {% for activity in summary_activities %}
+      {% if activity == 'feeding' %}
       <span class="summary-chip milk" title="{{ t('date_milk_summary', n=g.milk_count, plural='' if g.milk_count == 1 else 's', amount=g.total_ml) }}">{{ icon('feeding') }}{{ al('feeding') }} {{ g.milk_count }}{{ t('unit_times') }} · {{ g.total_ml }} {{ t('col_ml') }}</span>
-      <span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }}">{{ icon('solid_food') }}{{ al('solid_food') }} {{ g.food_count }}{{ t('unit_times') }} · {{ g.total_g }} {{ t('col_g') }}</span>
+      {% elif activity == 'sleep' %}
       {% set sleep_duration = t('date_sleep_duration', hours=g.sleep_hours, minutes=g.sleep_minutes) %}
       <span class="summary-chip sleep" title="{{ t('date_sleep_summary', n=g.sleep_count, plural='' if g.sleep_count == 1 else 's', duration=sleep_duration) }}">{{ icon('sleep') }}{{ al('sleep') }} {{ g.sleep_count }}{{ t('unit_times') }} · {{ sleep_duration }}</span>
+      {% elif activity == 'poopoo' %}
       <span class="summary-chip diaper" title="{{ t('date_poopoo_summary', n=g.poopoo, plural='' if g.poopoo == 1 else 's') }}">{{ icon('poopoo') }}{{ t('date_poopoo_count', n=g.poopoo) }}</span>
+      {% elif activity == 'solid_food' %}
+      <span class="summary-chip food" title="{{ t('date_food_summary', n=g.food_count, plural='' if g.food_count == 1 else 's', amount=g.total_g) }} · {{ t('date_water_summary', n=g.water_count, plural='' if g.water_count == 1 else 's') }}">{{ icon('solid_food') }}{{ t('solid_food_generic') }} {{ g.food_count }}{{ t('unit_times') }} · {{ g.total_g }} {{ t('col_g') }} · {{ t('water') }} {{ g.water_count }}{{ t('unit_times') }}</span>
+      {% endif %}
+      {% endfor %}
     </div>
     {% if g.note %}<p class="day-note-preview">{{ g.note }}</p>{% endif %}
     <ol class="day-timeline" id="timeline-{{ g.date }}"{% if g.date != now_date %} hidden{% endif %}>
       {% for r in g.records %}
+      {% set water = r.activity == 'solid_food' and r.solid_food_type == 'water' %}
       {% set intake = r.activity in ['feeding', 'solid_food'] %}
       {% set point = r.activity in ['poopoo', 'supplement'] or (r.stop_epoch is not none and r.stop_epoch == r.start_epoch) %}
       {% set amount = r.volume_ml if r.activity == 'feeding' else r.volume_g %}
@@ -541,13 +561,13 @@
       {% set edit_date = (r.stop_epoch or r.start_epoch) if r.activity in ['feeding', 'solid_food', 'poopoo', 'supplement'] else r.start_epoch %}
       <li class="timeline-item" data-activity="{{ r.activity }}">
         <button type="button" class="timeline-entry" aria-haspopup="dialog"
-                data-record='{{ {"id": r.id, "activity": r.activity, "feeding_type": r.feeding_type or "", "date": edit_date | localdate_input(tz), "start_time": r.start_epoch | localtime_only(tz, true), "stop_time": r.stop_epoch | localtime_only(tz, true), "amount": amount if intake and amount is not none else "", "notes": r.notes or ""} | tojson }}'>
+                data-record='{{ {"id": r.id, "activity": r.activity, "feeding_type": r.feeding_type or "", "solid_food_type": r.solid_food_type or "", "date": edit_date | localdate_input(tz), "start_time": r.start_epoch | localtime_only(tz, true), "stop_time": r.stop_epoch | localtime_only(tz, true), "amount": amount if intake and not water and amount is not none else "", "notes": r.notes or ""} | tojson }}'>
           <time class="timeline-time">{{ r.timeline_epoch | localtime_only(tz) }}</time>
           <span class="timeline-marker" aria-hidden="true"></span>
           <span class="timeline-content">
             <span class="timeline-line">
-              <span class="timeline-activity">{{ icon(r.activity) }}<span>{{ t('feeding_type_' + r.feeding_type) if r.activity == 'feeding' and r.feeding_type else al(r.activity) }}</span></span>
-              {% if intake and amount is not none %}
+              <span class="timeline-activity">{{ icon(r.activity) }}<span>{% if water %}{{ t('water') }}{% elif r.activity == 'solid_food' %}{{ r.solid_food_type or t('solid_food_generic') }}{% elif r.activity == 'feeding' and r.feeding_type %}{{ t('feeding_type_' + r.feeding_type) }}{% else %}{{ al(r.activity) }}{% endif %}</span></span>
+              {% if intake and not water and amount is not none %}
               <span class="timeline-value">{{ amount }} <span>{{ t('col_g') if r.activity == 'solid_food' else t('col_ml') }}</span></span>
               {% elif r.stop_epoch is none %}
               <span class="timeline-running">{{ t('record_running') }}</span>
@@ -605,6 +625,15 @@
           {% endfor %}
         </select>
       </label>
+      <label data-edit-solid-food-type>{{ t('solid_food_type') }}
+        <select data-edit-field="solid_food_type">
+          <option value="">{{ t('solid_food_generic') }}</option>
+          {% for option in solid_food_options %}
+          <option value="{{ option }}">{{ option }}</option>
+          {% endfor %}
+          <option value="water">{{ t('water') }}</option>
+        </select>
+      </label>
       <label>{{ t('col_date') }}<input type="date" data-edit-field="date" required></label>
       <div class="record-time-fields">
         <label data-edit-start>{{ t('col_start') }}<input type="time" step="60" data-edit-field="start_time"></label>
@@ -652,7 +681,6 @@
     const deleteConfirm = {{ t('record_delete_confirm') | tojson }};
     const saveError = {{ t('record_save_error') | tojson }};
     const milkAmount = {{ (t('milk_amount') + ' (' + t('col_ml') + ')') | tojson }};
-    const waterAmount = {{ (t('water_amount') + ' (' + t('col_ml') + ')') | tojson }};
     const foodAmount = {{ (t('solid_food_amount') + ' (' + t('col_g') + ')') | tojson }};
     const defaultFeedingType = {{ default_feeding_type | tojson }};
     const durationError = {{ t('record_duration_invalid', minutes=max_record_duration_minutes) | tojson }};
@@ -660,7 +688,9 @@
     function syncFields() {
       const activity = fields.activity.value;
       const feeding = activity === 'feeding';
-      const intake = activity === 'feeding' || activity === 'solid_food';
+      const solidFood = activity === 'solid_food';
+      const water = solidFood && fields.solid_food_type.value === 'water';
+      const intake = feeding || (solidFood && !water);
       const needsAmount = intake && !(feeding && fields.feeding_type.value === 'breastfeeding');
       const timed = ['sleep', 'etc'].includes(activity) || fields.activity.selectedOptions[0]?.dataset.timed === '1';
       const point = !intake && !timed;
@@ -672,11 +702,13 @@
       fields.stop_time.required = intake || point;
       form.querySelector('[data-edit-feeding-type]').classList.toggle('is-hidden', !feeding);
       fields.feeding_type.disabled = !feeding;
+      form.querySelector('[data-edit-solid-food-type]').classList.toggle('is-hidden', !solidFood);
+      fields.solid_food_type.disabled = !solidFood;
       form.querySelector('[data-edit-amount]').classList.toggle('is-hidden', !needsAmount);
       fields.amount.disabled = !needsAmount;
       form.querySelector('[data-edit-amount-label]').textContent = activity === 'solid_food'
         ? foodAmount
-        : fields.feeding_type.value === 'water' ? waterAmount : milkAmount;
+        : milkAmount;
       form.querySelector('[data-open-record-hint]').classList.toggle('is-hidden', !timed);
       if (point && !fields.stop_time.value) fields.stop_time.value = fields.start_time.value;
       fields.stop_time.setCustomValidity('');
@@ -701,6 +733,12 @@
           option.dataset.timed = original.start_time !== original.stop_time ? '1' : '0';
           fields.activity.add(option);
         }
+        fields.solid_food_type.querySelector('[data-legacy-option]')?.remove();
+        if (original.solid_food_type && !Array.from(fields.solid_food_type.options).some(option => option.value === original.solid_food_type)) {
+          const option = new Option(original.solid_food_type, original.solid_food_type);
+          option.dataset.legacyOption = '1';
+          fields.solid_food_type.add(option);
+        }
         Object.entries(fields).forEach(([name, input]) => {
           input.name = name + '_' + original.id;
           if (input.type === 'time') {
@@ -721,6 +759,7 @@
     });
     fields.activity.addEventListener('change', syncFields);
     fields.feeding_type.addEventListener('change', syncFields);
+    fields.solid_food_type.addEventListener('change', syncFields);
     form.addEventListener('input', () => fields.stop_time.setCustomValidity(''));
 
     document.querySelectorAll('[data-day-note]').forEach(button => {
@@ -877,6 +916,30 @@
                   data-add-option-list-item>{{ t('config_add_option') }}</button>
         </div>
         {% endfor %}
+      </div>
+    </fieldset>
+    <fieldset class="config-poopoo-options full-width">
+      <legend>{{ t('config_solid_food_options') }}</legend>
+      <input type="hidden" name="solid_food_options_present" value="1">
+      <p class="hint">{{ t('config_solid_food_options_hint') }}</p>
+      <div class="poopoo-config-groups">
+        <div class="poopoo-config-group"
+             data-option-list-group
+             data-option-prefix="solid_food_options_item_">
+          <h3>{{ t('solid_food_type') }}</h3>
+          <div data-option-list-rows>
+            {% for option in solid_food_options %}
+            <div class="poopoo-option-row">
+              <input type="text" name="solid_food_options_item_{{ loop.index0 }}"
+                     value="{{ option }}" pattern="[^,]+" aria-label="{{ t('solid_food_type') }}">
+              <button type="button" class="poopoo-option-remove row-remove ghost"
+                      aria-label="{{ t('config_remove_option') }}">×</button>
+            </div>
+            {% endfor %}
+          </div>
+          <button type="button" class="poopoo-option-add ghost"
+                  data-add-option-list-item>{{ t('config_add_option') }}</button>
+        </div>
       </div>
     </fieldset>
     <fieldset class="config-poopoo-options full-width">

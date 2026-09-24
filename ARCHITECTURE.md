@@ -36,10 +36,10 @@ cache and pending queue; the gateway owns durable records and day notes.
 import routes. Its lifespan starts one scheduler task.
 
 Epoch seconds are the wire/storage format; saved gateway `timezone`, not
-`TZ`, controls calendar grouping. Milk/Solid food entries are End times
+`TZ`, controls calendar grouping. Milk/Food entries (except Water) are End times
 with Start derived from `auto_stop_minutes`; completed sleep splits at
 midnight and other completed spans clamp to their first day
-(`main._segments`, `util.midnight_segments`). Legacy open records stay
+(`main._segments`, `util.midnight_segments`); Water is a point. Legacy open records stay
 compatible. Token/trusted-network checks guard all application routes;
 proxy trust is resolved by the app, so uvicorn runs `--no-proxy-headers`.
 Read the API owner before changing auth or timestamps, and firmware owners
@@ -60,7 +60,7 @@ before changing state payloads.
 | --- | --- | --- |
 | Gateway setup | `python3 -m venv .venv`, then `.venv/bin/pip install -r requirements.txt` in `gateway/` | Python 3.12+; pinned dependencies installed. |
 | Python syntax | `python3 -m compileall -q gateway/app skill/scripts` at root | Exit 0 proves parsing only. |
-| Gateway tests | `PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v` at root | 17 cases; disposable SQLite/config and patched clock. |
+| Gateway tests | `PYTHONPATH=gateway gateway/.venv/bin/python -m unittest discover -s gateway/tests -v` at root | 17 cases; disposable state. |
 | Firmware build | `make build DEVICE=dnesp32s3b`; `make build DEVICE=esp32p4_7b` at root | PlatformIO, toolchain downloads and a local `config.h`; each reports SUCCESS. Override `PIO` if needed. |
 | Runtime / UI / storage | Owner Verification sections and their topics | Disposable state; API/CLI smoke, browser and hardware checks prove different behavior. |
 

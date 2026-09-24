@@ -19,6 +19,7 @@ DEFAULTS: dict = {
     "poopoo_color_options": "yellow,green",
     "poopoo_texture_options": "soft,hard",
     "supplement_options": "AD,D3",
+    "solid_food_options": "",
     "timezone": "UTC",
     "ui_show_count": "10",
     "trusted_networks": "10.0.0.0/8",
@@ -31,7 +32,7 @@ POOPOO_OPTION_KEYS = {
     "texture": "poopoo_texture_options",
 }
 
-FEEDING_TYPES = ("formula", "breastfeeding", "water")
+FEEDING_TYPES = ("formula", "breastfeeding")
 
 _BUILTIN_ACTIVITY_ALIASES = {
     "feeding": "feeding",
@@ -159,6 +160,16 @@ def supplement_options(cfg: dict) -> list[str]:
         value = part.strip()
         if value and value not in seen:
             seen.add(value)
+            values.append(value)
+    return values
+
+
+def solid_food_options(cfg: dict) -> list[str]:
+    """Custom food choices; water is a separate, permanent built-in choice."""
+    values: list[str] = []
+    for part in (cfg.get("solid_food_options") or "").replace("\n", ",").split(","):
+        value = part.strip()
+        if value and value.casefold() != "water" and value not in values:
             values.append(value)
     return values
 

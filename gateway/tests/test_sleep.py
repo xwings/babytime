@@ -1,4 +1,5 @@
 import asyncio
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -40,7 +41,7 @@ class SleepTests(unittest.TestCase):
             "stop_time": "", "duration": "", "amount": "", "volume_ml": "",
             "activity": "sleep", "notes": "", "poopoo_amount": "",
             "poopoo_color": "", "poopoo_texture": "", "supplement_type": "",
-            "feeding_type": "",
+            "feeding_type": "", "solid_food_type": "",
             **fields,
         }))
 
@@ -162,6 +163,10 @@ class SleepTests(unittest.TestCase):
         self.assertIn('class="day-timeline"', html)
         self.assertIn('id="edit-record-dialog"', html)
         self.assertNotIn('class="row-check"', html)
+        self.assertEqual(re.findall(r'class="summary-chip ([^"]+)"', html), ["milk", "sleep", "diaper", "food"])
+        self.cfg["activity_types"] = "feeding,solid_food"
+        response = asyncio.run(main.ui_home(Request({"type": "http", "headers": []})))
+        self.assertEqual(re.findall(r'class="summary-chip ([^"]+)"', response.body.decode()), ["milk", "sleep", "diaper", "food"])
 
     def test_sleep_card_tracks_last_completed_and_current_sleep(self):
         state = main.state_payload()
@@ -219,17 +224,19 @@ class SleepTests(unittest.TestCase):
     def test_popup_notes_and_amount_edits_preserve_exact_times(self):
         self.cfg["auto_stop_minutes"] = "30"
         cases = [
-            ("sleep", "23:40:17", "23:59:59", ""),
-            ("sleep", "22:00:31", "", ""),
-            ("feeding", "11:45:23", "12:00:23", "100"),
-            ("solid_food", "12:45:00", "13:00:00", "40"),
+            ("sleep", "23:40:17", "23:59:59", "", None),
+            ("sleep", "22:00:31", "", "", None),
+            ("feeding", "11:45:23", "12:00:23", "100", None),
+            ("solid_food", "12:45:00", "13:00:00", "40", None),
+            ("solid_food", "13:45:17", "14:00:17", "", "water"),
         ]
-        for activity, start_time, stop_time, amount in cases:
+        for activity, start_time, stop_time, amount, solid_food_type in cases:
             with self.subTest(activity=activity, stop_time=stop_time):
                 start = self.epoch("2026-09-23", start_time)
                 stop = self.epoch("2026-09-23", stop_time) if stop_time else None
-                feeding_type = "water" if activity == "feeding" else None
-                rid = db.create_record(start, stop, activity=activity, feeding_type=feeding_type)
+                feeding_type = "formula" if activity == "feeding" else None
+                rid = db.create_record(start, stop, activity=activity, feeding_type=feeding_type,
+                                       solid_food_type=solid_food_type)
                 response = asyncio.run(main.ui_bulk_save(self.form_request({
                     "record_id": str(rid), f"date_{rid}": "2026-09-23",
                     f"start_time_{rid}": start_time, f"stop_time_{rid}": stop_time,
@@ -241,6 +248,10 @@ class SleepTests(unittest.TestCase):
                 self.assertEqual((row["start_epoch"], row["stop_epoch"]), (start, stop))
                 self.assertEqual(row["notes"], "updated note")
                 self.assertEqual(row["feeding_type"], feeding_type)
+                self.assertEqual(row["solid_food_type"], solid_food_type)
+                if solid_food_type == "water":
+                    self.assertIsNone(row["volume_ml"])
+                    self.assertIsNone(row["volume_g"])
                 if amount:
                     self.assertEqual(row["volume_ml" if activity == "feeding" else "volume_g"], int(amount))
         self.assertEqual(len(db.list_records()), len(cases))

@@ -40,16 +40,15 @@ lock/cache, `sqlite3.Row` dicts, parameterized SQL and allowlisted updates.
   creation; `_lock` serializes helper bodies and each write commits.
 - Schema: `records(id PK AUTOINCREMENT, start_epoch NOT NULL, stop_epoch,
   volume_ml, volume_g, notes, activity DEFAULT 'feeding', device_id DEFAULT
-  '', feeding_type, created_at)` with the single index `idx_records_start(start_epoch
+  '', feeding_type, solid_food_type, created_at)` with the single index `idx_records_start(start_epoch
   DESC)`; `day_notes(date PK, note, updated_at)`. `init` runs `CREATE IF
-  NOT EXISTS`, then probes `table_info` to add `volume_g` and nullable `feeding_type`; no version table
-  exists. A legacy `config` table is read by `legacy_config_rows` and never
-  dropped.
-- Helpers: `create_record(start, stop=None, volume_ml, volume_g, notes,
-  activity='feeding', device_id='', feeding_type=None) -> id`; `get_active(activity=None)`
-  newest open row, optionally of one activity; `stop_active(stop,
-  activity=None) -> bool` closes the newest open row; `update_record(rid,
-  **fields)` silently drops unknown keys; `delete_record`;
+  NOT EXISTS`, then adds missing `volume_g`, `feeding_type`, `solid_food_type`.
+  Legacy feeding/water rows become solid_food/water with NULL amounts and
+  feeding_type; completed timestamps/metadata survive, open water closes at
+  Start. Migration is idempotent. The legacy `config` table is never dropped.
+- Helpers: `create_record` returns an id; `get_active(activity=None)` finds
+  the newest open row; `stop_active(stop, activity=None)` closes it and returns
+  bool; `update_record(rid, **fields)` drops unknown keys; `delete_record`;
   `list_records(limit, ids, offset, activity)` orders by
   `COALESCE(stop, start) DESC`, ignores the other filters when `ids` is
   given and applies `offset` only with `limit`; `count_records` has no
@@ -72,14 +71,17 @@ lock/cache, `sqlite3.Row` dicts, parameterized SQL and allowlisted updates.
   `timed_activities` sleep,etc; `auto_stop_minutes` 15; `feeding_alert_minutes`
   120; `default_volume_ml` ""; `default_feeding_type` formula; `default_language` en; `poopoo_amount_options`
   many,less; `poopoo_color_options` yellow,green; `poopoo_texture_options`
-  soft,hard; `supplement_options` AD,D3; `timezone` UTC; `ui_show_count` 10;
+  soft,hard; `supplement_options` AD,D3; `solid_food_options` empty; `timezone` UTC; `ui_show_count` 10;
   `trusted_networks` 10.0.0.0/8; `trusted_proxies` "".
 - `canonical_activity` casefolds aliases (`milk`, `solid food`, `solidfood`,
   `subpliment`). `activity_list` always starts with `feeding`, `solid_food`
   and keeps custom names. `timed_activities` drops Milk/Food/Poopoo/Supplement,
   adds `etc` whenever it is a configured type, and never removes `sleep`.
-- `FEEDING_TYPES` is formula,breastfeeding,water; `default_feeding_type(cfg)`
-  falls back to formula for invalid saved values. Legacy record categories stay NULL.
+- `FEEDING_TYPES` is formula,breastfeeding; invalid defaults (including old
+  water) fall back to formula. Unclassified legacy milk categories stay NULL.
+- Food options are ordered, deduplicated comma/newline lists; reserved Water
+  is excluded from configurable names and supplied by the UI. NULL food type
+  means generic food, `water` means quantity-free water, other values are names.
 - Poopoo/Supplement options are ordered, deduplicated comma/newline lists
   (`poopoo_options` keyed by `POOPOO_OPTION_KEYS`). Invalid CIDRs are dropped.
   `int_value(cfg, key, default, minimum)` clamps; `feeding_alert_minutes`
@@ -89,11 +91,9 @@ lock/cache, `sqlite3.Row` dicts, parameterized SQL and allowlisted updates.
 
 ## Dependencies and Boundaries
 
-Stdlib-only persistence. [API](gateway-api.md) and
-[Scheduler](gateway-scheduler.md) consume helpers; read those owners when
-changing call semantics, transactions or time fields. Read
-[UI](gateway-ui.md) when changing settings/options rendered in forms.
-No route imports belong here.
+Stdlib-only persistence. Read [API](gateway-api.md) and
+[Scheduler](gateway-scheduler.md) for helper/time changes, [UI](gateway-ui.md)
+for settings/options. No route imports belong here.
 
 ## Change Guide
 
@@ -105,10 +105,8 @@ No route imports belong here.
 
 ## Verification
 
-Run the root syntax check and unittest command: `gateway/tests/test_sleep.py`
-exercises `init`, `create_record`, `get_active`, `stop_active`,
-`clone_segments`, `list_records(ids=)` and `update_record` through HTTP
-handlers with `db._DB_PATH`/`db._conn` patched. Isolated stdlib smoke from root:
+Run root syntax/unittest checks. Sleep tests exercise storage through routes
+with disposable state. Isolated stdlib smoke from root:
 
 ```sh
 PYTHONPATH=gateway python3 - <<'PY'
@@ -132,9 +130,9 @@ print('storage smoke passed')
 PY
 ```
 
-`gateway/tests/test_feeding.py` covers old-schema intake/category migration,
-config persistence/defaults, category CRUD and water exclusion from totals.
-Legacy config migration, ordering, deletion and other parsing remain untested.
+Feeding tests cover old-schema/category migrations, config defaults/options,
+category CRUD and separate water totals. Legacy config migration, ordering,
+deletion and other parsing lack dedicated tests.
 
 ## Known Gaps
 

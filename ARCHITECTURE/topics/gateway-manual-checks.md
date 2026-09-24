@@ -55,8 +55,14 @@ Browser checks for template, CSS, JavaScript or translation edits, at
    a cross-midnight stop splits and the timer cap leaves it open.
 4. Navigate tabs, dialogs and folds by keyboard; observe focus and ARIA
    state, long custom names, responsive labels and reduced-motion mode.
-5. Confirm card order Milk, Sleep, Poopoo, Solid food, Supplement, Etc,
-   followed by configured custom activities. Idle Sleep shows HH:MM since
+5. Confirm card order Milk, Sleep, Poopoo, Solid food / Water, Supplement, Etc,
+   followed by configured custom activities; summaries follow the same
+   order for their four categories. The food button is 辅食/水 in Chinese.
+   Milk offers only formula/breastfeeding. Add/remove food types in settings,
+   save/reload and log a selected type with grams. Water has no amount control
+   on add/edit, persists as a point without ml/g and has a separate daily count.
+   Edit a record after removing its food type; the saved type must survive.
+   Switch food ↔ water and verify quantities and bounds. Idle Sleep shows HH:MM since
    its latest End; a remote start switches to elapsed Start and a stop
    action, and a remote stop restores the idle timer. Poopoo shows today's
    count (including 0), refreshes after remote edits, and resets at saved-
@@ -75,8 +81,7 @@ Read the [UI owner](../modules/gateway-ui.md) before browser edits and the
 
 ## Evidence and Gaps
 
-The API/CLI sequence passed in this refresh on a loopback port with a
-temporary database (Python 3.13 venv, pinned dependencies). No browser
-check ran in this refresh; there is no committed browser suite and no
-Safari/iOS or physical-device evidence. A screenshot alone cannot prove
-submission, persistence or keyboard behavior.
+API/CLI and Chromium checks passed against disposable loopback storage:
+EN/ZH responsive layouts, all quick-log modes, food options, water quantities,
+summary order, edits/deletes, exact timestamps and keyboard behavior. There
+is no committed browser suite or Safari/iOS/physical-device evidence.

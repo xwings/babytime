@@ -18,8 +18,11 @@ Read when: changing timestamps, intake derivation, sleep sessions, midnight spli
   `max(0, end − auto_stop_minutes*60)` and keeps the first midnight segment,
   so an intake at 00:05 is stored 23:50–23:59:59 and grouped on the previous
   day. Poopoo/Supplement are point rows with equal bounds. `volume_ml` is
-  formula/water/legacy-Milk only (breastfeeding stores no ml); `volume_g` Food-only.
-  All three feeding categories retain the same end-time rules.
+  formula/legacy-Milk only (breastfeeding stores no ml); `volume_g` Food-only.
+  Solid food with `solid_food_type=water` is a point at the requested End,
+  without either amount or a derived Start, including just after midnight.
+  Legacy water history retains completed epochs through migration; unchanged
+  note edits preserve them. Changing to/from Water re-derives the bounds.
 - Explicit spans: normalized spans cap at 30 minutes except sleep (24 h);
   an earlier stop is read as the next day. Legacy completed sleep accepts
   `HH:MM` `duration` up to 23:59; Etc takes Start/End.
@@ -43,7 +46,9 @@ Read when: changing timestamps, intake derivation, sleep sessions, midnight spli
   activity is active; `stop` closes the newest via `_stop_session` with no
   duration guard; `log` records a feeding End (normalizing a legacy open
   feeding), always a point row for poopoo/supplement, and close-or-point
-  for other timed types. New formula device rows receive `default_volume_ml`; water/breastfeeding do not.
+  for other timed types. New formula device rows receive `default_volume_ml`;
+  breastfeeding does not. Water accepts only `log`, stores a point under
+  solid_food, and has no amount; start/stop requests return 400.
   Missing category uses the configured default for new rows; closing an existing
   row preserves its category unless explicitly supplied.
 - Grouping and order: `_record_date_epoch` (canonical names) groups
@@ -51,7 +56,7 @@ Read when: changing timestamps, intake derivation, sleep sessions, midnight spli
   `ui_home` sorts dates descending and entries by `timeline_epoch` (raw
   names: intake/point End, session Start, id tie-break); JSON list order is
   unchanged. `GET /api/records?date=` returns oldest-first rows, the day
-  note and milk/food/poopoo/sleep totals; water is excluded from milk totals
+  note and milk/food/poopoo/sleep totals plus `water_count`; water is excluded from food/milk totals
   and Last fed/reminders; `feeds` counts truthy `volume_ml`.
 - Preservation: `/records/save` with unchanged exact Date/Start/End/activity
   keeps the original epochs on notes/amount edits, including midnight

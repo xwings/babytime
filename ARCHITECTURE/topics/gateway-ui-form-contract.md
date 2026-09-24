@@ -20,14 +20,14 @@ Read when: changing form field names, `data-*` hooks, browser-called endpoints, 
   custom), `POST /records`, `POST /config` (redirects to `/#config`),
   `GET /lang/en|zh` and `?page=N`. Stylesheet loads as
   `/static/style.css?v=<tag>`; bump the tag on CSS edits.
-- `/records` fields: `activity`, `feeding_type`, `amount`, `poopoo_amount|color|texture`,
+- `/records` fields: `activity`, `feeding_type`, `solid_food_type`, `amount`, `poopoo_amount|color|texture`,
   `supplement_type`, `notes` (two same-named textareas; only the enabled
   one submits), `date`, `start_time`, `end_time`. Sleep reuses the
   `data-etc-start-time-field` hook for its Start input; End stays disabled.
   Legacy `duration`, `stop_time` and `volume_ml` are server-accepted but no
   longer sent.
 - `/records/save` fields: `record_id`, `activity_ID`, `date_ID`,
-  `start_time_ID`, `stop_time_ID`, `amount_ID`, `feeding_type_ID`, `notes_ID`, `day_note_DATE`;
+  `start_time_ID`, `stop_time_ID`, `amount_ID`, `feeding_type_ID`, `solid_food_type_ID`, `notes_ID`, `day_note_DATE`;
   legacy `volume_ml_ID`/`volume_g_ID` accepted. The edit dialog renames
   `data-edit-field` inputs to `*_ID` on open and fills them from the
   entry's `data-record` JSON. Time controls use `step="60"` and show `HH:MM`;
@@ -39,24 +39,30 @@ Read when: changing form field names, `data-*` hooks, browser-called endpoints, 
   `poopoo_options_present` plus `poopoo_{amount|color|texture}_options_item_N`
   (prefix from `config.POOPOO_OPTION_KEYS` + `_item_`),
   `supplement_options_present` plus `supplement_options_item_N`,
+  `solid_food_options_present` plus `solid_food_options_item_N`,
   `default_language`, `default_feeding_type`, and the `config_keys_simple` inputs. Option inputs
-  use `pattern="[^,]+"`; the server rejects commas with 400. Presence
+  use `pattern="[^,]+"`; the server rejects commas with 400. Food types also
+  reject newlines and reserved Water (case-insensitive). Presence
   markers preserve intent when an option list is emptied.
 - `ui_home` context: `request`, `lang`, `html_lang`, `t`, `al`, `pol`,
   `groups`, `activities`, `languages`, `timed`, `active_map`, `last_fed`,
   `button_activities` (preferred built-in card order, then custom types),
+  `summary_activities` (four summary types from the same preferred order),
   `active_sleep`, `last_sleep`, `today_poopoo`, `day_end_epoch`, `server_epoch`,
   `feeding_alert` (`due`, `threshold_minutes`), `config`, `feeding_types`,
   `default_feeding_type`, `poopoo_options`,
-  `supplement_options`, `tz`, `now_date`, `now_time`, `page`, `total_pages`,
+  `supplement_options`, `solid_food_options`, `tz`, `now_date`, `now_time`, `page`, `total_pages`,
   `dates_per_page` (unused), `max_record_duration_minutes`,
   `config_keys_simple`. Group keys: `date`, `records`, `note`, `milk_count`,
-  `total_ml`, `food_count`, `total_g`, `sleep_count`, `sleep_hours`,
+  `total_ml`, `food_count`, `total_g`, `water_count`, `sleep_count`, `sleep_hours`,
   `sleep_minutes`, `sleep_duration`, `poopoo`. Record keys: `id`, `activity`, `start_epoch`,
-  `stop_epoch`, `volume_ml`, `volume_g`, `feeding_type`, `notes`, `timeline_epoch`.
+  `stop_epoch`, `volume_ml`, `volume_g`, `feeding_type`, `solid_food_type`, `notes`, `timeline_epoch`.
   `active_map` excludes solid_food/poopoo/supplement/etc.
-- Reminder ticks use `.activity-bar` data `last-fed-epoch` and `milk-active`;
-  active Water retains its close button without suppressing milk reminders.
+- Food selectors use `solid_food_type`: empty generic food, configured names,
+  or reserved `water`. Water disables amount and editor Start; only its
+  occurrence time is editable. Removed saved food names are inserted with
+  `new Option` when opening the editor. Reminder ticks use `.activity-bar`
+  data `last-fed-epoch` and `milk-active`.
 - `.activity-bar` data `server-epoch` seeds the clock offset; `day-end-epoch`
   triggers a Poopoo count reset and state refresh at local midnight.
   `[data-poopoo-count]` holds the daily count; `last-sleep-label` and

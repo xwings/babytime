@@ -26,24 +26,17 @@ HTTP CLI. Persistence, scheduling and presentation are partner owners.
 
 ## Local Conventions
 
-Follow [root conventions](../../ARCHITECTURE.md#code-conventions). Observed:
-async routes call synchronous storage helpers; Pydantic models validate
-JSON; `HTTPException` reports client errors; forms redirect 303 after
-writes. Form paths silently skip unknown `record_id`, missing dates/times
-and unparseable intake ends. Config parsing, amount normalization and
-midnight helpers are shared across browser/device/JSON paths, but the
-paths are not identical: keep legacy fields explicitly.
+Follow [root conventions](../../ARCHITECTURE.md#code-conventions). Async routes
+call synchronous storage; Pydantic validates JSON; `HTTPException` reports
+client errors. Forms skip unknown IDs and missing dates/times. Browser/device/
+JSON paths share config, amounts and midnight helpers; retain legacy fields.
 
 ## Contracts and Invariants
 
-- Routes, all behind the app-level `require_auth` dependency (the `/static`
-  mount and FastAPI docs are outside it): `POST /api/events`; `GET
-  /api/state`; `GET /api/records` (`limit` default 100 newest-first, or
-  `date=YYYY-MM-DD`); `POST /api/records`; `PATCH|DELETE /api/records/{rid}`;
-  `GET /api/day_notes`; `PUT /api/day_notes/{date}`; `GET /api/config`;
-  `GET /api/activities`; `GET /`; `GET /lang/{code}`; 303 form posts
-  `/ui/activity`, `/records`, `/records/save`, `/records/delete`, `/config`.
-  JSON routes return 404 for missing IDs; a blank day note deletes.
+- Routes use app-level `require_auth`; `/static` and FastAPI docs are outside
+  it. Route decorators in `main.py` are the endpoint inventory. Record GET
+  defaults to 100 newest-first or takes `date=YYYY-MM-DD`; missing IDs return
+  404; blank day notes delete; successful form writes redirect 303.
 - `lifespan` runs `db.init`, migrates absent JSON config from the legacy
   table, starts one scheduler task and cancels/awaits it on shutdown.
   `GATEWAY_TOKEN` is stripped at import; empty opens all routes. Saved
@@ -66,25 +59,27 @@ paths are not identical: keep legacy fields explicitly.
   [record time rules](../topics/gateway-record-time-rules.md) before
   changing any timestamp, intake, sleep, split, device-event or grouping
   behavior; it holds the full contract and its gaps.
-- `/api/state` holds feeding-only `active` and `last_feeding`,
-  `today_feeds`/`today_ml`, eight mixed `history` rows, `server_epoch`,
-  `feeding_duration_minutes` and `feeding_alert{due, elapsed_seconds,
-  threshold_minutes, message}`; firmware and browser decode it. Additive
-  browser fields: `active_sleep`, `last_sleep` (newest open/completed Sleep
-  records or null), `today_poopoo` (count in the saved timezone's half-open
-  midnight-to-midnight interval), `day_end_epoch` (next local midnight).
-  `_activity_card_state` supplies the same values to `ui_home`; one server
-  epoch anchors each response's clock and calendar. Firmware reads its
-  existing named fields and ignores these additions.
-- `feeding_type` on records/events is formula,breastfeeding,water; omitted
-  creates use `default_feeding_type`, edits preserve it (including legacy NULL).
-  Other activities clear it; breastfeeding has no ml. Water is excluded from
-  milk totals/Last fed. Invalid types/default config selections return 400.
+- `/api/state`: milk `active`/`last_feeding`, `today_feeds`/`today_ml`, eight
+  mixed `history` rows, `server_epoch`, `feeding_duration_minutes`,
+  `feeding_alert{due, elapsed_seconds, threshold_minutes, message}`.
+  Browser fields: `active_sleep`/`last_sleep` (or null), `today_poopoo`
+  (half-open local day), `day_end_epoch` (next midnight). `_activity_card_state`
+  also serves `ui_home`; one epoch anchors clock/calendar. Firmware ignores
+  additive fields.
+- `feeding_type` is formula/breastfeeding; omitted creates use the configured
+  default, edits preserve it (including legacy NULL). Breastfeeding has no ml.
+  `solid_food_type` is NULL (generic food), a configured food name, or `water`.
+  Unknown new choices return 400; removed saved choices survive unchanged edits.
+  Other activities clear both category fields. Legacy `feeding_type=water`
+  writes normalize to solid_food/water. Water has no ml/g, uses a point timestamp,
+  and accepts device `log` only (start/stop return 400). Daily `water_count` is
+  separate from food/milk totals and never resets Last fed.
 - Poopoo/Supplement notes serialize as `Amount: x; Color: y; Texture: z;
   Extra notes: …` and `Supplement: x; Extra notes: …`; a configured option
   group without a valid selection is 400. `/config` rebuilds
   `activity_types`/`timed_activities` from `activity_name_N`/`activity_timed_N`,
-  forces `etc` timed, strips built-in intake types and rejects commas.
+  forces `etc` timed and strips built-in intake types. Food-option settings
+  reject commas/newlines and reserved Water; the built-in Water choice remains.
 - Popup editors post one `record_id` with `*_ID` fields to `/records/save`
   and `/records/delete`; legacy bulk and `volume_ml_ID`/`volume_g_ID`
   fields remain accepted. `ui_home` paginates dates (`page` clamped), not
@@ -96,11 +91,10 @@ paths are not identical: keep legacy fields explicitly.
 
 ## Dependencies and Boundaries
 
-Read [Storage](gateway-storage.md) for schema/settings changes,
-[Scheduler](gateway-scheduler.md) for lifespan/cap changes,
-[UI](gateway-ui.md) for template context/form/i18n changes, and
-[Firmware app](firmware-app.md) for device payload changes. Read storage and scheduler for midnight changes. The CLI uses HTTP;
-dependency pins live in the root snapshot.
+Read [Storage](gateway-storage.md) for schema/settings,
+[Scheduler](gateway-scheduler.md) for lifespan/caps, [UI](gateway-ui.md) for
+forms/i18n, [Firmware app](firmware-app.md) for device payloads, storage and
+scheduler for midnight rules. CLI uses HTTP; pins are in the root snapshot.
 
 ## Change Guide
 
@@ -114,14 +108,10 @@ dependency pins live in the root snapshot.
 ## Verification
 
 Run the root syntax check and unittest command. `gateway/tests/test_sleep.py`
-covers adjusted/duplicate starts,
-invalid and future starts, manual stops, local-midnight splits, legacy
-duration posts, cap exclusion, future Start edits, timeline ordering and
-exact timestamp preservation with disposable SQLite and a patched clock.
-It also covers Sleep card transitions, button order/custom activities,
-Poopoo day boundaries and 23/25-hour daylight-saving days.
-`gateway/tests/test_feeding.py` covers category/default round-trips, migration,
-validation, device defaults and water exclusion. For route, auth, CLI or time changes run the
+covers sleep sessions/splits, timeline ordering, exact timestamp preservation,
+card/summary order, Poopoo boundaries and daylight-saving days.
+`gateway/tests/test_feeding.py` covers milk/food/water categories, config,
+migration, validation, edits, device defaults and water totals. For route, auth, CLI or time changes run the
 [manual gateway checks](../topics/gateway-manual-checks.md) (read when
 verifying behavior against a running gateway); its API/CLI sequence passed
 in this refresh.

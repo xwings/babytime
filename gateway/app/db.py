@@ -33,6 +33,7 @@ def init() -> None:
                 notes TEXT,
                 activity TEXT NOT NULL DEFAULT 'feeding',
                 feeding_type TEXT,
+                solid_food_type TEXT,
                 device_id TEXT NOT NULL DEFAULT '',
                 created_at INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
             );
@@ -52,6 +53,14 @@ def init() -> None:
             conn.execute("ALTER TABLE records ADD COLUMN volume_g INTEGER")
         if "feeding_type" not in columns:
             conn.execute("ALTER TABLE records ADD COLUMN feeding_type TEXT")
+        if "solid_food_type" not in columns:
+            conn.execute("ALTER TABLE records ADD COLUMN solid_food_type TEXT")
+        conn.execute(
+            "UPDATE records SET activity='solid_food', solid_food_type='water', "
+            "feeding_type=NULL, volume_ml=NULL, volume_g=NULL, "
+            "stop_epoch=COALESCE(stop_epoch, start_epoch) "
+            "WHERE activity='feeding' AND feeding_type='water'"
+        )
         conn.commit()
 
 
@@ -124,14 +133,15 @@ def create_record(
     activity: str = "feeding",
     device_id: str = "",
     feeding_type: Optional[str] = None,
+    solid_food_type: Optional[str] = None,
 ) -> int:
     conn = get_conn()
     with _lock:
         cur = conn.execute(
             "INSERT INTO records "
-            "(start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id, feeding_type) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id, feeding_type),
+            "(start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id, feeding_type, solid_food_type) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (start_epoch, stop_epoch, volume_ml, volume_g, notes, activity, device_id, feeding_type, solid_food_type),
         )
         conn.commit()
         return cur.lastrowid
@@ -154,9 +164,9 @@ def clone_segments(rid: int, segments: list) -> None:
         for start_epoch, stop_epoch in segments:
             conn.execute(
                 "INSERT INTO records "
-                "(start_epoch, stop_epoch, notes, activity, device_id, feeding_type) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (start_epoch, stop_epoch, row["notes"], row["activity"], row["device_id"], row["feeding_type"]),
+                "(start_epoch, stop_epoch, notes, activity, device_id, feeding_type, solid_food_type) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (start_epoch, stop_epoch, row["notes"], row["activity"], row["device_id"], row["feeding_type"], row["solid_food_type"]),
             )
         conn.commit()
 
@@ -170,6 +180,7 @@ def update_record(rid: int, **fields) -> None:
         "notes",
         "activity",
         "feeding_type",
+        "solid_food_type",
         "device_id",
     }
     sets = []
